@@ -1,9 +1,12 @@
-"""Minimal CLI entrypoint for health checks (Phase 0)."""
+"""CLI entrypoint for GNI Phase 1-A."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 from gni import __version__
 from gni.core.config import get_settings
@@ -19,7 +22,7 @@ def cmd_health(_: argparse.Namespace) -> int:
         "llm_provider": settings.llm_provider,
         "llm_api_configured": bool(settings.llm_api_key),
         "database_url_scheme": settings.database_url.split("://", 1)[0],
-        "note": "Phase 0 skeleton — no live ingestion or LLM calls",
+        "phase": "1A",
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -30,6 +33,122 @@ def cmd_version(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_db_upgrade(_: argparse.Namespace) -> int:
+    settings = get_settings()
+    if settings.database_url.startswith("sqlite"):
+        print(
+            "SQLite URL detected — use `gni db init` instead of alembic upgrade.",
+            file=sys.stderr,
+        )
+        return 2
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=root,
+        check=False,
+    )
+    return result.returncode
+
+
+def cmd_db_init(_: argparse.Namespace) -> int:
+    """Create schema via SQLAlchemy metadata (SQLite local / emergency bootstrap)."""
+    from gni.infrastructure.db import get_engine
+    from gni.infrastructure.models import Base
+
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    print(json.dumps({"status": "ok", "tables": sorted(Base.metadata.tables.keys())}, indent=2))
+    return 0
+
+
+def cmd_sources_seed(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import session_scope
+    from gni.sources.seed import seed_sources
+
+    path = Path(args.file) if args.file else None
+    with session_scope() as session:
+        counts = seed_sources(session, path)
+    print(json.dumps({"seeded": counts}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_sources_list(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import session_scope
+    from gni.sources.seed import list_sources
+
+    with session_scope() as session:
+        rows = list_sources(session, active_only=args.active)
+        payload = [
+            {
+                "id": s.id,
+                "country_id": s.country_id,
+                "name": s.name,
+                "active_status": s.active_status,
+                "verification_status": s.verification_status,
+                "adapter_type": s.adapter_type,
+                "feed_or_api_url": s.feed_or_api_url,
+            }
+            for s in rows
+        ]
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_ingest_run(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import session_scope
+    from gni.ingestion.service import run_ingestion
+
+    with session_scope() as session:
+        jobs = run_ingestion(session, source_id=args.source)
+        payload = [
+            {
+                "job_id": j.id,
+                "source_id": j.source_id,
+                "status": j.status,
+                "error": j.error,
+                "stats": j.stats,
+            }
+            for j in jobs
+        ]
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    failed = sum(1 for j in payload if j["status"] != "success")
+    return 1 if failed and not args.allow_partial else 0
+
+
+def cmd_ingest_health(_: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
+    from gni.infrastructure.db import session_scope
+    from gni.infrastructure.models import Source, SourceHealth
+
+    with session_scope() as session:
+        rows = session.execute(
+            select(Source, SourceHealth)
+            .outerjoin(SourceHealth, SourceHealth.source_id == Source.id)
+            .order_by(Source.id)
+        ).all()
+        payload = []
+        for source, health in rows:
+            payload.append(
+                {
+                    "source_id": source.id,
+                    "active_status": source.active_status,
+                    "last_success_at": health.last_success_at.isoformat()
+                    if health and health.last_success_at
+                    else None,
+                    "last_failure_at": health.last_failure_at.isoformat()
+                    if health and health.last_failure_at
+                    else None,
+                    "success_count": health.success_count if health else 0,
+                    "failure_count": health.failure_count if health else 0,
+                    "success_rate": health.success_rate if health else None,
+                    "error_message": health.error_message if health else None,
+                }
+            )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     settings = get_settings()
     setup_logging(settings.log_level)
@@ -37,11 +156,46 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="gni", description="Global Narrative Intelligence CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_health = sub.add_parser("health", help="Print local health JSON (no network)")
+    p_health = sub.add_parser("health", help="Print local health JSON")
     p_health.set_defaults(func=cmd_health)
 
     p_version = sub.add_parser("version", help="Print package version")
     p_version.set_defaults(func=cmd_version)
+
+    p_db = sub.add_parser("db", help="Database commands")
+    db_sub = p_db.add_subparsers(dest="db_command", required=True)
+    p_up = db_sub.add_parser("upgrade", help="Run alembic upgrade head (PostgreSQL)")
+    p_up.set_defaults(func=cmd_db_upgrade)
+    p_init = db_sub.add_parser("init", help="Create tables via metadata (SQLite/local)")
+    p_init.set_defaults(func=cmd_db_init)
+
+    p_sources = sub.add_parser("sources", help="Source registry commands")
+    sources_sub = p_sources.add_subparsers(dest="sources_command", required=True)
+    p_seed = sources_sub.add_parser("seed", help="Seed countries/orgs/sources from YAML")
+    p_seed.add_argument("--file", help="Path to sources_seed.yaml")
+    p_seed.set_defaults(func=cmd_sources_seed)
+    p_list = sources_sub.add_parser("list", help="List sources")
+    p_list.add_argument("--active", action="store_true", help="Only active sources")
+    p_list.set_defaults(func=cmd_sources_list)
+
+    p_ingest = sub.add_parser("ingest", help="Ingestion commands")
+    ingest_sub = p_ingest.add_subparsers(dest="ingest_command", required=True)
+    p_run = ingest_sub.add_parser("run", help="Run ingestion once for active sources")
+    p_run.add_argument("--source", help="Limit to one source_id")
+    p_run.add_argument(
+        "--once",
+        action="store_true",
+        default=True,
+        help="Run a single batch (default; cron-friendly)",
+    )
+    p_run.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Exit 0 even if some sources fail",
+    )
+    p_run.set_defaults(func=cmd_ingest_run)
+    p_ihealth = ingest_sub.add_parser("health", help="Show source_health rows")
+    p_ihealth.set_defaults(func=cmd_ingest_health)
 
     args = parser.parse_args(argv)
     raise SystemExit(args.func(args))

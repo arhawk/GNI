@@ -26,6 +26,8 @@ htmlcov/
 # Data & secrets
 data/raw/
 data/processed/
+data/*.db
+data/*.db-*
 *.pem
 credentials*.json
 

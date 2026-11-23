@@ -1,0 +1,200 @@
+# GNI P1-A seed — only feeds verified by live HTTP+feedparser probe on 2026-11-23.
+# Do not invent feed URLs. Russia/India candidates timed out or returned 403/404 — left unverified.
+
+meta:
+  verified_at_utc: "2026-11-23T15:18:32Z"
+  user_agent: "GNI-ResearchBot/0.1 (+internal-research)"
+  notes: >
+    State.gov and WhiteHouse feeds returned 407/404 from this environment.
+    TASS connect timeout; PIB/MEA 403. ABC included as AU public_service with
+    editorial_independence=medium pending deeper review.
+
+countries:
+  - { id: US, code: US, name: United States }
+  - { id: RU, code: RU, name: Russia }
+  - { id: DE, code: DE, name: Germany }
+  - { id: IN, code: IN, name: India }
+  - { id: AU, code: AU, name: Australia }
+
+organizations:
+  - id: org_usagm
+    country_id: US
+    name: U.S. Agency for Global Media
+    organization_type: media_agency
+    ownership_type: government
+    government_control_level: high
+  - id: org_us_dod
+    country_id: US
+    name: U.S. Department of Defense
+    organization_type: government_department
+    ownership_type: government
+    government_control_level: high
+  - id: org_us_nara_fr
+    country_id: US
+    name: National Archives — Federal Register
+    organization_type: government_publisher
+    ownership_type: government
+    government_control_level: high
+  - id: org_dw
+    country_id: DE
+    name: Deutsche Welle
+    organization_type: public_broadcaster
+    ownership_type: public_law
+    government_control_level: medium
+  - id: org_au_pmc
+    country_id: AU
+    name: Office of the Prime Minister of Australia
+    organization_type: government_office
+    ownership_type: government
+    government_control_level: high
+  - id: org_au_abc
+    country_id: AU
+    name: Australian Broadcasting Corporation
+    organization_type: public_broadcaster
+    ownership_type: public
+    government_control_level: low
+
+sources:
+  - source_id: us_voa_english
+    name: Voice of America (English RSS)
+    country_id: US
+    organization_id: org_usagm
+    canonical_url: https://www.voanews.com/
+    source_type: state_controlled
+    ownership_type: government
+    funding_type: public
+    government_control_level: high
+    editorial_independence: low
+    language: en
+    timezone: America/New_York
+    access_method: rss
+    adapter_type: rss_adapter
+    terms_url: https://www.voanews.com/p/5373.html
+    compliance_status: allowed_internal
+    evidence_url: https://www.usagm.gov/
+    classification_confidence: high
+    reviewed_by: phase1a_verifier
+    active_status: active
+    verification_status: verified
+    feed_or_api_url: "https://www.voanews.com/api/z-$otevtiq"
+    notes: "Live probe 2026-11-23: 15 entries (Africa channel ID). Broader/China channel TBD."
+
+  - source_id: us_rfa_english
+    name: Radio Free Asia (English RSS)
+    country_id: US
+    organization_id: org_usagm
+    canonical_url: https://www.rfa.org/
+    source_type: state_controlled
+    ownership_type: government
+    funding_type: public
+    government_control_level: high
+    editorial_independence: low
+    language: en
+    timezone: America/New_York
+    access_method: rss
+    adapter_type: rss_adapter
+    terms_url: null
+    compliance_status: allowed_internal
+    evidence_url: https://www.usagm.gov/
+    classification_confidence: high
+    reviewed_by: phase1a_verifier
+    active_status: active
+    verification_status: verified
+    feed_or_api_url: https://www.rfa.org/english/rss
+    notes: "Live probe 2026-11-23: 5 entries. High China-relevant density expected."
+
+  - source_id: us_defense_news
+    name: U.S. Department of Defense News Feed
+    country_id: US
+    organization_id: org_us_dod
+    canonical_url: https://www.defense.gov/
+    source_type: gov_comms
+    ownership_type: government
+    funding_type: public
+    government_control_level: high
+    editorial_independence: low
+    language: en
+    timezone: America/New_York
+    access_method: rss
+    adapter_type: rss_adapter
+    terms_url: https://www.defense.gov/Resources/Legal-Notices/
+    compliance_status: allowed_internal
+    evidence_url: https://www.defense.gov/
+    classification_confidence: high
+    reviewed_by: phase1a_verifier
+    active_status: active
+    verification_status: verified
+    feed_or_api_url: "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=10&ContentType=1&Site=945"
+    notes: "Live probe 2026-11-23: 10 entries. Feed title may show Department of War branding."
+
+  - source_id: us_federal_register_state
+    name: Federal Register — State Department documents
+    country_id: US
+    organization_id: org_us_nara_fr
+    canonical_url: https://www.federalregister.gov/
+    source_type: gov_comms
+    ownership_type: government
+    funding_type: public
+    government_control_level: high
+    editorial_independence: low
+    language: en
+    timezone: America/New_York
+    access_method: rss
+    adapter_type: rss_adapter
+    terms_url: https://www.federalregister.gov/reader-aids/government-policy-and-ofr-procedures/about-this-site
+    compliance_status: allowed_internal
+    evidence_url: https://www.federalregister.gov/
+    classification_confidence: medium
+    reviewed_by: phase1a_verifier
+    active_status: active
+    verification_status: verified
+    feed_or_api_url: "https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bagencies%5D%5B%5D=state-department"
+    notes: "Live probe 2026-11-23: 23 entries. Official notices, not news narrative; useful gov_comms signal."
+
+  - source_id: de_dw_english
+    name: Deutsche Welle (English all)
+    country_id: DE
+    organization_id: org_dw
+    canonical_url: https://www.dw.com/
+    source_type: public_service
+    ownership_type: public_law
+    funding_type: public
+    government_control_level: medium
+    editorial_independence: medium
+    language: en
+    timezone: Europe/Berlin
+    access_method: rss
+    adapter_type: rss_adapter
+    terms_url: https://www.dw.com/en/terms-of-use/a-16529300
+    compliance_status: allowed_internal
+    evidence_url: https://www.dw.com/en/about-dw/s-30606
+    classification_confidence: medium
+    reviewed_by: phase1a_verifier
+    active_status: active
+    verification_status: verified
+    feed_or_api_url: https://rss.dw.com/rdf/rss-en-all
+    notes: "Live probe 2026-11-23: 36 entries. Public service — not equated to state_controlled."
+
+  - source_id: au_pm_media
+    name: Prime Minister of Australia — media feed
+    country_id: AU
+    organization_id: org_au_pmc
+    canonical_url: https://www.pm.gov.au/
+    source_type: gov_comms
+    ownership_type: government
+    funding_type: public
+    government_control_level: high
+    editorial_independence: low
+    language: en
+    timezone: Australia/Sydney
+    access_method: rss
+    adapter_type: rss_adapter
+    terms_url: https://www.pm.gov.au/copyright
+    compliance_status: allowed_internal
+    evidence_url: https://www.pm.gov.au/
+    classification_confidence: high
+    reviewed_by: phase1a_verifier
+    active_status: active
+    verification_status: verified
+    feed_or_api_url: https://www.pm.gov.au/rss.xml
+    notes: "Live probe 2026-11-23: 50 entries."
