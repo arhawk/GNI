@@ -1,0 +1,108 @@
+%% GNI MVP ERD (logical) — Phase 0
+%% Phase 2 event tables intentionally omitted from physical MVP
+
+erDiagram
+    countries ||--o{ organizations : has
+    countries ||--o{ sources : "via org"
+    organizations ||--o{ sources : owns
+    sources ||--o{ source_reviews : reviewed
+    sources ||--o{ source_attribute_history : history
+    sources ||--o| source_health : health
+    sources ||--o{ articles : publishes
+    sources ||--o{ ingestion_jobs : runs
+
+    articles ||--o{ article_versions : versions
+    articles ||--o{ article_analyses : analyzed
+    articles ||--o{ article_topics : tagged
+    articles ||--o{ article_entities : mentions
+    articles ||--o{ article_evidence : "via analysis"
+
+    taxonomy_versions ||--o{ topics : versions
+    taxonomy_versions ||--o{ stance_targets : versions
+    topics ||--o{ topic_relations : relates
+    topics ||--o{ article_topics : used
+
+    analysis_runs ||--o{ article_analyses : batch
+    model_versions ||--o{ article_analyses : model
+    prompt_versions ||--o{ article_analyses : prompt
+    article_analyses ||--o{ article_evidence : evidences
+
+    metric_definitions ||--o{ metric_runs : defines
+    reports ||--o{ report_claims : claims
+    report_claims ||--o{ report_evidence : evidence
+    articles ||--o{ report_evidence : cited
+    metric_runs ||--o{ report_evidence : cited
+
+    countries {
+        string id PK
+        string code UK
+        string name
+    }
+
+    organizations {
+        string id PK
+        string country_id FK
+        string name
+        string ownership_type
+    }
+
+    sources {
+        string id PK
+        string organization_id FK
+        string country_id FK
+        string name
+        string source_type
+        string active_status
+        jsonb config
+    }
+
+    articles {
+        uuid id PK
+        string source_id FK
+        string url
+        string content_hash
+        timestamptz published_at
+        timestamptz first_seen_at
+        string language
+    }
+
+    article_analyses {
+        uuid id PK
+        uuid article_id FK
+        int analysis_version
+        string schema_version
+        string taxonomy_version
+        jsonb structured_result
+        timestamptz analyzed_at
+    }
+
+    article_evidence {
+        uuid id PK
+        uuid analysis_id FK
+        uuid article_id FK
+        string field_path
+        text quote
+    }
+
+    metric_runs {
+        uuid id PK
+        string metric_definition_version
+        timestamptz period_start
+        timestamptz period_end
+        jsonb value
+    }
+
+    reports {
+        uuid id PK
+        string report_type
+        timestamptz period_start
+        timestamptz period_end
+        text content
+    }
+
+    report_claims {
+        uuid id PK
+        uuid report_id FK
+        string claim_type
+        string validation_status
+    }

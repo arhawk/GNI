@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gni.local/schemas/article_analysis_v0.1.json",
+  "title": "GNI Article Analysis Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "taxonomy_version",
+    "language",
+    "topics",
+    "sentiment",
+    "stances",
+    "framing",
+    "entities",
+    "evidence",
+    "field_status",
+    "confidence"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "article_analysis_v0.1" },
+    "taxonomy_version": { "type": "string", "minLength": 1 },
+    "language": { "type": "string", "minLength": 2 },
+    "china_relevance": {
+      "type": "object",
+      "required": ["is_relevant", "status"],
+      "properties": {
+        "is_relevant": { "type": ["boolean", "null"] },
+        "status": {
+          "type": "string",
+          "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+        },
+        "rationale": { "type": "string" }
+      }
+    },
+    "topics": {
+      "type": "object",
+      "required": ["primary", "secondary"],
+      "properties": {
+        "primary": { "type": ["string", "null"] },
+        "secondary": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "prominence": {
+          "type": "string",
+          "enum": ["core", "secondary_mention", "unknown"]
+        }
+      }
+    },
+    "sentiment": {
+      "type": "object",
+      "required": ["label", "status"],
+      "properties": {
+        "label": {
+          "type": ["string", "null"],
+          "enum": ["positive", "negative", "neutral", "mixed", null]
+        },
+        "emotions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["fear", "concern", "anger", "optimism", "praise", "criticism", "uncertainty"]
+          }
+        },
+        "intensity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+        }
+      }
+    },
+    "stances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["target_id", "stance", "status"],
+        "properties": {
+          "target_id": { "type": "string" },
+          "target_surface_form": { "type": "string" },
+          "stance": {
+            "type": ["string", "null"],
+            "enum": ["supportive", "opposing", "critical", "cautious", "neutral", "ambiguous", null]
+          },
+          "strength": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "status": {
+            "type": "string",
+            "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+          }
+        }
+      }
+    },
+    "framing": {
+      "type": "object",
+      "required": ["primary", "secondary", "status"],
+      "properties": {
+        "primary": { "type": ["string", "null"] },
+        "secondary": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+        }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "type"],
+        "properties": {
+          "text": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["person", "organization", "country", "location", "policy", "product", "company", "other"]
+          },
+          "normalized_id": { "type": ["string", "null"] },
+          "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field_path", "quote", "evidence_type"],
+        "properties": {
+          "field_path": { "type": "string" },
+          "quote": { "type": "string", "minLength": 1 },
+          "start_offset": { "type": ["integer", "null"], "minimum": 0 },
+          "end_offset": { "type": ["integer", "null"], "minimum": 0 },
+          "paragraph_index": { "type": ["integer", "null"], "minimum": 0 },
+          "evidence_type": {
+            "type": "string",
+            "enum": ["sentiment", "stance", "frame", "topic", "entity", "relevance", "other"]
+          },
+          "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "field_status": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

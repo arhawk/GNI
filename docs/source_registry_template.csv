@@ -1,0 +1,2 @@
+source_id,name,country_id,organization_id,canonical_url,source_type,ownership_type,funding_type,government_control_level,editorial_independence,language,timezone,access_method,adapter_type,terms_url,robots_checked_at,compliance_status,evidence_url,classification_confidence,reviewed_at,reviewed_by,active_status,verification_status,feed_or_api_url,notes
+example_us_placeholder,Example US Source,US,org_example,https://example.gov/,gov_comms,government,public,high,low,en,America/New_York,rss,rss_adapter,TBD,,pending,TBD,low,,,candidate,unverified,TBD,模板行：禁止当作真实来源使用；feed 必须核验后填写

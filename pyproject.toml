@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gni"
+version = "0.1.0"
+description = "Global Narrative Intelligence — official media narrative monitoring (Phase 0 skeleton)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "GNI" }]
+dependencies = [
+  "pydantic>=2.0",
+  "pydantic-settings>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+api = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+]
+dashboard = [
+  "streamlit>=1.38",
+]
+
+[project.scripts]
+gni = "gni.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gni"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

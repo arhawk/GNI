@@ -1,0 +1,21 @@
+# Local PostgreSQL for GNI. Phase 0 does not require the app to connect at install time.
+services:
+  db:
+    image: postgres:16
+    container_name: gni-postgres
+    environment:
+      POSTGRES_USER: gni
+      POSTGRES_PASSWORD: gni
+      POSTGRES_DB: gni
+    ports:
+      - "5432:5432"
+    volumes:
+      - gni_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gni -d gni"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  gni_pgdata:
