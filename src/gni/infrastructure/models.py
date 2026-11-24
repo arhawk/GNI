@@ -1,4 +1,4 @@
-"""SQLAlchemy models for P1-A / P1-B."""
+"""SQLAlchemy models for P1-A / P1-B / P1-C."""
 
 from __future__ import annotations
 
@@ -191,6 +191,11 @@ class Article(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     title_screening_label: Mapped[str | None] = mapped_column(String(32))
     title_screening_priority: Mapped[str | None] = mapped_column(String(8))
+    analysis_status: Mapped[str] = mapped_column(String(32), default="pending")
+    fulltext_screening_label: Mapped[str | None] = mapped_column(String(64))
+    china_relevance_level: Mapped[str | None] = mapped_column(String(32))
+    china_relevance_weight: Mapped[float | None] = mapped_column(Float)
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     versions: Mapped[list["ArticleVersion"]] = relationship(
         "ArticleVersion", back_populates="article"
@@ -255,3 +260,91 @@ class ProcessingJob(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
     stats: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+
+
+class ArticleRelevanceAssessment(Base):
+    __tablename__ = "article_relevance_assessments"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    article_version_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("article_versions.id"), nullable=True
+    )
+    relevance_level: Mapped[str] = mapped_column(String(32), nullable=False)
+    relevance_weight: Mapped[float | None] = mapped_column(Float)
+    content_share_estimate: Mapped[float | None] = mapped_column(Float)
+    headline_prominence: Mapped[str | None] = mapped_column(String(32))
+    thesis_contribution: Mapped[str | None] = mapped_column(String(32))
+    china_actor_role: Mapped[str | None] = mapped_column(String(32))
+    analysis_depth: Mapped[str | None] = mapped_column(String(32))
+    reasoning_summary: Mapped[str | None] = mapped_column(Text)
+    assessment_version: Mapped[str | None] = mapped_column(String(64))
+    review_status: Mapped[str] = mapped_column(String(32), default="auto")
+    features: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ArticleChinaSpan(Base):
+    __tablename__ = "article_china_spans"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    article_version_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("article_versions.id"), nullable=True
+    )
+    paragraph_index: Mapped[int | None] = mapped_column(Integer)
+    char_start: Mapped[int | None] = mapped_column(Integer)
+    char_end: Mapped[int | None] = mapped_column(Integer)
+    text_original: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str | None] = mapped_column(String(32))
+    span_type: Mapped[str] = mapped_column(String(64), default="direct_mention")
+    related_entities: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    candidate_targets: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    relevance_reason: Mapped[str | None] = mapped_column(Text)
+    extraction_confidence: Mapped[float | None] = mapped_column(Float)
+    validation_status: Mapped[str] = mapped_column(String(32), default="valid")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AnalysisRun(Base):
+    __tablename__ = "analysis_runs"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    provider: Mapped[str | None] = mapped_column(String(64))
+    model_name: Mapped[str | None] = mapped_column(String(128))
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    schema_version: Mapped[str | None] = mapped_column(String(64))
+    taxonomy_version: Mapped[str | None] = mapped_column(String(64))
+    relevance_weight_version: Mapped[str | None] = mapped_column(String(64))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    token_usage: Mapped[int | None] = mapped_column(Integer)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(Float)
+    stats: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+
+
+class ArticleAnalysis(Base):
+    __tablename__ = "article_analyses"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    analysis_run_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("analysis_runs.id"), nullable=True
+    )
+    article_version_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("article_versions.id"), nullable=True
+    )
+    provider: Mapped[str | None] = mapped_column(String(64))
+    model_name: Mapped[str | None] = mapped_column(String(128))
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    schema_version: Mapped[str] = mapped_column(String(64), default="article_analysis_v0.2")
+    taxonomy_version: Mapped[str | None] = mapped_column(String(64))
+    relevance_weight_version: Mapped[str | None] = mapped_column(String(64))
+    analysis_status: Mapped[str] = mapped_column(String(32), default="completed")
+    confidence: Mapped[float | None] = mapped_column(Float)
+    token_usage: Mapped[int | None] = mapped_column(Integer)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(Float)
+    structured_result: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -1,4 +1,4 @@
-"""LLM provider abstraction — Phase 0 interface only (no live API calls)."""
+"""LLM provider abstraction for article analysis."""
 
 from __future__ import annotations
 
@@ -21,13 +21,13 @@ class BaseLLMProvider(ABC):
 
 
 class NullLLMProvider(BaseLLMProvider):
-    """Safe default for Phase 0 / tests — does not contact external APIs."""
+    """Safe default — does not contact external APIs."""
 
     def analyze(self, article: dict[str, Any], *, schema: dict[str, Any], prompt_version: str) -> dict[str, Any]:
-        raise RuntimeError("NullLLMProvider: live analysis is not enabled in Phase 0")
+        raise RuntimeError("NullLLMProvider: live analysis is not enabled; use heuristic or deepseek")
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
-        raise RuntimeError("NullLLMProvider: live generation is not enabled in Phase 0")
+        raise RuntimeError("NullLLMProvider: live generation is not enabled")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        raise RuntimeError("NullLLMProvider: live embedding is not enabled in Phase 0")
+        raise RuntimeError("NullLLMProvider: live embedding is not enabled")

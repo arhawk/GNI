@@ -58,7 +58,7 @@ def reset_engine() -> None:
 
 
 def ensure_schema() -> list[str]:
-    """Create missing tables; on SQLite also ADD missing P1-B columns on articles."""
+    """Create missing tables; on SQLite also ADD missing P1-B/P1-C columns on articles."""
     from gni.infrastructure.models import Base
 
     engine = get_engine()
@@ -78,6 +78,11 @@ def ensure_schema() -> list[str]:
         ("processed_at", "DATETIME"),
         ("title_screening_label", "VARCHAR(32)"),
         ("title_screening_priority", "VARCHAR(8)"),
+        ("analysis_status", "VARCHAR(32) DEFAULT 'pending'"),
+        ("fulltext_screening_label", "VARCHAR(64)"),
+        ("china_relevance_level", "VARCHAR(32)"),
+        ("china_relevance_weight", "FLOAT"),
+        ("analyzed_at", "DATETIME"),
     ]
     with engine.begin() as conn:
         for name, ddl in alters:

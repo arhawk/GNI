@@ -1,4 +1,4 @@
-"""CLI entrypoint for GNI Phase 1-A/B."""
+"""CLI entrypoint for GNI Phase 1-A/B/C."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def cmd_health(_: argparse.Namespace) -> int:
         "llm_provider": settings.llm_provider,
         "llm_api_configured": bool(settings.llm_api_key),
         "database_url_scheme": settings.database_url.split("://", 1)[0],
-        "phase": "1B",
+        "phase": "1C",
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -148,6 +148,39 @@ def cmd_process_run(args: argparse.Namespace) -> int:
     return 0 if status in {"success", "partial"} else 1
 
 
+def cmd_analyze_run(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.analysis.service import run_analysis
+
+    ensure_schema()
+    provider = args.provider
+    with session_scope() as session:
+        run = run_analysis(
+            session,
+            limit=None if args.article else args.limit,
+            source_id=args.source,
+            article_id=args.article,
+            provider=provider,
+            reanalyze=args.reanalyze,
+        )
+        payload = {
+            "run_id": run.id,
+            "status": run.status,
+            "provider": run.provider,
+            "model_name": run.model_name,
+            "schema_version": run.schema_version,
+            "taxonomy_version": run.taxonomy_version,
+            "relevance_weight_version": run.relevance_weight_version,
+            "token_usage": run.token_usage,
+            "estimated_cost_usd": run.estimated_cost_usd,
+            "error": run.error,
+            "stats": run.stats,
+        }
+        status = run.status
+    print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    return 0 if status in {"success", "partial", "budget_exhausted"} else 1
+
+
 def cmd_ingest_health(_: argparse.Namespace) -> int:
     from sqlalchemy import select
 
@@ -253,6 +286,31 @@ def main(argv: list[str] | None = None) -> None:
         help="Single batch (default)",
     )
     p_prun.set_defaults(func=cmd_process_run)
+
+    p_analyze = sub.add_parser("analyze", help="P1-C L2/L3 + relevance + six-dim analysis")
+    analyze_sub = p_analyze.add_subparsers(dest="analyze_command", required=True)
+    p_arun = analyze_sub.add_parser("run", help="Screen fulltext, extract spans, assess weight, analyze")
+    p_arun.add_argument("--source", help="Limit to one source_id")
+    p_arun.add_argument("--article", help="Analyze a single article id")
+    p_arun.add_argument("--limit", type=int, default=20, help="Max articles (default 20)")
+    p_arun.add_argument(
+        "--provider",
+        choices=["heuristic", "deepseek"],
+        default=None,
+        help="Analyzer backend (default: heuristic unless GNI_LLM_API_KEY set with llm_provider)",
+    )
+    p_arun.add_argument(
+        "--reanalyze",
+        action="store_true",
+        help="Include already analyzed articles",
+    )
+    p_arun.add_argument(
+        "--once",
+        action="store_true",
+        default=True,
+        help="Single batch (default)",
+    )
+    p_arun.set_defaults(func=cmd_analyze_run)
 
     args = parser.parse_args(argv)
     raise SystemExit(args.func(args))

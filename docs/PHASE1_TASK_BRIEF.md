@@ -143,6 +143,7 @@ P1-F 通过即 **Phase 1 / 监测型 MVP** 完成；Phase 2 另授权。
 |----|------|
 | P1-A | 已完成（不重写） |
 | P1-B | 已完成 |
-| P1-C → F | 依次授权 |
+| P1-C | 完成（启发式默认；DeepSeek 可选） |
+| P1-D → F | 依次授权 |
 
 验收文档：`PHASE1{A,B,C,D,E,F}_ACCEPTANCE.md`。
