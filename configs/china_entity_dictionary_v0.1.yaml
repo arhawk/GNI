@@ -1,7 +1,8 @@
 # China-related entity dictionary for L1 title screening (rule-only).
-# versioned; not a gold-standard research scope freeze.
-version: china_entity_dictionary_v0.1
-rule_version: title_l1_rules_v0.1
+# High-recall bias for monitoring: L1 is priority only; L2 decides inclusion.
+# Bare "Asia"/"Asian" are secondary (may FP); prefer collocates when possible.
+version: china_entity_dictionary_v0.2
+rule_version: title_l1_rules_v0.2
 
 entities:
   - entity_id: china_country
@@ -10,13 +11,47 @@ entities:
     inclusion_scope: core
     ambiguity_notes: null
     aliases:
+      # English
       - China
+      - China's
+      - Chinese
       - People's Republic of China
       - PRC
+      - Zhongguo
+      - Zhonghua
+      - Sino
+      - Sino-American
+      - Sino-US
+      - Sino-Russian
+      - Sino-Indian
+      - Middle Kingdom
+      # Chinese
       - 中国
+      - 中华
       - 中华人民共和国
+      - 内地
+      - 大陆
+      # French / German / Spanish / Portuguese / Italian
       - Chine
+      - chinoise
+      - chinois
+      - Chinas
+      - chinesisch
+      - chinesische
+      - chinesischer
+      - chinesischen
+      - Cina
+      # Russian / other
       - Китай
+      - Китая
+      - китайский
+      - китайская
+      - китайской
+      - Китайской
+      - КНР
+      # Hindi (common Latin / Devanagari)
+      - Cheen
+      - चीन
 
   - entity_id: chinese_gov
     canonical_name: Chinese Government
@@ -29,8 +64,38 @@ entities:
       - State Council
       - Ministry of Foreign Affairs
       - Chinese MFA
+      - Chinese Foreign Ministry
+      - CPC
+      - CCP
+      - Chinese Communist Party
+      - Communist Party of China
+      - People's Liberation Army
+      - PLA Navy
       - 中国政府
       - 外交部
+      - 国务院
+      - 中共
+      - 共产党
+      - 解放军
+      - chinesische Regierung
+      - chinesischen Behörden
+      - Китайское правительство
+      - КПК
+
+  - entity_id: china_leaders
+    canonical_name: Chinese political figures
+    entity_type: person
+    inclusion_scope: core
+    aliases:
+      - Xi Jinping
+      - President Xi
+      - Xi's
+      - 习近平
+      - Li Qiang
+      - 李强
+      - Wang Yi
+      - 王毅
+      - Си Цзиньпин
 
   - entity_id: beijing_geo
     canonical_name: Beijing
@@ -42,38 +107,83 @@ entities:
       - 北京
       - Pekin
       - Peking
+      - Pékin
+      - Пекин
 
   - entity_id: shanghai
     canonical_name: Shanghai
     entity_type: geography
     inclusion_scope: secondary
-    aliases: [Shanghai, 上海]
+    aliases: [Shanghai, 上海, Shanghaï, Шанхай]
+
+  - entity_id: other_china_cities
+    canonical_name: Major PRC cities
+    entity_type: geography
+    inclusion_scope: secondary
+    aliases:
+      - Shenzhen
+      - 深圳
+      - Guangzhou
+      - 广州
+      - Canton
+      - Chongqing
+      - 重庆
+      - Chengdu
+      - 成都
+      - Wuhan
+      - 武汉
+      - Hangzhou
+      - 杭州
+      - Nanjing
+      - 南京
+      - Tianjin
+      - 天津
+      - Xi'an
+      - Xian
+      - 西安
 
   - entity_id: hong_kong
     canonical_name: Hong Kong
     entity_type: geography
     inclusion_scope: secondary
-    ambiguity_notes: Inclusion per research scope; L1 marks likely/uncertain not final
-    aliases: [Hong Kong, Hongkong, 香港]
+    ambiguity_notes: Inclusion per research scope; L1 marks likely not final
+    aliases: [Hong Kong, Hongkong, 香港, Hongkonger]
+
+  - entity_id: macau
+    canonical_name: Macau
+    entity_type: geography
+    inclusion_scope: secondary
+    aliases: [Macau, Macao, 澳门, 澳門]
 
   - entity_id: taiwan
     canonical_name: Taiwan
     entity_type: geography
     inclusion_scope: secondary
     ambiguity_notes: Scope-sensitive; L1 likely_relevant only
-    aliases: [Taiwan, 台湾, 台灣]
+    aliases: [Taiwan, 台湾, 台灣, Taipei, 台北, Taiwan Strait, 台海]
 
   - entity_id: xinjiang
     canonical_name: Xinjiang
     entity_type: geography
     inclusion_scope: secondary
-    aliases: [Xinjiang, 新疆]
+    aliases: [Xinjiang, 新疆, Uyghur, Uighur, 维吾尔]
 
   - entity_id: tibet
     canonical_name: Tibet
     entity_type: geography
     inclusion_scope: secondary
-    aliases: [Tibet, 西藏, Xizang]
+    aliases: [Tibet, 西藏, Xizang, Tibetan]
+
+  - entity_id: south_china_sea
+    canonical_name: South China Sea
+    entity_type: geography
+    inclusion_scope: core
+    aliases:
+      - South China Sea
+      - 南海
+      - East China Sea
+      - 东海
+      - Taiwan Strait
 
   - entity_id: bri
     canonical_name: Belt and Road Initiative
@@ -84,7 +194,10 @@ entities:
       - Belt and Road Initiative
       - BRI
       - One Belt One Road
+      - New Silk Road
       - 一带一路
+      - Seidenstraße
+      - Neue Seidenstraße
 
   - entity_id: mic2025
     canonical_name: Made in China 2025
@@ -92,16 +205,86 @@ entities:
     inclusion_scope: core
     aliases: [Made in China 2025, 中国制造2025]
 
+  - entity_id: china_indirect
+    canonical_name: Indirect China references
+    entity_type: metonym
+    inclusion_scope: core
+    ambiguity_notes: High-recall metonyms common in foreign media
+    aliases:
+      - Asian giant
+      - Asian superpower
+      - Asian powerhouse
+      - Asian power
+      - rising power in Asia
+      - world's second-largest economy
+      - world's second largest economy
+      - second-largest economy
+      - second largest economy
+      - global factory
+      - factory of the world
+      - Middle Kingdom
+      - the mainland
+      - mainland China
+      - Chinese mainland
+      - 亚洲巨人
+      - 世界第二大经济体
+
+  - entity_id: asia_china_collocations
+    canonical_name: Asia phrases often China-adjacent
+    entity_type: region_collocation
+    inclusion_scope: secondary
+    ambiguity_notes: Prefer collocates; still may FP — L2 must confirm
+    aliases:
+      - Asia-Pacific
+      - Asia Pacific
+      - Indo-Pacific
+      - East Asia
+      - East Asian
+      - Northeast Asia
+      - China and Asia
+      - Asia and China
+      - Asian markets
+      - Asian supply chain
+      - Asian semiconductors
+      - Asian EV
+      - Asian tech
+      - Asien
+      - asiatisch
+      - asiatische
+      - Азия
+      - азиатский
+      - 亚太
+      - 东亚
+      - 印太
+
+  - entity_id: asia_broad
+    canonical_name: Asia / Asian (broad recall)
+    entity_type: region
+    inclusion_scope: secondary
+    ambiguity_notes: >
+      Broad terms raise L1 priority for fulltext screening; many hits will not
+      be China-related after L2. Intentional high-recall for monitoring MVP.
+    aliases:
+      - Asia
+      - Asian
+      - Asians
+      - Asien
+      - asiatique
+      - Азия
+      - 亚洲
+      - 亞洲
+
   - entity_id: huawei
     canonical_name: Huawei
     entity_type: company
     inclusion_scope: secondary
-    aliases: [Huawei, 华为]
+    aliases: [Huawei, 华为, Huawei's]
 
   - entity_id: byod
     canonical_name: BYD
     entity_type: company
     inclusion_scope: secondary
+    ambiguity_notes: Ticker/name collisions possible
     aliases: [BYD, 比亚迪]
 
   - entity_id: tencent
@@ -114,7 +297,39 @@ entities:
     canonical_name: Alibaba
     entity_type: company
     inclusion_scope: secondary
-    aliases: [Alibaba, 阿里巴巴, Alibaba Group]
+    aliases: [Alibaba, 阿里巴巴, Alibaba Group, AliExpress]
+
+  - entity_id: other_china_firms
+    canonical_name: Other major Chinese firms
+    entity_type: company
+    inclusion_scope: secondary
+    aliases:
+      - ByteDance
+      - TikTok
+      - Douyin
+      - 字节跳动
+      - 抖音
+      - CATL
+      - 宁德时代
+      - SMIC
+      - 中芯国际
+      - Xiaomi
+      - 小米
+      - Lenovo
+      - 联想
+      - DJI
+      - 大疆
+      - Shein
+      - Temu
+      - WeChat
+      - 微信
+      - Baidu
+      - 百度
+      - Sinopec
+      - CNPC
+      - CNOOC
+      - ICBC
+      - Bank of China
 
   - entity_id: chinese_industry
     canonical_name: Chinese industry phrases
@@ -123,8 +338,22 @@ entities:
     aliases:
       - Chinese firms
       - Chinese companies
+      - Chinese company
       - Chinese EV
+      - Chinese EVs
       - Chinese semiconductor
+      - Chinese semiconductors
       - Chinese tech
-      - mainland China
-      - the mainland
+      - Chinese technology
+      - Chinese exports
+      - Chinese imports
+      - Chinese market
+      - Chinese economy
+      - Chinese yuan
+      - renminbi
+      - RMB
+      - CNY
+      - Made in China
+      - chinesische Unternehmen
+      - chinesische Wirtschaft
+      - китайские компании

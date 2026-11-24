@@ -37,8 +37,8 @@ class TitleScreenResult:
     reason_codes: list[str] = field(default_factory=list)
     confidence: float | None = None
     requires_human_review: bool = False
-    rule_version: str = "title_l1_rules_v0.1"
-    entity_dictionary_version: str = "china_entity_dictionary_v0.1"
+    rule_version: str = "title_l1_rules_v0.2"
+    entity_dictionary_version: str = "china_entity_dictionary_v0.2"
     input_hash: str | None = None
 
 

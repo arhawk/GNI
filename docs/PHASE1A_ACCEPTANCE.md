@@ -21,7 +21,7 @@
 | 项 | 路径 / 说明 |
 |----|-------------|
 | Phase 1 任务书 A–D | [PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md) |
-| 已核验种子 | [configs/sources_seed.yaml](../configs/sources_seed.yaml)（**8** 个 active RSS，覆盖 **5** 国） |
+| 已核验种子 | [configs/sources_seed.yaml](../configs/sources_seed.yaml)（平衡后面板约 **10** 个 active：各国 2；含 ru/de/hi） |
 | 候选表更新 | [source_candidates.csv](source_candidates.csv) |
 | 模型 + Alembic | `src/gni/infrastructure/`、`alembic/versions/20261123_0001_p1a_initial.py` |
 | RSS Adapter / 编排 | 支持 per-source `config.user_agent` |
@@ -33,14 +33,13 @@
 
 | 国家 | source_id | 状态 |
 |------|-----------|------|
-| 美国 | us_voa_english, us_rfa_english, us_defense_news, us_federal_register_state | active |
-| 俄罗斯 | **ru_tass_english** | active（2026-11-24 复探接通） |
-| 德国 | de_dw_english | active |
-| 印度 | **in_president** | active（总统府 RSS；PIB/MEA 仍 403） |
-| 澳大利亚 | au_pm_media | active |
+| 美国 | us_voa_english, us_rfa_english | active（en；defense/FR 降为 inactive 备份） |
+| 俄罗斯 | **ru_tass_russian**, **ru_ria** | active（**ru**；TASS EN 降为 inactive） |
+| 德国 | **de_dw_german**, de_dw_english | active（**de** + en） |
+| 印度 | **in_pib_hindi**, **in_niti** | active（**hi** + en；总统府降为 inactive） |
+| 澳大利亚 | au_pm_media, **au_abc_top** | active（en；当地官方语言） |
 
-**Postgres 复验计数（2026-11-24）：**  
-`active_countries=['AU','DE','IN','RU','US']`（5）、`sources_active=8`、`articles≥381`（含 RU 100 + IN 10 新增）、pytest **13 passed**。
+**平衡复探（2026-11-24）：** 各国 2 源；非英：RU/DE/IN 本地语 feed 已接通。  
 
 ### 仍未接通（保留候选，不强爬）
 
