@@ -209,16 +209,24 @@ def cmd_reports_daily(args: argparse.Namespace) -> int:
 
     ensure_schema()
     with session_scope() as session:
-        payload = build_daily_report(session, day=args.date)
+        payload = build_daily_report(
+            session,
+            day=args.date,
+            polish=bool(getattr(args, "polish", False)),
+        )
     paths = write_daily_files(payload, out_dir=args.out_dir)
+    sections = payload.get("sections") or {}
     print(
         json.dumps(
             {
                 "status": "ok",
                 "period": payload.get("period"),
+                "schema_version": payload.get("schema_version"),
+                "generator": payload.get("generator"),
                 "files": paths,
-                "missing_analysis": payload.get("missing_analysis"),
-                "events": len(payload.get("events") or []),
+                "missing_analysis": (sections.get("attention") or {}).get("missing_analysis"),
+                "events": len(sections.get("events") or []),
+                "polish": payload.get("polish"),
             },
             ensure_ascii=False,
             indent=2,
@@ -477,12 +485,19 @@ def main(argv: list[str] | None = None) -> None:
 
     p_reports = sub.add_parser("reports", help="Daily / weekly report generation")
     reports_sub = p_reports.add_subparsers(dest="reports_command", required=True)
-    p_rdaily = reports_sub.add_parser("daily", help="Build daily report JSON+Markdown")
+    p_rdaily = reports_sub.add_parser(
+        "daily", help="Build 7-section daily report JSON+Markdown (daily_report_schema_v1)"
+    )
     p_rdaily.add_argument("--date", help="YYYY-MM-DD (Asia/Shanghai); default today")
     p_rdaily.add_argument(
         "--out-dir",
         default=None,
         help="Output directory (default: ./data)",
+    )
+    p_rdaily.add_argument(
+        "--polish",
+        action="store_true",
+        help="Optional LLM polish for narrative one-liners only (never changes numbers)",
     )
     p_rdaily.set_defaults(func=cmd_reports_daily)
 

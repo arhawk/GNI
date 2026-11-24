@@ -106,9 +106,10 @@ def api_country_china_attitude(
 @app.get("/api/reports/daily")
 def api_daily_report(
     date: str | None = Query(None, description="YYYY-MM-DD in Asia/Shanghai"),
+    polish: bool = Query(False, description="LLM narrative polish only"),
 ) -> dict:
     try:
         with session_scope() as session:
-            return build_daily_report(session, day=date)
+            return build_daily_report(session, day=date, polish=polish)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

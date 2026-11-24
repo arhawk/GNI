@@ -135,36 +135,88 @@ export type EventSummary = {
 
 export type DailyReport = {
   report_type: string
+  schema_version?: string
   period: string
   generated_at: string
   country_scope: string[]
   target_scope: string
   disclaimer: string
-  overview: Record<string, unknown>
-  coverage_by_country: Array<{
-    country_id: string
-    article_count: number
-    analyzed_count: number
-  }>
-  title_samples: Record<string, Array<{ title: string; source_id: string; url: string | null }>>
-  china_articles: Array<{
-    country_id: string
-    relevance: string | null
-    title: string | null
-    article_id: string
-    sentiment: string | null
-    stance: string | null
-    summary: string | null
-  }>
-  events: Array<{
-    event_id: string
-    title: string
-    event_time: string | null
-    article_count: number
-    evidence: Array<{ article_id: string; title: string | null; country_id: string | null }>
-  }>
-  missing_analysis: number
-  quality_notes: string[]
+  generator?: string
+  narratives?: {
+    attention?: string
+    tone?: string
+    agenda?: string
+    events?: string
+    quality?: string
+  }
+  sections: {
+    attention: {
+      china_article_count: number
+      attention_share: number | null
+      day_article_count: number
+      missing_analysis: number
+      coverage_by_country: Array<{
+        country_id: string
+        article_count: number
+        analyzed_count: number
+        china_article_count?: number
+        source_count?: number
+      }>
+    }
+    tone: {
+      note?: string
+      overall_sentiment_counts: Record<string, number>
+      overall_stance_counts: Record<string, number>
+      by_country: Record<
+        string,
+        {
+          analyzed_china: number
+          sentiment_counts: Record<string, number>
+          stance_counts: Record<string, number>
+        }
+      >
+    }
+    agenda: {
+      topics_top: Array<{ label: string; count: number; share: number }>
+      frames_top: Array<{ label: string; count: number; share: number }>
+      by_country?: Record<string, unknown>
+    }
+    events: Array<{
+      event_id: string
+      title: string
+      event_time: string | null
+      article_count: number
+      multi_source?: boolean
+      reporting_countries?: string[]
+      first_seen_at?: string | null
+      evidence: Array<{
+        article_id: string
+        title: string | null
+        country_id: string | null
+        url?: string | null
+        sentiment?: string | null
+        stance?: string | null
+      }>
+    }>
+    evidence: Record<
+      string,
+      Array<{
+        article_id: string
+        title: string | null
+        url: string | null
+        sentiment: string | null
+        stance: string | null
+        topic?: string | null
+        frame?: string | null
+      }>
+    >
+    quality: {
+      missing_analysis: number
+      countries_without_sample: string[]
+      notes: string[]
+      source_health?: Array<Record<string, unknown>>
+    }
+  }
 }
 
 export type EventDetail = {
