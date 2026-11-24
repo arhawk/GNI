@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { CommandPalette } from './components/CommandPalette'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { TimeFilter } from './components/TimeFilter'
 import { TopSearch } from './components/TopSearch'
@@ -8,10 +9,11 @@ import { OverviewPage } from './pages/Overview'
 import { EventsPage } from './pages/Events'
 import { EventDetailPage } from './pages/EventDetail'
 import { ReportsPage } from './pages/Reports'
-import { Placeholder } from './pages/Placeholder'
+import { TrendsPage } from './pages/Trends'
+import { CountriesPage } from './pages/Countries'
+import { AlertsPage } from './pages/Alerts'
+import { SystemPage } from './pages/System'
 import './App.css'
-
-const PLANNED = '总纲已规划，本页尚未实现业务功能。'
 
 export default function App() {
   return (
@@ -49,8 +51,8 @@ export default function App() {
               <header className="topbar">
                 <div className="topbar-brand-line">GNI · 对华舆情监测</div>
                 <TopSearch />
-                <div className="topbar-status" title="本地监测面板">
-                  监测中
+                <div className="topbar-status" title="⌘K 打开命令面板">
+                  监测中 · ⌘K
                 </div>
               </header>
               <TimeFilter />
@@ -59,35 +61,16 @@ export default function App() {
                   <Route path="/" element={<OverviewPage />} />
                   <Route path="/events" element={<EventsPage />} />
                   <Route path="/events/:id" element={<EventDetailPage />} />
-                  <Route
-                    path="/countries"
-                    element={
-                      <Placeholder title="国家与媒体监测" note={`${PLANNED} 将支持国家↔媒体切换列表。`} />
-                    }
-                  />
-                  <Route
-                    path="/trends"
-                    element={
-                      <Placeholder title="舆情趋势分析" note={`${PLANNED} 将展示关注度与情感走势。`} />
-                    }
-                  />
-                  <Route
-                    path="/alerts"
-                    element={
-                      <Placeholder title="异常与预警" note={`${PLANNED} 舆情异常与源质量分区展示。`} />
-                    }
-                  />
+                  <Route path="/countries" element={<CountriesPage />} />
+                  <Route path="/trends" element={<TrendsPage />} />
+                  <Route path="/alerts" element={<AlertsPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
-                  <Route
-                    path="/system"
-                    element={
-                      <Placeholder title="系统与数据管理" note={`${PLANNED} 来源健康与数据质量面板。`} />
-                    }
-                  />
+                  <Route path="/system" element={<SystemPage />} />
                 </Routes>
               </main>
             </div>
           </div>
+          <CommandPalette />
         </ErrorBoundary>
       </TimeWindowProvider>
     </BrowserRouter>

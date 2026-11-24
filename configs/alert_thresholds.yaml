@@ -1,0 +1,36 @@
+# Alert rule thresholds (tunable without code change)
+
+volume_spike:
+  recent_hours: 24
+  baseline_days: 7
+  min_recent_count: 3
+  growth_ratio: 2.0  # 200% of daily baseline (= 3x absolute vs mean day)
+
+attitude_shift:
+  recent_hours: 48
+  baseline_days: 7
+  min_sample: 3
+  negative_share_rise: 0.25
+
+narrative_shift:
+  recent_hours: 48
+  baseline_days: 7
+  min_count: 3
+  share_rise: 0.2
+
+major_event:
+  min_importance: 0.7
+  min_articles: 2
+  keyword_boost: true
+
+transnational:
+  min_countries: 3
+
+source_failure:
+  min_failures: 2
+  failure_rate: 0.5
+
+collection_stall_hours: 36
+analysis_backlog: 50
+model_fail_min: 5
+quality_exclude_rate: 0.35

@@ -50,6 +50,10 @@ export function TopSearch() {
   const onPick = (hit: SearchHit) => {
     setOpen(false)
     setQ('')
+    if (hit.href) {
+      navigate(hit.href)
+      return
+    }
     if (hit.kind === 'event') {
       navigate(`/events/${hit.id}`)
       return
@@ -78,7 +82,15 @@ export function TopSearch() {
             hits.map((h) => (
               <li key={`${h.kind}-${h.id}`}>
                 <button type="button" className="top-search-hit" onClick={() => onPick(h)}>
-                  <span className="top-search-kind">{h.kind === 'event' ? '事件' : '文章'}</span>
+                  <span className="top-search-kind">
+                    {h.kind === 'event'
+                      ? '事件'
+                      : h.kind === 'article'
+                        ? '文章'
+                        : h.kind === 'country'
+                          ? '国家'
+                          : '来源'}
+                  </span>
                   <span className="top-search-title">{h.title}</span>
                   {h.subtitle && <span className="meta">{h.subtitle}</span>}
                 </button>

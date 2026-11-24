@@ -345,14 +345,108 @@ export function fetchDailyReport(date?: string) {
 }
 
 export type SearchHit = {
-  kind: 'event' | 'article'
+  kind: 'event' | 'article' | 'country' | 'source'
   id: string
   title: string
   subtitle?: string | null
   url?: string | null
+  href?: string | null
+  match?: string
 }
 
-export function fetchSearch(q: string, limit = 12) {
+export function fetchSearch(q: string, limit = 20) {
   const params = new URLSearchParams({ q, limit: String(limit) })
   return get<{ query: string; results: SearchHit[] }>(`/api/search?${params.toString()}`)
+}
+
+export type TrendsPayload = {
+  days: number
+  country_id: string | null
+  china_article_count: number
+  volume_series: Array<{ date: string; china_articles: number }>
+  sentiment_series: Array<{
+    date: string
+    positive: number
+    neutral: number
+    negative: number
+    unknown: number
+  }>
+  topics_top: Array<{ label: string; count: number; share: number }>
+  note?: string
+}
+
+export function fetchTrends(days = 30, country?: string) {
+  const params = new URLSearchParams({ days: String(days) })
+  if (country) params.set('country', country)
+  return get<TrendsPayload>(`/api/trends?${params.toString()}`)
+}
+
+export type CountryListItem = {
+  country_id: string
+  name: string
+  source_count: number
+  active_sources: number
+  china_article_count: number
+}
+
+export function fetchCountries() {
+  return get<{ countries: CountryListItem[] }>('/api/countries')
+}
+
+export type CountryDetail = {
+  country_id: string
+  name: string
+  disclaimer: string
+  media: Array<{
+    source_id: string
+    name: string
+    active_status: string
+    china_article_count: number
+    language: string | null
+  }>
+  china_article_count: number
+  sentiment_counts: Record<string, number>
+  stance_counts: Record<string, number>
+  topics_top: Array<{ label: string; count: number }>
+  frames_top: Array<{ label: string; count: number }>
+  recent_articles: Array<{
+    article_id: string
+    title: string | null
+    url: string | null
+    source_id: string
+    sentiment: string | null
+    published_at: string | null
+  }>
+}
+
+export function fetchCountryDetail(id: string) {
+  return get<CountryDetail>(`/api/countries/${encodeURIComponent(id)}`)
+}
+
+export type AlertItem = {
+  id: string
+  category: 'intelligence' | 'system'
+  subcategory: string
+  severity: string
+  title: string
+  summary: string
+  detected_at: string
+  evidence: Record<string, unknown>
+}
+
+export function fetchAlerts() {
+  return get<{
+    disclaimer: string
+    intelligence: AlertItem[]
+    system: AlertItem[]
+    counts: { intelligence: number; system: number; high: number }
+  }>('/api/alerts')
+}
+
+export function fetchSystemStatus() {
+  return get<{
+    totals: Record<string, number>
+    source_health: Array<Record<string, unknown>>
+    notes: string[]
+  }>('/api/system/status')
 }
