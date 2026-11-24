@@ -33,3 +33,7 @@ credentials*.json
 
 # Docker volumes
 postgres_data/
+
+# Frontend
+web/node_modules/
+web/dist/

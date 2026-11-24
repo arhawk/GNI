@@ -1,8 +1,9 @@
 # Dashboard 信息架构（DASHBOARD）
 
-**版本：** 0.4（对齐 Blueprint V4 §29）  
-**技术：** Streamlit（MVP）  
-**原则：** 按监测任务与交付组织页面；原始计数与加权量并列；情感与立场分图。
+**版本：** 0.5（对齐 Blueprint V4 §29 + Event Intelligence IA）  
+**技术：** 目标 UI = React（`web/`）；Streamlit 保留为调试入口  
+**原则：** 按监测任务组织；raw/weighted 并列；情感与立场分图；**事件发生地 ≠ 报道来源国**。  
+**事件模型权威：** [EVENT_INTELLIGENCE_IA.md](EVENT_INTELLIGENCE_IA.md)
 
 ---
 
@@ -11,7 +12,7 @@
 | 筛选 | 说明 |
 |------|------|
 | 时间范围 | 自然日/周/月或滚动窗口；展示时区可配，数据 UTC |
-| 国家 | 短名单多选 |
+| 国家 | 短名单多选（报道来源国） |
 | 来源组 | 如 state_controlled / public_service / gov_comms |
 | Topic / Target | **默认 Target=China** |
 | Sentiment / Stance / Frame | 可选 |
@@ -24,77 +25,107 @@
 
 ---
 
-## 2. Phase 1 主导航（V4）
+## 2. 主导航（分组壳）
 
-### 2.1 Overview（舆情总览）
+### MONITORING
 
-**问题：** 现在发生了什么？哪些变化值得关注？
+| 页 | 对应 |
+|----|------|
+| 总览 Overview | §2.1 |
+| 国家与媒体 | Countries + Sources 可切换（§2.2 / §2.7） |
+| 新闻中心 | News & Events / proto-Event 列表（§2.3） |
 
-- KPI：涉华 Article Count、Weighted Article Volume、正负比例、监测国家/活跃来源、重大新闻候选数、高优先级预警数  
-- 加权情感趋势、国家量/情感变化排名  
-- 重点正/负面文章、重大新闻候选、最新预警  
-- 可选 Agent/模板生成的当日摘要  
-- 采集与分析质量状态条  
+### INTELLIGENCE
 
-### 2.2 Countries（国家监测）
+| 页 | 对应 |
+|----|------|
+| 舆情趋势 | 趋势与分布下钻 |
+| 事件与叙事 | Event 三视图（Where / Who reports / How they frame） |
+| 异常与预警 | Alerts（§2.6） |
 
-**问题：** 某国被监测官方媒体如何报道中国？
+### REPORTS
 
-- 报道量、加权量、情感趋势（raw + weighted）  
-- Topic / Target / Frame；来源贡献  
-- 该国近期重大新闻候选与预警  
-- 下钻文章与证据  
-
-### 2.3 News & Events（重大新闻/事件）
-
-**Phase 1：** 规则/相似度**候选簇**列表（非完整事件图谱）。
-
-- 筛选：时间、国家、Topic、重要性/突发候选分  
-- 展示：摘要、覆盖国家/来源、报道趋势、情感分布、关联文章  
-- 允许人工合并/拆分反馈（完整事件生命周期 → Phase 2）  
-
-### 2.4 Articles（文章库）
-
-过滤：国家、来源、日期、Topic、Target、Sentiment、Stance、Frame、Relevance Level、分析状态、是否关联新闻候选。
-
-列表：标题、来源、国家、时间、weight、情感、立场、Topic、Target、簇、原文链接。
-
-详情：涉华片段、分析结果、证据、模型/权重版本、人工纠正入口。
-
-### 2.5 Reports（报告中心）
-
-日报/周报/月报列表；生成/截止时间、覆盖范围、校验状态；结论可展开证据。
-
-### 2.6 Alerts（预警中心）
-
-级别、类型、范围、触发时间、状态；规则与基线细节；代表文章；误报反馈。质量类与舆情类分栏。详见 [ALERTS.md](ALERTS.md)。
-
-### 2.7 Sources & Quality（来源与数据质量）
-
-来源属性与审核证据；采集成功率、提取率、时间完整率；重复率、分析成功率、Token/费用。**与舆情结论分区。**
-
-### 2.8 Research（研究分析）
-
-Phase 1 可占位或轻量下钻；跨国热力图等深化可后置。开放式研究 Agent → Phase 3。
+| 页 | 对应 |
+|----|------|
+| 报告中心 | Reports（§2.5） |
+| 系统与数据 | Sources & Quality（§2.7） |
 
 ---
 
-## 3. Phase 2+（预告）
+## 2.1 Overview（总览五块）
 
-完整事件生命周期、Narrative Shift / Entropy 等叙事变化页；Risk 提示与研究 Agent 工作台。
+**问题：** 现在发生了什么？哪些变化值得关注？
+
+| 块 | 内容 |
+|----|------|
+| A KPI | 总文章、涉华 Article Count、监测国家、活跃来源、重大事件(Event/候选数)、预警数；**Weighted Volume 与 Article Count 分列** |
+| B 地图 | **默认全球事件地图**（发生/宣布/影响地点）；可切换 **国家报道分布**（来源国热力）。两模式互斥 |
+| C 趋势 | 涉华量 + 情感分线（Sentiment ≠ Stance） |
+| D 主题 | `taxonomy_v0.4` 分布（非威胁八类） |
+| E 重要与异常 | 重大候选、量突增国、主题异动、基线异常 |
+
+禁止：威胁情报八色图例；US/China-Aligned 站队着色；把报道国钉成事件发生地。
+
+---
+
+## 2.2 国家与媒体监测
+
+**问题：** 某国被监测官方媒体如何报道中国？
+
+- 左：国家列表（搜索、地区、报道量/情感排序、时间窗）  
+- 右：详情 Tab（趋势、媒体贡献、Sentiment、Stance、Topic、Frame、近期新闻、历史）  
+- **国家 ↔ 媒体**可切换；一国媒体不得压成单一「国家立场」  
+
+---
+
+## 2.3 新闻中心 / Event 列表
+
+**Phase 1：** 规则型重大新闻候选 = **proto-Event**（非完整事件图谱）。
+
+- 筛选：时间、Topic、重要性分、是否有坐标  
+- 列表：标题、地点类型摘要、参与方、报道国家数、关联文章数  
+- 进入事件详情三视图（§2.3.1）  
+
+### 2.3.1 事件详情
+
+同一 Event ID：
+
+1. **Where** — 分类型地点地图  
+2. **Who reports** — 国家 → 媒体 → 文章  
+3. **How they frame** — 叙事簇 + 证据  
+4. **时间线** — 发生 / 首报 / 叙事变化 / 后续  
+
+---
+
+## 2.4 Articles（文章库）
+
+过滤：国家、来源、日期、Topic、Target、Sentiment、Stance、Frame、Relevance Level、分析状态、是否关联 Event。
+
+列表与详情：标题、weight、情感、立场、Topic、原文；涉华片段与证据。
+
+---
+
+## 2.5–2.8 Reports / Alerts / Sources / Research
+
+同 V4：报告列表与证据；预警分舆情/质量栏；来源质量与舆情分区；Research 可占位。
+
+---
+
+## 3. Phase 2+
+
+完整事件生命周期、跨语言聚类、Narrative Shift / Entropy；开放式研究 Agent → Phase 3。
 
 ---
 
 ## 4. 交互路径
 
 ```text
-Overview / Alerts → Country / News candidate → Chart → Articles → Evidence → Report
+Overview → Event pin / 异常列表 → Event 三视图 → Articles / Evidence → Report
+Overview → 报道分布地图 → Country → Media → Articles
 ```
-
-建议图表：排名横条、时间折线/堆叠、100% 堆叠分布、热力图、文章表。地图仅覆盖辅助。
 
 ---
 
-## 5. 与 VISUALIZATION_SPEC
+## 5. 与 VISUALIZATION_SPEC / EVENT_INTELLIGENCE_IA
 
-本文件定义页面与监测问题；[VISUALIZATION_SPEC.md](VISUALIZATION_SPEC.md) 补充图表约束。冲突时以本文件与 Blueprint V4 §22+ 为准。
+页面与监测问题以本文件为准；事件语义以 [EVENT_INTELLIGENCE_IA.md](EVENT_INTELLIGENCE_IA.md) 为准；图表约束见 [VISUALIZATION_SPEC.md](VISUALIZATION_SPEC.md)。冲突时以 Blueprint V4 §22+ 与 Event IA 为准。

@@ -372,3 +372,88 @@ class MetricRun(Base):
     results: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     stats: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+
+
+class Event(Base):
+    """Unique real-world event (Phase 1: proto from major-news rules; Phase 2: full clustering)."""
+
+    __tablename__ = "events"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    parent_event_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("events.id"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    event_type: Mapped[str | None] = mapped_column(String(64))  # taxonomy topic hint, not threat-class
+    status: Mapped[str] = mapped_column(String(32), default="proto")  # proto | active | closed
+    importance_score: Mapped[float | None] = mapped_column(Float)
+    window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    has_physical_location: Mapped[bool] = mapped_column(Boolean, default=False)
+    schema_version: Mapped[str] = mapped_column(String(64), default="event_v0.1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class EventLocation(Base):
+    __tablename__ = "event_locations"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    location_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    # EVENT_LOCATION | ANNOUNCEMENT_LOCATION | PARTICIPANT_LOCATION | AFFECTED_AREA | RELATED_LOCATION
+    label: Mapped[str | None] = mapped_column(String(256))
+    country_id: Mapped[str | None] = mapped_column(String(8))
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EventParticipant(Base):
+    __tablename__ = "event_participants"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    participant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    participant_name: Mapped[str | None] = mapped_column(String(256))
+    role: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EventArticle(Base):
+    __tablename__ = "event_articles"
+    __table_args__ = (UniqueConstraint("event_id", "article_id", name="uq_event_articles"),)
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    relation: Mapped[str] = mapped_column(String(32), default="covers")  # covers | follow_up | background
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class NarrativeCluster(Base):
+    __tablename__ = "narrative_clusters"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(256), nullable=False)
+    frame_id: Mapped[str | None] = mapped_column(String(64))
+    summary: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EventNarrativeEvidence(Base):
+    __tablename__ = "event_narrative_evidence"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    narrative_cluster_id: Mapped[str] = mapped_column(
+        ForeignKey("narrative_clusters.id"), nullable=False, index=True
+    )
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    span_id: Mapped[str | None] = mapped_column(PortableUUID, nullable=True)
+    quote: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

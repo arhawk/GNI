@@ -12,7 +12,8 @@ def setup_logging(level: str = "INFO") -> None:
         root.setLevel(level.upper())
         return
 
-    handler = logging.StreamHandler(sys.stdout)
+    # Keep stdout clean for CLI JSON payloads; send logs to stderr.
+    handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(
         logging.Formatter(
             fmt="%(asctime)s %(levelname)s [%(name)s] %(message)s",
