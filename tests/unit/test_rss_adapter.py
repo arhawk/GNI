@@ -79,6 +79,40 @@ def test_rss_adapter_rejects_tbd():
         adapter.fetch({"feed_url": "TBD"})
 
 
+def test_rss_adapter_uses_per_source_user_agent(monkeypatch):
+    adapter = RssAdapter(user_agent="default-bot")
+    seen: dict[str, str] = {}
+
+    class FakeResponse:
+        text = FIXTURE
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            seen["ua"] = kwargs.get("headers", {}).get("User-Agent", "")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url: str):
+            return FakeResponse()
+
+    monkeypatch.setattr("gni.ingestion.rss_adapter.httpx.Client", FakeClient)
+    adapter.fetch(
+        {
+            "feed_url": "https://example.test/feed.xml",
+            "user_agent": "custom-ua-for-source",
+        }
+    )
+    assert seen["ua"] == "custom-ua-for-source"
+
+
 def test_fixture_file_marked_synthetic():
     path = Path(__file__).resolve().parents[2] / "data" / "samples" / "synthetic_rss.xml"
     text = path.read_text(encoding="utf-8")

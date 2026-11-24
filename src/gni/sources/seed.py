@@ -88,7 +88,10 @@ def seed_sources(session: Session, path: Path | None = None) -> dict[str, int]:
             verification_status=row.get("verification_status", "unverified"),
             feed_or_api_url=row.get("feed_or_api_url"),
             notes=row.get("notes"),
-            config={"feed_url": row.get("feed_or_api_url")},
+            config={
+                "feed_url": row.get("feed_or_api_url"),
+                **(row.get("config") or {}),
+            },
         )
         if existing is None:
             session.add(Source(id=sid, **fields))

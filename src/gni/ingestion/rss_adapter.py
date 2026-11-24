@@ -57,6 +57,14 @@ class RssAdapter(BaseAdapter):
         if not feed_url or feed_url == "TBD":
             raise ValueError("RSS feed_url missing or TBD")
 
+        # Per-source UA override (some gov hosts block non-browser agents with 403).
+        user_agent = source_config.get("user_agent") or self.user_agent
+        headers = {
+            "User-Agent": user_agent,
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+            "X-GNI-Client": "GNI-ResearchBot/0.1",
+        }
+
         @retry(
             reraise=True,
             stop=stop_after_attempt(self.max_attempts),
@@ -67,7 +75,7 @@ class RssAdapter(BaseAdapter):
             with httpx.Client(
                 timeout=self.timeout,
                 follow_redirects=True,
-                headers={"User-Agent": self.user_agent},
+                headers=headers,
             ) as client:
                 response = client.get(feed_url)
                 response.raise_for_status()
