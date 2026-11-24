@@ -46,7 +46,7 @@
 | 特征 | title/lead prominence、primary_subject、argument_centrality 等 |
 | rationale / confidence | 必填可审计 |
 
-MVP 用可解释规则/等级映射；标注集校准后调整阈值。低相关文章可保留库内但排除核心舆情纳入。
+MVP 用可解释规则/等级映射；**provisional** 中点与纳入规则见 [PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)。公开集（如 GDELT_chinaNews）仅作评测代理。低相关（incidental）默认保留库内但排除核心舆情纳入。
 
 ---
 

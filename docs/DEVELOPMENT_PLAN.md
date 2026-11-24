@@ -46,6 +46,8 @@
 
 - Phase 2：跨语言故事、完整事件聚类、叙事变化指标、预警校准  
 - Phase 3：开放式研究 Agent、高级专题与 Risk 深化  
+- **2026-11-24 确认：** 在 **P1-F 完成前**只保留路线图，**不**写独立 P2/P3 任务书。  
+- Provisional 参数与公开评测代理：[PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)  
 
 ---
 

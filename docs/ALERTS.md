@@ -20,7 +20,7 @@
 | MAJOR_EVENT_CANDIDATE | 重大新闻候选被识别 | |
 | SOURCE_HEALTH_FAILURE | 采集异常 | **数据质量提醒，非舆情** |
 
-阈值（σ / 百分比）、窗口与冷启动禁用规则 **待标定**，见 [PHASE0_REPOSITORY_AUDIT_V4.md](PHASE0_REPOSITORY_AUDIT_V4.md)。
+阈值与冷启动：**provisional** 见 [PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)（`alert_rules_provisional_v0.1`）；非最终 σ 校准。
 
 ---
 

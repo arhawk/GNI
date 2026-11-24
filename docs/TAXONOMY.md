@@ -135,7 +135,7 @@ V4 候选体系（试标后可调整）：
 | incidental | 顺带提及 | 0.01–0.09 或可排除核心统计 |
 | not_relevant | 无实质关系 | 0.00 |
 
-详见 [METRICS.md](METRICS.md)、[AI_ANALYSIS.md](AI_ANALYSIS.md)。
+详见 [METRICS.md](METRICS.md)、[AI_ANALYSIS.md](AI_ANALYSIS.md)、[PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)（provisional 中点与纳入规则）。
 
 ---
 

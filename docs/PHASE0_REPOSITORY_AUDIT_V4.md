@@ -40,16 +40,20 @@
 
 ---
 
-## 4. 待标定（后置，不阻塞文档对齐）
+## 4. 待标定 → 已冻结 provisional（2026-11-24）
 
-- Relevance 等级→权重映射的标注集与纳入阈值  
-- Sentiment 连续分 `s_i∈[-1,1]` 与 Mixed 映射  
-- 预警阈值（σ/%）与冷启动禁用  
-- 重大新闻特征权重  
-- Agent 模块接口 ADR（Intelligence / Metrics / Alert / Reporting）
+详见 [PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)：
+
+- Relevance 等级→权重中点/区间与 incidental 默认不进核心统计  
+- Sentiment `s_i` 与 Mixed 不进加权分母  
+- 预警阈值与冷启动禁用（`alert_rules_provisional_v0.1`）  
+- 重大新闻特征权重（`major_news_score_provisional_v0.1`）  
+- 公开评测代理：GDELT_chinaNews 等（非 GNI 金标）  
+
+Agent 模块接口 ADR 仍可后置；交付切分以任务书 P1-A→F 为准（非 V4 Sprint 字母）。
 
 ---
 
 ## 5. 本轮文档动作
 
-入库 V4；更新 PRD、PRODUCT_SCOPE、METRICS、AI_ANALYSIS、TAXONOMY、DASHBOARD、ALERTS、PHASE1_TASK_BRIEF、REPORT_GOVERNANCE、ARCHITECTURE、ARTICLE_ANALYSIS_SCHEMA、DEVELOPMENT_PLAN、README。
+入库 V4；更新 PRD、PRODUCT_SCOPE、METRICS、AI_ANALYSIS、TAXONOMY、DASHBOARD、ALERTS、PHASE1_TASK_BRIEF、REPORT_GOVERNANCE、ARCHITECTURE、ARTICLE_ANALYSIS_SCHEMA、DEVELOPMENT_PLAN、README；后续冻结 PROVISIONAL_CALIBRATION。

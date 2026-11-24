@@ -87,7 +87,7 @@
 
 - 权重 `w_i ∈ [0,1]` 表达统计贡献，**不篡改** Article Count  
 - Dashboard / 报告必须提供 **A 原始视图** 与 **B 加权视图**  
-- 等级 → 权重映射待标注校准（见审计「待标定」）
+- 等级 → 权重映射：**provisional** 默认见 [PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)（`relevance_weight_version=provisional_v0.1`）
 
 ### 4.2 加权规模与情感
 
@@ -100,7 +100,7 @@
 | Negative-to-Positive Ratio (N/P) | 加权负面量 / 加权正面量；分母为 0 → N/A |
 | Sentiment Coverage | 有效情感权重 / 纳入文章权重 |
 
-**默认：** Unknown / Insufficient Evidence **不进**情感分数分母，但单独报告数量与权重；Mixed 映射规则待标定。
+**默认（provisional）：** Unknown / Insufficient Evidence / Mixed **不进** Weighted Sentiment Score 分母，但单独报告数量与权重；`s_i` 映射见 [PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)。
 
 不得把 Weighted Sentiment Score 称为「国家对华态度分」；推荐表述：**被监测官媒样本加权情感分数**。
 

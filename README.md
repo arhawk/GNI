@@ -10,6 +10,7 @@
 - [Blueprint V4](docs/BLUEPRINT_V4.md) · [V4 仓库审计](docs/PHASE0_REPOSITORY_AUDIT_V4.md)
 - [Blueprint V3](docs/BLUEPRINT_V3.md)（历史）
 - [PRD](docs/PRD.md) · [指标](docs/METRICS.md) · [Dashboard](docs/DASHBOARD.md) · [Alerts](docs/ALERTS.md)
+- [Provisional 标定](docs/PROVISIONAL_CALIBRATION.md)（P1-C 起临时默认 + 公开评测代理）
 - [Phase 1 任务书（监测型 A～F）](docs/PHASE1_TASK_BRIEF.md) · [P1-A 验收](docs/PHASE1A_ACCEPTANCE.md)
 - [开发计划](docs/DEVELOPMENT_PLAN.md) · [种子配置](configs/sources_seed.yaml)
 
