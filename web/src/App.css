@@ -323,6 +323,28 @@ h4 {
   border-top: 1px solid var(--line);
 }
 
+.board-list {
+  margin: 0.5rem 0 0;
+}
+
+.report-page h2 {
+  margin-top: 1.25rem;
+}
+
+.report-page table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.report-page th,
+.report-page td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+}
+
 .kpi-grid.compact {
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   margin: 0.5rem 0 0.75rem;

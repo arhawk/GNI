@@ -203,6 +203,30 @@ def cmd_events_extract(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reports_daily(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.reports.daily import build_daily_report, write_daily_files
+
+    ensure_schema()
+    with session_scope() as session:
+        payload = build_daily_report(session, day=args.date)
+    paths = write_daily_files(payload, out_dir=args.out_dir)
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "period": payload.get("period"),
+                "files": paths,
+                "missing_analysis": payload.get("missing_analysis"),
+                "events": len(payload.get("events") or []),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_api_serve(args: argparse.Namespace) -> int:
     try:
         import uvicorn
@@ -245,13 +269,19 @@ def cmd_analyze_run(args: argparse.Namespace) -> int:
     ensure_schema()
     provider = args.provider
     with session_scope() as session:
+        per_country = getattr(args, "per_country", None)
+        # When capping per country, raise the default total limit so 5×10 is reachable.
+        limit = None if args.article else args.limit
+        if per_country and not args.article and args.limit == 20:
+            limit = max(args.limit, per_country * 20)
         run = run_analysis(
             session,
-            limit=None if args.article else args.limit,
+            limit=limit,
             source_id=args.source,
             article_id=args.article,
             provider=provider,
             reanalyze=args.reanalyze,
+            per_country=per_country,
         )
         payload = {
             "run_id": run.id,
@@ -384,6 +414,13 @@ def main(argv: list[str] | None = None) -> None:
     p_arun.add_argument("--article", help="Analyze a single article id")
     p_arun.add_argument("--limit", type=int, default=20, help="Max articles (default 20)")
     p_arun.add_argument(
+        "--per-country",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Max articles per source country (e.g. 10 for trial); combines with --limit",
+    )
+    p_arun.add_argument(
         "--provider",
         choices=["heuristic", "deepseek"],
         default=None,
@@ -437,6 +474,17 @@ def main(argv: list[str] | None = None) -> None:
     p_eext = events_sub.add_parser("extract", help="Extract event fingerprint candidates")
     p_eext.add_argument("--limit", type=int, default=500, help="Max articles to extract")
     p_eext.set_defaults(func=cmd_events_extract)
+
+    p_reports = sub.add_parser("reports", help="Daily / weekly report generation")
+    reports_sub = p_reports.add_subparsers(dest="reports_command", required=True)
+    p_rdaily = reports_sub.add_parser("daily", help="Build daily report JSON+Markdown")
+    p_rdaily.add_argument("--date", help="YYYY-MM-DD (Asia/Shanghai); default today")
+    p_rdaily.add_argument(
+        "--out-dir",
+        default=None,
+        help="Output directory (default: ./data)",
+    )
+    p_rdaily.set_defaults(func=cmd_reports_daily)
 
     p_api = sub.add_parser("api", help="HTTP API for React UI")
     api_sub = p_api.add_subparsers(dest="api_command", required=True)

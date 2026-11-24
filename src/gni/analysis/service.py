@@ -217,6 +217,79 @@ def _overall_confidence(confidence: Any) -> float | None:
     return None
 
 
+def _select_articles_for_analysis(
+    session: Session,
+    *,
+    limit: int | None,
+    source_id: str | None,
+    article_id: str | None,
+    reanalyze: bool,
+    per_country: int | None,
+    articles_remaining: int,
+) -> tuple[list[Article], dict[str, int]]:
+    """Pick articles; optional per-country cap then optional total limit (stricter wins)."""
+    from collections import defaultdict
+
+    from gni.infrastructure.models import Source
+
+    if article_id:
+        art = session.get(Article, article_id)
+        return ([art] if art else []), {}
+
+    q = select(Article).where(
+        Article.processing_status == "done",
+        Article.exclude_from_metrics.is_(False),
+    )
+    if source_id:
+        q = q.where(Article.source_id == source_id)
+    if not reanalyze:
+        q = q.where(Article.analysis_status.in_(["pending", "failed"]))
+    q = q.order_by(Article.first_seen_at.asc())
+
+    # Fetch a wide pool when capping per country; otherwise apply limit in SQL.
+    if per_country is not None and per_country > 0:
+        pool_cap = max(per_country * 40, (limit or 0), 200)
+        pool_cap = min(pool_cap, max(articles_remaining, 0) or pool_cap)
+        candidates = list(session.scalars(q.limit(pool_cap)).all())
+        sources = {
+            s.id: s
+            for s in session.scalars(
+                select(Source).where(Source.id.in_({a.source_id for a in candidates}))
+            ).all()
+        } if candidates else {}
+        by_country: dict[str, list[Article]] = defaultdict(list)
+        for a in candidates:
+            src = sources.get(a.source_id)
+            cid = (src.country_id if src else None) or "UNK"
+            if len(by_country[cid]) < per_country:
+                by_country[cid].append(a)
+        picked: list[Article] = []
+        counts: dict[str, int] = {}
+        for cid in sorted(by_country.keys()):
+            rows = by_country[cid]
+            counts[cid] = len(rows)
+            picked.extend(rows)
+        # Stable-ish: already first_seen order within country; keep country groups
+        if limit is not None:
+            picked = picked[: min(limit, articles_remaining)]
+        else:
+            picked = picked[:articles_remaining] if articles_remaining >= 0 else picked
+        # Recount after total trim
+        trimmed: dict[str, int] = defaultdict(int)
+        sources2 = sources
+        for a in picked:
+            src = sources2.get(a.source_id)
+            cid = (src.country_id if src else None) or "UNK"
+            trimmed[cid] += 1
+        return picked, dict(trimmed)
+
+    cap = limit if limit is not None else 20
+    cap = min(cap, articles_remaining) if articles_remaining >= 0 else cap
+    if cap <= 0:
+        return [], {}
+    return list(session.scalars(q.limit(cap)).all()), {}
+
+
 def run_analysis(
     session: Session,
     *,
@@ -225,6 +298,7 @@ def run_analysis(
     article_id: str | None = None,
     provider: str | None = None,
     reanalyze: bool = False,
+    per_country: int | None = None,
 ) -> AnalysisRun:
     settings = get_settings()
     requested = (provider or settings.llm_provider or "heuristic").lower()
@@ -275,30 +349,29 @@ def run_analysis(
         task.stats = {"skipped_budget": True}
         return run
 
-    q = select(Article)
-    if article_id:
-        q = q.where(Article.id == article_id)
-    else:
-        q = q.where(Article.processing_status == "done")
-        q = q.where(Article.exclude_from_metrics.is_(False))
-        if source_id:
-            q = q.where(Article.source_id == source_id)
-        if not reanalyze:
-            q = q.where(Article.analysis_status.in_(["pending", "failed"]))
-        q = q.order_by(Article.first_seen_at.asc())
-        cap = limit if limit is not None else settings.daily_article_limit
-        cap = min(cap, budget.articles_remaining)
-        if cap <= 0:
-            run.status = "budget_exhausted"
-            run.finished_at = datetime.now(timezone.utc)
-            run.stats = {"attempted": 0, "ok": 0, "failed": 0, "skipped_budget": True}
-            task.status = "budget_exhausted"
-            task.finished_at = run.finished_at
-            task.stats = {"skipped_budget": True}
-            return run
-        q = q.limit(cap)
+    remaining = budget.articles_remaining
+    if remaining <= 0 and not article_id:
+        run.status = "budget_exhausted"
+        run.finished_at = datetime.now(timezone.utc)
+        run.stats = {"attempted": 0, "ok": 0, "failed": 0, "skipped_budget": True}
+        task.status = "budget_exhausted"
+        task.finished_at = run.finished_at
+        task.stats = {"skipped_budget": True}
+        return run
 
-    articles = list(session.scalars(q).all())
+    effective_limit = limit
+    if effective_limit is None and per_country is None and not article_id:
+        effective_limit = settings.daily_article_limit
+
+    articles, per_country_counts = _select_articles_for_analysis(
+        session,
+        limit=effective_limit,
+        source_id=source_id,
+        article_id=article_id,
+        reanalyze=reanalyze,
+        per_country=per_country,
+        articles_remaining=remaining if not article_id else 10**9,
+    )
     ok = 0
     failed = 0
     stopped_budget = False
@@ -347,6 +420,8 @@ def run_analysis(
         "failed": failed,
         "provider_requested": requested,
         "stopped_budget": stopped_budget,
+        "per_country": per_country,
+        "per_country_counts": per_country_counts,
         "budget": snapshot_budget(session, settings).__dict__,
         "details_sample": details[:20],
     }
@@ -357,5 +432,6 @@ def run_analysis(
         "ok": ok,
         "failed": failed,
         "stopped_budget": stopped_budget,
+        "per_country_counts": per_country_counts,
     }
     return run

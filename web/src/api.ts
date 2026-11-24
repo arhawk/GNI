@@ -120,6 +120,8 @@ export type EventSummary = {
   importance_score: number | null
   window_start: string | null
   window_end: string | null
+  event_time?: string | null
+  sort_time?: string | null
   has_physical_location: boolean
   article_count: number
   locations: Array<{
@@ -129,6 +131,40 @@ export type EventSummary = {
     lat: number | null
     lon: number | null
   }>
+}
+
+export type DailyReport = {
+  report_type: string
+  period: string
+  generated_at: string
+  country_scope: string[]
+  target_scope: string
+  disclaimer: string
+  overview: Record<string, unknown>
+  coverage_by_country: Array<{
+    country_id: string
+    article_count: number
+    analyzed_count: number
+  }>
+  title_samples: Record<string, Array<{ title: string; source_id: string; url: string | null }>>
+  china_articles: Array<{
+    country_id: string
+    relevance: string | null
+    title: string | null
+    article_id: string
+    sentiment: string | null
+    stance: string | null
+    summary: string | null
+  }>
+  events: Array<{
+    event_id: string
+    title: string
+    event_time: string | null
+    article_count: number
+    evidence: Array<{ article_id: string; title: string | null; country_id: string | null }>
+  }>
+  missing_analysis: number
+  quality_notes: string[]
 }
 
 export type EventDetail = {
@@ -247,4 +283,11 @@ export function fetchCountryChinaAttitude(countryId: string, window = '30d') {
   return get<CountryAttitudeDetail>(
     `/api/countries/${encodeURIComponent(countryId)}/china-attitude?window=${encodeURIComponent(window)}`,
   )
+}
+
+export function fetchDailyReport(date?: string) {
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  const q = params.toString()
+  return get<DailyReport>(`/api/reports/daily${q ? `?${q}` : ''}`)
 }

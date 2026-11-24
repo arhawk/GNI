@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   fetchCountryChinaAttitude,
   fetchOverview,
   type CountryAttitudeDetail,
   type Overview as OverviewData,
 } from '../api'
-import { DualMap, type MapMode } from '../components/DualMap'
+import { DualMap } from '../components/DualMap'
 import { useTimeWindow } from '../TimeWindowContext'
 
-type OverviewMapMode = Extract<MapMode, 'event_geography' | 'country_china_attitude'>
+type BoardMode = 'event_time_list' | 'country_china_attitude'
 
 export function OverviewPage() {
   const { window, setDataExtent } = useTimeWindow()
-  const navigate = useNavigate()
   const [data, setData] = useState<OverviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<OverviewMapMode>('event_geography')
+  const [mode, setMode] = useState<BoardMode>('event_time_list')
   const [attitudeDetail, setAttitudeDetail] = useState<CountryAttitudeDetail | null>(null)
   const [attitudeError, setAttitudeError] = useState<string | null>(null)
 
@@ -42,13 +41,6 @@ export function OverviewPage() {
       .catch((e: Error) => setError(e.message))
   }, [window.startMs, window.endMs, window.presetDays, setDataExtent])
 
-  const onEventClick = useCallback(
-    (eventId: string) => {
-      navigate(`/events/${eventId}`)
-    },
-    [navigate],
-  )
-
   const onCountryClick = useCallback((countryId: string) => {
     setAttitudeError(null)
     fetchCountryChinaAttitude(countryId)
@@ -73,6 +65,11 @@ export function OverviewPage() {
   const sentCounts = countsFrom(data.sentiment)
   const topicEntries = Object.entries(topicCounts).sort((a, b) => b[1] - a[1])
   const sentEntries = Object.entries(sentCounts).sort((a, b) => b[1] - a[1])
+  const timedEvents = [...data.events].sort((a, b) => {
+    const ta = Date.parse(a.sort_time || a.event_time || a.window_end || a.window_start || '') || 0
+    const tb = Date.parse(b.sort_time || b.event_time || b.window_end || b.window_start || '') || 0
+    return tb - ta
+  })
 
   return (
     <div className="overview">
@@ -119,17 +116,17 @@ export function OverviewPage() {
 
       <section className="block">
         <div className="block-head">
-          <h2>B · Map</h2>
-          <div className="seg" role="group" aria-label="Map mode">
+          <h2>B · Board</h2>
+          <div className="seg" role="group" aria-label="Board mode">
             <button
               type="button"
-              className={mode === 'event_geography' ? 'active' : ''}
+              className={mode === 'event_time_list' ? 'active' : ''}
               onClick={() => {
-                setMode('event_geography')
+                setMode('event_time_list')
                 setAttitudeDetail(null)
               }}
             >
-              Event geography
+              Latest events
             </button>
             <button
               type="button"
@@ -141,54 +138,74 @@ export function OverviewPage() {
           </div>
         </div>
         <p className="muted small">{data.meta.map_modes_note}</p>
-        <DualMap
-          mode={mode}
-          eventPins={data.maps.event_geography}
-          attitudePins={data.maps.country_china_attitude || []}
-          onEventClick={onEventClick}
-          onCountryClick={onCountryClick}
-        />
+
+        {mode === 'event_time_list' && (
+          <ul className="event-list board-list">
+            {timedEvents.map((e) => (
+              <li key={e.id}>
+                <Link to={`/events/${e.id}`}>{e.title}</Link>
+                <span className="meta">
+                  {fmtWhen(e.sort_time || e.event_time || e.window_end)} · {e.article_count} arts ·{' '}
+                  {e.status}
+                </span>
+              </li>
+            ))}
+            {timedEvents.length === 0 && (
+              <li className="muted">
+                No events yet — run <code>gni events rebuild</code>.
+              </li>
+            )}
+          </ul>
+        )}
+
         {mode === 'country_china_attitude' && (
-          <div className="attitude-panel">
-            {attitudeError && <p className="error">{attitudeError}</p>}
-            {!attitudeDetail && !attitudeError && (
-              <p className="muted small">
-                Click a colored country for positive / neutral / negative / unknown article counts.
-                Grey = no monitored sample (not clickable).
-              </p>
-            )}
-            {attitudeDetail && (
-              <>
-                <h3>{attitudeDetail.country_id} · {attitudeDetail.label}</h3>
-                <p className="muted small">{attitudeDetail.disclaimer}</p>
-                <div className="kpi-grid compact">
-                  <Kpi label="Positive" value={attitudeDetail.counts.positive} />
-                  <Kpi label="Neutral" value={attitudeDetail.counts.neutral} />
-                  <Kpi label="Negative" value={attitudeDetail.counts.negative} />
-                  <Kpi label="Unknown" value={attitudeDetail.counts.unknown} />
-                </div>
-                <ul className="event-list">
-                  {attitudeDetail.articles.slice(0, 12).map((a) => (
-                    <li key={a.article_id}>
-                      {a.url ? (
-                        <a href={a.url} target="_blank" rel="noreferrer">
-                          {a.title || a.article_id}
-                        </a>
-                      ) : (
-                        <span>{a.title || a.article_id}</span>
-                      )}
-                      <span className="meta">
-                        {a.source_name} · {a.sentiment ?? '—'}
-                      </span>
-                    </li>
-                  ))}
-                  {attitudeDetail.articles.length === 0 && (
-                    <li className="muted">No article sample for this country.</li>
-                  )}
-                </ul>
-              </>
-            )}
-          </div>
+          <>
+            <DualMap
+              mode="country_china_attitude"
+              eventPins={[]}
+              attitudePins={data.maps.country_china_attitude || []}
+              onCountryClick={onCountryClick}
+            />
+            <div className="attitude-panel">
+              {attitudeError && <p className="error">{attitudeError}</p>}
+              {!attitudeDetail && !attitudeError && (
+                <p className="muted small">
+                  Click a colored country for positive / neutral / negative / unknown counts. Grey =
+                  no monitored sample.
+                </p>
+              )}
+              {attitudeDetail && (
+                <>
+                  <h3>
+                    {attitudeDetail.country_id} · {attitudeDetail.label}
+                  </h3>
+                  <p className="muted small">{attitudeDetail.disclaimer}</p>
+                  <div className="kpi-grid compact">
+                    <Kpi label="Positive" value={attitudeDetail.counts.positive} />
+                    <Kpi label="Neutral" value={attitudeDetail.counts.neutral} />
+                    <Kpi label="Negative" value={attitudeDetail.counts.negative} />
+                    <Kpi label="Unknown" value={attitudeDetail.counts.unknown} />
+                  </div>
+                  <ul className="event-list">
+                    {attitudeDetail.articles.slice(0, 12).map((a) => (
+                      <li key={a.article_id}>
+                        {a.url ? (
+                          <a href={a.url} target="_blank" rel="noreferrer">
+                            {a.title || a.article_id}
+                          </a>
+                        ) : (
+                          <span>{a.title || a.article_id}</span>
+                        )}
+                        <span className="meta">
+                          {a.source_name} · {a.sentiment ?? '—'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </>
         )}
       </section>
 
@@ -271,6 +288,11 @@ function Bar({ label, value, max }: { label: string; value: number; max: number 
 function fmtNum(n: number | null | undefined) {
   if (n == null) return '—'
   return Number.isInteger(n) ? n : n.toFixed(2)
+}
+
+function fmtWhen(iso: string | null | undefined) {
+  if (!iso) return '—'
+  return iso.slice(0, 16).replace('T', ' ')
 }
 
 function countsFrom(blob: unknown): Record<string, number> {

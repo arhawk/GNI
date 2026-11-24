@@ -100,7 +100,7 @@ def test_rebuild_proto_no_forced_coords(db):
 
         overview = overview_payload(session, days=30)
         assert overview["meta"]["map_modes"] == [
-            "event_geography",
+            "event_time_list",
             "country_china_attitude",
         ]
         assert overview["kpis"]["major_events"] >= 1

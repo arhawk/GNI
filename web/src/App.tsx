@@ -6,6 +6,7 @@ import { TimeWindowProvider } from './TimeWindowContext'
 import { OverviewPage } from './pages/Overview'
 import { EventsPage } from './pages/Events'
 import { EventDetailPage } from './pages/EventDetail'
+import { ReportsPage } from './pages/Reports'
 import { Placeholder } from './pages/Placeholder'
 import './App.css'
 
@@ -59,7 +60,7 @@ export default function App() {
                   />
                   <Route path="/trends" element={<Placeholder title="Trends" />} />
                   <Route path="/alerts" element={<Placeholder title="Alerts" />} />
-                  <Route path="/reports" element={<Placeholder title="Report center" />} />
+                  <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/system" element={<Placeholder title="Sources & quality" />} />
                 </Routes>
               </main>

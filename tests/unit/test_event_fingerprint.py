@@ -185,7 +185,7 @@ def test_fingerprint_rebuild_and_overview_modes(db):
         assert stats["path"] == "fingerprint"
         assert stats["created"] >= 1
         payload = overview_payload(session, days=30)
-        assert "event_geography" in payload["meta"]["map_modes"]
+        assert "event_time_list" in payload["meta"]["map_modes"]
         assert "country_china_attitude" in payload["meta"]["map_modes"]
         assert "country_china_attitude" in payload["maps"]
         # Brussels/Beijing place hint may create pins; without coords events still listed

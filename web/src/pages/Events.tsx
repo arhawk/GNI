@@ -8,7 +8,16 @@ export function EventsPage() {
 
   useEffect(() => {
     fetchEvents(50)
-      .then((r) => setEvents(r.events))
+      .then((r) => {
+        const sorted = [...r.events].sort((a, b) => {
+          const ta =
+            Date.parse(a.sort_time || a.event_time || a.window_end || a.window_start || '') || 0
+          const tb =
+            Date.parse(b.sort_time || b.event_time || b.window_end || b.window_start || '') || 0
+          return tb - ta
+        })
+        setEvents(sorted)
+      })
       .catch((e: Error) => setError(e.message))
   }, [])
 
@@ -17,21 +26,22 @@ export function EventsPage() {
   return (
     <div className="panel">
       <h2>News & Events</h2>
-      <p className="muted small">
-        Phase 1 proto-Events from rule clustering — not a full cross-language event graph.
-      </p>
+      <p className="muted small">Sorted by event time (newest first). Location pins are not required.</p>
       <ul className="event-list">
         {events.map((e) => (
           <li key={e.id}>
             <Link to={`/events/${e.id}`}>{e.title}</Link>
             <span className="meta">
-              {e.status} · {e.article_count} arts · score {e.importance_score ?? '—'}
-              {!e.has_physical_location && ' · no physical pin'}
+              {(e.sort_time || e.event_time || e.window_end || '').slice(0, 16).replace('T', ' ') ||
+                '—'}{' '}
+              · {e.status} · {e.article_count} arts
             </span>
           </li>
         ))}
         {events.length === 0 && !error && (
-          <li className="muted">Empty — run <code>gni events rebuild</code>.</li>
+          <li className="muted">
+            Empty — run <code>gni events rebuild</code>.
+          </li>
         )}
       </ul>
     </div>

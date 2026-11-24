@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -308,18 +308,28 @@ def _persist_cluster(session: Session, cl: ProtoCluster) -> str:
     return event_id
 
 
+def _event_sort_time(e: Event) -> datetime:
+    """Newest-first board key: event_time → window_end → window_start → created_at."""
+    for t in (e.event_time, e.window_end, e.window_start, e.created_at):
+        if t is not None:
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def list_events(session: Session, *, limit: int = 50) -> list[dict[str, Any]]:
     from sqlalchemy import func
 
-    rows = session.scalars(
-        select(Event).order_by(Event.importance_score.desc(), Event.created_at.desc()).limit(limit)
-    ).all()
+    # Fetch then sort in Python so SQLite/Postgres both honor event_time fallbacks.
+    rows = list(session.scalars(select(Event).limit(max(limit * 3, 80))).all())
+    rows.sort(key=_event_sort_time, reverse=True)
+    rows = rows[:limit]
     out: list[dict[str, Any]] = []
     for e in rows:
         art_count = session.scalar(
             select(func.count()).select_from(EventArticle).where(EventArticle.event_id == e.id)
         )
         locs = session.scalars(select(EventLocation).where(EventLocation.event_id == e.id)).all()
+        sort_t = _event_sort_time(e)
         out.append(
             {
                 "id": e.id,
@@ -330,6 +340,8 @@ def list_events(session: Session, *, limit: int = 50) -> list[dict[str, Any]]:
                 "importance_score": e.importance_score,
                 "window_start": e.window_start.isoformat() if e.window_start else None,
                 "window_end": e.window_end.isoformat() if e.window_end else None,
+                "event_time": e.event_time.isoformat() if e.event_time else None,
+                "sort_time": sort_t.isoformat() if sort_t.year > 1 else None,
                 "has_physical_location": e.has_physical_location,
                 "article_count": art_count or 0,
                 "locations": [
@@ -626,10 +638,10 @@ def overview_payload(
             "data_max": data_max.isoformat() if data_max else None,
             "metric_definition_version": metrics.get("metric_definition_version"),
             "relevance_weight_version": metrics.get("relevance_weight_version"),
-            "map_modes": ["event_geography", "country_china_attitude"],
+            "map_modes": ["event_time_list", "country_china_attitude"],
             "map_modes_note": (
-                "Mutually exclusive: event geography vs China-attitude (monitored media sample, "
-                "not official state position). reporting_source retained in maps payload only."
+                "Primary board: events newest-first by event_time. "
+                "Attitude map: monitored media sample colors — not official state position."
             ),
             "time_window": metrics.get("time_window"),
         },

@@ -17,6 +17,7 @@ from gni.events.service import (
     rebuild_proto_events,
 )
 from gni.infrastructure.db import ensure_schema, session_scope
+from gni.reports.daily import build_daily_report
 
 app = FastAPI(title="GNI API", version=__version__)
 app.add_middleware(
@@ -100,3 +101,14 @@ def api_country_china_attitude(
 ) -> dict:
     with session_scope() as session:
         return get_country_china_attitude(session, country_id.upper(), window=window)
+
+
+@app.get("/api/reports/daily")
+def api_daily_report(
+    date: str | None = Query(None, description="YYYY-MM-DD in Asia/Shanghai"),
+) -> dict:
+    try:
+        with session_scope() as session:
+            return build_daily_report(session, day=date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
