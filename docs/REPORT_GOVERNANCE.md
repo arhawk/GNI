@@ -1,7 +1,7 @@
 # 报告治理与证据约束（REPORT_GOVERNANCE）
 
-**版本：** 0.1  
-**阶段：** MVP 实现日报/周报；Agent 增强在 Phase 3
+**版本：** 0.4（对齐 Blueprint V4 §27）  
+**阶段：** MVP 实现日报/周报/月报模板 + 规则预警投递；开放式研究 Agent 在 Phase 3
 
 ---
 
@@ -9,10 +9,11 @@
 
 | 类型 | 窗口 | 说明 |
 |------|------|------|
-| daily | 自然日（指定时区） | 主题、情感/立场摘要、重点文章、质量摘要 |
-| weekly | 自然周 | 同上 + 周环比（冷启动期谨慎表述） |
+| daily | 自然日（指定时区） | 概览、raw/weighted 情感、国家观察、正负面代表文、重大新闻候选、异常、质量与限制 |
+| weekly | 自然周 | 同上 + 周环比与走势（冷启动谨慎） |
+| monthly | 自然月 | 格局与持续性；须按统一口径基于文章级数据重算，禁止简单日均 |
 
-月报可在 MVP 后期或 Phase 1-D 扩展；非 Phase 0 实现项。
+重大新闻候选简报可作为日报章节或独立投递；结构见 Blueprint V4 §26.5。
 
 ---
 
@@ -25,6 +26,8 @@
 | Hypothesis | 待验证假设 | 不得写成事实 |
 | Background | 背景知识 | 不得冒充本次采集证据 |
 
+标准表述须落在「被监测官媒样本」，禁止无证据扩大为国家政策/民意结论。
+
 ---
 
 ## 3. 证据硬约束
@@ -32,9 +35,9 @@
 正式报告中的**事实性结论**必须绑定：
 
 - `article_id` 和/或 `evidence_id`  
-- 和/或 `metric_run_id`  
+- 和/或 `metric_run_id` / `alert_id`  
 - `source_id`  
-- 时间窗口与统计口径  
+- 时间窗口与统计口径（含 weight 版本）  
 
 **无证据 → 验证器拒绝写入正式报告**，或要求改写为不确定性说明。
 
@@ -48,18 +51,24 @@
 
 - report_type、period_start/end、timezone  
 - country_scope、source_scope  
-- taxonomy_version、metric_definition_version  
+- taxonomy_version、metric_definition_version、relevance_weight_version  
 - generator（rule/llm）、model/prompt 版本（若用 LLM 润色）  
-- sample_size、coverage notes、limitations  
+- sample_size、weighted_sample、coverage notes、limitations  
 - created_at、content 快照  
 
-生成后保留**证据快照**，避免来源文章后续更新导致不可复核。
+生成后保留**证据快照**。自然语言生成不得改写统计结果。
 
 ---
 
-## 5. Agent 边界（Phase 3 预告）
+## 5. 与预警的关系
 
-Agent 可：查询、归纳、在工具结果上起草。  
-Agent 不可：替代采集、替代指标计算、凭空判断事件、无证据预测政策。
+规则预警摘要可进入日报「异常变化」；完整生命周期与反馈见 [ALERTS.md](ALERTS.md)。质量类（SOURCE_HEALTH_FAILURE）不得伪装为舆情结论。
 
-流程：`Research Question → Query Tools → Evidence Retrieval → Draft Claims → Evidence Validation → Report`
+---
+
+## 6. Agent 边界
+
+**MVP：** 模板拼装 + 可选润色 + Evidence QA。  
+**Phase 3：** 开放式研究问题多步骤检索。  
+
+Agent 不可：替代采集、替代指标/阈值计算、无证据声称重大事件、推断政府真实意图。

@@ -1,7 +1,9 @@
 # 技术架构（ARCHITECTURE）
 
-**版本：** 0.1  
+**版本：** 0.4（对齐 Blueprint V4）  
+**权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（§22+ 冲突优先）  
 **风格：** Modular Monolith + Asynchronous Data Pipeline  
+**研究查询路径：** `Country × Source × Topic × Target × Time`（默认 Target=China）  
 **非目标：** 微服务、Kafka、Neo4j、Prefect（MVP 非强制）、Celery、Redis（非必要不引入）
 
 ---
@@ -14,7 +16,9 @@
 4. Adapter 插件化；来源配置进 Registry  
 5. 模型供应商可替换  
 6. 分析结果可追溯、可版本化  
-7. 先可运行可测试，再增加分布式复杂度  
+7. 指标与预警阈值由可测试模块计算，非 LLM 直接出数  
+8. 先可运行可测试，再增加分布式复杂度  
+9. **Agent = 受控编排**，不是无限制聊天机器人  
 
 ---
 
@@ -27,16 +31,35 @@ Ingestion Layer     RSS / API / Web Adapter
      ↓
 Processing Layer    提取、清洗、语言、时间、去重、质检
      ↓
-Intelligence Layer  文章分析（MVP）；Embedding/事件/叙事（Phase 2+）
+Intelligence Layer  涉华片段、Relevance Weight、文章分析；Embedding/事件（Phase 2+）
+     ↓
+Metrics / Alert     确定性聚合、规则预警、重大新闻候选打分
      ↓
 Storage Layer       PostgreSQL（+ pgvector Phase 2）
      ↓
-Application Layer   FastAPI、Streamlit、报告、（Phase 3 Agent）
+Application Layer   FastAPI、Streamlit、报告投递、轻量任务编排
 ```
 
 ---
 
-## 3. MVP 技术栈
+## 3. Agent / 编排边界（MVP）
+
+| 角色（职责边界，非独立服务） | MVP |
+|------------------------------|-----|
+| Monitoring | 调度采集、重试、健康 |
+| Article Intelligence | 调用分析管线 |
+| News/Event Triage | **规则型**候选簇 |
+| Trend & Alert | **规则引擎** |
+| Reporting | 模板 + 可选 LLM 润色 + 证据校验 |
+| Evidence QA | 数字/链接/引用核对 |
+
+**开放式多步骤研究 Agent → Phase 3。** 工具调用须审计；Agent 不得改写原文、覆盖历史分析或静默改指标定义。
+
+建议模块接口（ADR 草案，待标定）：Intelligence / Metrics / Alert / Reporting。
+
+---
+
+## 4. MVP 技术栈
 
 | 层 | 技术 | 说明 |
 |----|------|------|
@@ -48,17 +71,15 @@ Application Layer   FastAPI、Streamlit、报告、（Phase 3 Agent）
 | RSS | feedparser | |
 | HTTP | httpx | |
 | HTML | BeautifulSoup / 可替换抽取器 | |
-| Crawling | Scrapy 可选 | |
-| Scheduling | Cron / APScheduler | Phase 0 仅选型 |
+| Scheduling | Cron / APScheduler | |
 | LLM | DeepSeek 抽象层 | 可替换 |
 | Embedding | BGE-M3 等 | Phase 2 重点 |
 | Test | pytest | |
 | Deploy | Docker Compose | |
-| Logging | 标准 logging / 结构化日志 | |
 
 ---
 
-## 4. 包结构
+## 5. 包结构
 
 ```text
 src/gni/
@@ -66,17 +87,21 @@ src/gni/
   sources/          来源注册与治理
   ingestion/        Adapter 与采集任务
   processing/       清洗与去重
-  analysis/         LLM 分析
+  analysis/         LLM 分析 + relevance weight
   metrics/          指标计算
-  reports/          日报周报与证据校验
+  alerts/           规则预警（P1-F）
+  news/             重大新闻候选（P1-F）
+  reports/          报告与证据校验
   api/              FastAPI
   dashboard/        Streamlit
   infrastructure/   DB 会话等
 ```
 
+P1-A 已交付部分保持稳定；新增包在后续授权段引入。
+
 ---
 
-## 5. Adapter 接口（设计）
+## 6. Adapter 接口（设计）
 
 ```python
 from abc import ABC, abstractmethod
@@ -94,28 +119,25 @@ class BaseAdapter(ABC):
         return {"status": "unknown"}
 ```
 
-来源特定逻辑放在 Source Registry 配置中，避免散落 `if/else`。
+---
+
+## 7. 数据流（监测型 MVP）
+
+`Fetch → Parse → Normalize → Extract → Relevance → Analyze → Quality Gate → Metrics → News Triage → Alerts → Report → Evidence Validation → Delivery`
+
+每步可观测；ingestion_jobs / analysis_runs / metric_runs / alerts 留痕。
 
 ---
 
-## 6. 数据流（MVP）
-
-`Fetch → Parse → Normalize → Extract → Language Detect → Time Normalize → Deduplicate → Persist → Analyze → Aggregate Metrics → Report`
-
-每步可观测；ingestion_jobs / analysis_runs / metric_runs 留痕。
-
----
-
-## 7. 时间
+## 8. 时间
 
 - 存储：UTC  
 - 展示：用户或报告指定时区  
 - 区分：event_time、published_at、first_seen_at、analyzed_at、updated_at  
-- 记录：source_timezone、report_timezone、time_precision  
 
 ---
 
-## 8. 相关 ADR
+## 9. 相关 ADR
 
 - [0001 模块化单体](ADR/0001-modular-monolith.md)  
 - [0002 数据库与向量扩展](ADR/0002-database-and-vector-extension.md)  

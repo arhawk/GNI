@@ -1,127 +1,134 @@
 # 指标定义（METRICS）
 
-**版本：** metrics_v0.1  
-**原则：** 先独立可解释指标；MVP **不**实现综合舆情总分。
+**版本：** metrics_v0.4（对齐 Blueprint V4）  
+**原则：** 研究 7 项保留；增补加权/运营监测指标；原始与加权**并列**；不做黑盒综合总分；**禁止 LLM 直接输出正式指标数值**。
+
+默认研究单元：`Country × Source × Topic × Target × Time`（默认 Target=China）。
 
 ---
 
-## 1. 六个分析维度（跨层级）
+## 1. 建设分层
 
-Sentiment、Stance、Framing、Attention、Narrative Shift、Risk Signal  
-
-它们**不是**可直接相加的六个字段。每个维度须分别定义文章级 / 事件级 / 叙事级计算对象。
-
-| 维度 | MVP | Phase 2+ |
-|------|-----|----------|
-| Sentiment 分布 | 是（文章聚合） | 事件/叙事级增强 |
-| Stance 分布 | 是（按 Target） | 同上 |
-| Framing 分布 | 是（基础） | 热力图等 |
-| Attention | 基础版 | 去重增强后完整版 |
-| Narrative Shift | 否 | 是（需基线） |
-| Risk Signal | 否（冷启动禁止确定性异常） | 条件成熟后 |
+| 层 | 指标 | 阶段 |
+|----|------|------|
+| 研究核心 | Article Count、Unique Story Count、Attention Share、Sentiment Distribution、Target-bound Stance Distribution、Frame Distribution、Topic Share | **Phase 1** |
+| 监测加权/运营 | Weighted Article Volume、Weighted Sentiment Score/Distribution、Weighted ± Volume、N/P Ratio、Sentiment Coverage、Source/Country Coverage 等 | **Phase 1** |
+| 叙事变化 | Frame Entropy、Narrative Shift、Persistence、Source Convergence | Phase 2 |
+| 派生 | Risk / 高级研究信号 | Phase 3 |
 
 ---
 
-## 2. 统计单位
-
-**叙事级建议单位（Phase 2 起）：**  
-`Country × Topic × Time × Source Group × Target`
-
-**MVP 聚合：** 主要按 `Country × Topic × Time Window` 与 `Country × Target × Time Window` 展示分布。
-
----
-
-## 3. 通用元数据（每次 metric_run）
-
-必须记录：
+## 2. 每次 metric_run 必须记录
 
 - metric_definition_version  
-- time_window、timezone（展示）、数据按 UTC 过滤  
-- source_scope、topic_scope、target_scope  
-- numerator、denominator、excluded_count、missing_count  
+- numerator / denominator  
+- excluded_count / missing_count / unknown_count  
+- time_window / timezone（展示；数据按 UTC 过滤）  
+- country_scope / source_scope / topic_scope / target_scope  
 - deduplication_method  
+- relevance_weight_version（若用加权）  
 - computed_at  
 
-Unknown / Ambiguous / Neutral **不得混为一类**。
+**不得混用：** Article Count、Unique Story Count、Weighted Article Volume、Original Reporting Count、Source Count、Country Count。  
+**不得合并：** Neutral、Unknown、Ambiguous、Insufficient Evidence。  
+多标签主题/框架占比须说明是否允许合计 >100%。
 
 ---
 
-## 4. MVP 指标定义
+## 3. Phase 1 七项研究核心指标
 
-### 4.1 SentimentShare
+### 3.1 Article Count
 
-- **对象：** 指定国家/时间窗/来源范围内的文章（或 Unique Story，口径须声明）  
-- **分子：** sentiment = 某类（如 negative）的篇数  
-- **分母：** 具有明确 sentiment（非 unknown）的篇数；若用全部文章作分母须标注  
-- **去重：** MVP 默认 URL/Hash 去重后的 Article Count；近重策略写进 run 元数据  
+- **问题：** 指定范围内有多少篇纳入条件的涉华文章？  
+- **分子：** 通过 china_relevance / Target 过滤后的文章数（**不**被 weight 改写成小数篇）  
+- **分母：** 不适用；须同时展示样本量  
+- **版本：** `article_count_v1`
 
-### 4.2 StanceShare
+### 3.2 Unique Story Count
 
-- **对象：** 绑定特定 `target_id`  
-- **公式示例：** 明确批评的独立报道数 / 具有明确立场的独立报道数  
-- **注意：** 多 Target 文章按 Target 分别计入  
+- **MVP：** 精确去重 + 单语言近似去重簇数  
+- **Phase 2：** 跨语言故事聚类  
+- **版本：** `unique_story_count_v1`
 
-### 4.3 FrameShare
+### 3.3 Attention Share
 
-- **分子：** 含某 frame 的文章数（多标签会导致份额之和可 >1；须注明）  
-- **分母：** 有框架标注的文章数（或全部相关文章，须注明）  
+- **问题：** 对华报道占同一来源集合全部有效报道的比例？  
+- **分子：** 对华相关文章数  
+- **分母：** **同一 source_scope + time_window 内全部有效报道数**（含非对华；P1-A 全量 RSS stub 支撑）  
+- **硬门禁：** 分母不可靠 / 仅采集涉华子集冒充全量时 → **禁止发布正式 Attention Share**（可标 `unavailable` / 内部调试）  
+- **同时展示：** 绝对对华量（Article Count）  
+- **版本：** `attention_share_v1`
 
-### 4.4 Attention（基础版）
+### 3.4 Sentiment Distribution（Raw）
 
-组合披露（不合成黑盒分）：
+- 类别：positive / negative / neutral / mixed；另计 unknown / ambiguous  
+- **版本：** `sentiment_distribution_v1`
 
-- Article Count  
-- Unique Story Count（MVP：精确去重 + 单语言近重簇数）  
-- Source Count  
-- （Phase 2）Original Reporting Count、Syndicated Story Count、Reprint Ratio  
+### 3.5 Target-bound Stance Distribution
 
-相对历史基线的变化率：冷启动期仅展示原始计数，不标「异常」。
+- Stance 必须绑定 Target；与 Sentiment 分开展示  
+- **版本：** `stance_distribution_v1`
 
-### 4.5 TopicShare
+### 3.6 Frame Distribution / Frame Share
 
-- 某主题文章数 / 窗口内中国相关文章总数（相关性定义见 Phase 1 配置）  
+- primary-only 或多标签 share 须声明；taxonomy 绑定 `taxonomy_v0.4+`  
+- **版本：** `frame_distribution_v1`
 
----
+### 3.7 Topic Share
 
-## 5. Phase 2+ 指标（预告，MVP 不实现）
-
-### Narrative Shift
-
-比较当前窗口与基线窗口的框架/立场/主题分布，可用 Jensen-Shannon Divergence。高值 = 分布差异大，**不**表示正负面。
-
-### Frame Entropy
-
-\( H = -\sum p_i \log p_i \)，可按有效类别数标准化。低 = 框架集中；高 ≠ 客观。
-
-### Persistence / Convergence / Risk Signal
-
-见 Blueprint V2；须排除转载与共同引源等解释；Risk 不能由单篇认定。
+- Topic 与 Target 识别分离  
+- **版本：** `topic_share_v1`
 
 ---
 
-## 6. 冷启动
+## 4. Phase 1 监测指标（加权与运营）
 
-| 阶段 | 天数 | 行为 |
-|------|------|------|
-| Cold Start | 0–30 | 不发布确定性异常结论 |
-| Baseline Building | 30–90 | 可展示初步变化，降低置信度并说明限制 |
-| Baseline Ready | 90+ 且样本/覆盖达标 | 才启用正式基线比较 |
+### 4.1 China Relevance Weight 使用规则
 
-90 天不是充分条件；低频主题可能需要更久。
+- 权重 `w_i ∈ [0,1]` 表达统计贡献，**不篡改** Article Count  
+- Dashboard / 报告必须提供 **A 原始视图** 与 **B 加权视图**  
+- 等级 → 权重映射待标注校准（见审计「待标定」）
+
+### 4.2 加权规模与情感
+
+| 指标 | 定义要点 |
+|------|----------|
+| Weighted Article Volume | `Σ w_i` |
+| Weighted Positive / Negative / Neutral Volume | `Σ w_i × I(label)` 或连续贡献 |
+| Weighted Sentiment Distribution | 按 `w_i` 加权的分布 |
+| Weighted Sentiment Score | `Σ(w_i × s_i) / Σ(w_i)`，`s_i ∈ [-1,1]` |
+| Negative-to-Positive Ratio (N/P) | 加权负面量 / 加权正面量；分母为 0 → N/A |
+| Sentiment Coverage | 有效情感权重 / 纳入文章权重 |
+
+**默认：** Unknown / Insufficient Evidence **不进**情感分数分母，但单独报告数量与权重；Mixed 映射规则待标定。
+
+不得把 Weighted Sentiment Score 称为「国家对华态度分」；推荐表述：**被监测官媒样本加权情感分数**。
+
+### 4.3 覆盖与质量（运营）
+
+Source Count、Country Count、Source Coverage Rate、Ingestion Success Rate、Article Extraction Success Rate 等——与舆情结论分区展示。
+
+### 4.4 变化线索（规则侧，非正式 Phase 2 叙事指标）
+
+Coverage Velocity、Baseline Deviation、Sentiment Shift 等可服务 Alerts / 重大新闻候选；冷启动禁用「统计显著异常」表述。
 
 ---
 
-## 7. 综合指数（Phase 3）
+## 5. Phase 2 / 3（预告）
 
-\[
-I = \sum_{i=1}^{n} w_i S_i,\quad \sum_i w_i = 1
-\]
+| 阶段 | 指标 |
+|------|------|
+| Phase 2 | Frame Entropy、Narrative Shift、Persistence、Source Convergence |
+| Phase 3 | Risk / 高级研究信号 |
 
-约束：分项可解释、权重可配置可版本化、仅用于排序/筛选、不做因果推断。MVP **不实现**。
+冷启动：0–30 / 30–90 / 90+ 规则见 Blueprint；基线不足只描述「集中/快速增长」。
 
 ---
 
-## 8. 禁止
+## 6. 禁止
 
-- LLM 直接生成指标数值作为正式结果  
-- 把采集失败导致的样本结构变化解释为舆情变化（须对照质量面板）  
+- LLM 直接生成正式指标数值  
+- 只展示单一得分而无分布/样本量  
+- 把采集失败导致的样本结构变化解释为舆情变化  
+- 分母不可靠时发布正式 Attention Share  
+- 将政府公告与媒体报道混为同一来源组而不声明  

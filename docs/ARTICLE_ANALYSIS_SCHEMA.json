@@ -1,13 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gni.local/schemas/article_analysis_v0.1.json",
+  "$id": "https://gni.local/schemas/article_analysis_v0.2.json",
   "title": "GNI Article Analysis Result",
+  "description": "Document-level schema draft aligned to Blueprint V4. Does not imply a DB migration.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "taxonomy_version",
     "language",
+    "china_relevance",
     "topics",
     "sentiment",
     "stances",
@@ -18,19 +20,57 @@
     "confidence"
   ],
   "properties": {
-    "schema_version": { "type": "string", "const": "article_analysis_v0.1" },
+    "schema_version": { "type": "string", "const": "article_analysis_v0.2" },
     "taxonomy_version": { "type": "string", "minLength": 1 },
+    "relevance_weight_version": { "type": "string" },
     "language": { "type": "string", "minLength": 2 },
     "china_relevance": {
       "type": "object",
-      "required": ["is_relevant", "status"],
+      "required": ["level", "weight", "status"],
       "properties": {
         "is_relevant": { "type": ["boolean", "null"] },
+        "level": {
+          "type": "string",
+          "enum": [
+            "core",
+            "major",
+            "moderate",
+            "minor",
+            "incidental",
+            "not_relevant",
+            "unknown"
+          ]
+        },
+        "weight": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "estimated_share": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "title_mentions_china": { "type": ["boolean", "null"] },
+        "lead_mentions_china": { "type": ["boolean", "null"] },
+        "china_is_primary_subject": { "type": ["boolean", "null"] },
+        "features": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "rationale": { "type": "string" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
         "status": {
           "type": "string",
-          "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
-        },
-        "rationale": { "type": "string" }
+          "enum": [
+            "known",
+            "unknown",
+            "ambiguous",
+            "insufficient_evidence",
+            "not_applicable",
+            "needs_review"
+          ]
+        }
       }
     },
     "topics": {
@@ -56,17 +96,41 @@
           "type": ["string", "null"],
           "enum": ["positive", "negative", "neutral", "mixed", null]
         },
+        "score": {
+          "type": ["number", "null"],
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Continuous sentiment s_i in [-1,1]; mapping rules TBD"
+        },
         "emotions": {
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["fear", "concern", "anger", "optimism", "praise", "criticism", "uncertainty"]
+            "enum": [
+              "fear",
+              "concern",
+              "anger",
+              "optimism",
+              "praise",
+              "criticism",
+              "uncertainty"
+            ]
           }
         },
         "intensity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "basis_segment_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "status": {
           "type": "string",
-          "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+          "enum": [
+            "known",
+            "unknown",
+            "ambiguous",
+            "insufficient_evidence",
+            "not_applicable"
+          ]
         }
       }
     },
@@ -80,12 +144,28 @@
           "target_surface_form": { "type": "string" },
           "stance": {
             "type": ["string", "null"],
-            "enum": ["supportive", "opposing", "critical", "cautious", "neutral", "ambiguous", null]
+            "enum": [
+              "supportive",
+              "opposing",
+              "critical",
+              "cautious",
+              "neutral",
+              "no_explicit_stance",
+              "mixed",
+              "ambiguous",
+              null
+            ]
           },
           "strength": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
           "status": {
             "type": "string",
-            "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+            "enum": [
+              "known",
+              "unknown",
+              "ambiguous",
+              "insufficient_evidence",
+              "not_applicable"
+            ]
           }
         }
       }
@@ -101,7 +181,13 @@
         },
         "status": {
           "type": "string",
-          "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+          "enum": [
+            "known",
+            "unknown",
+            "ambiguous",
+            "insufficient_evidence",
+            "not_applicable"
+          ]
         }
       }
     },
@@ -114,10 +200,38 @@
           "text": { "type": "string" },
           "type": {
             "type": "string",
-            "enum": ["person", "organization", "country", "location", "policy", "product", "company", "other"]
+            "enum": [
+              "person",
+              "organization",
+              "country",
+              "location",
+              "policy",
+              "product",
+              "company",
+              "other"
+            ]
           },
           "normalized_id": { "type": ["string", "null"] },
           "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim_text": { "type": "string" },
+          "speaker": { "type": "string" },
+          "attribution": {
+            "type": "string",
+            "enum": ["media", "quoted", "unclear"]
+          },
+          "target_id": { "type": ["string", "null"] },
+          "evidence_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         }
       }
     },
@@ -134,17 +248,42 @@
           "paragraph_index": { "type": ["integer", "null"], "minimum": 0 },
           "evidence_type": {
             "type": "string",
-            "enum": ["sentiment", "stance", "frame", "topic", "entity", "relevance", "other"]
+            "enum": [
+              "sentiment",
+              "stance",
+              "frame",
+              "topic",
+              "entity",
+              "relevance",
+              "claim",
+              "other"
+            ]
           },
           "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
         }
       }
     },
+    "summary": { "type": "string" },
+    "analysis_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "needs_review",
+        "insufficient_evidence",
+        "failed"
+      ]
+    },
     "field_status": {
       "type": "object",
       "additionalProperties": {
         "type": "string",
-        "enum": ["known", "unknown", "ambiguous", "insufficient_evidence", "not_applicable"]
+        "enum": [
+          "known",
+          "unknown",
+          "ambiguous",
+          "insufficient_evidence",
+          "not_applicable"
+        ]
       }
     },
     "confidence": {

@@ -1,8 +1,8 @@
 # 主题与目标对象 Taxonomy
 
-**版本：** taxonomy_v0.1  
-**状态：** Phase 0 草案；变更须升版本并记录生效时间  
-**原则：** Topic 与 Stance Target 分离；不把 China 写死为唯一目标对象类型
+**版本：** taxonomy_v0.4  
+**状态：** Phase 0/1 草案；变更须升版本并记录生效时间  
+**原则：** Topic 与 Stance Target 分离；Frame 以 V4 候选词表为准；旧 `taxonomy_v0.1` Frame 仅兼容历史分析  
 
 ---
 
@@ -10,11 +10,13 @@
 
 | 字段 | 说明 |
 |------|------|
-| taxonomy_version | 如 `taxonomy_v0.1` |
+| taxonomy_version | 当前 `taxonomy_v0.4` |
 | effective_from | UTC 生效时间 |
 | changelog | 新增/停用/合并/拆分记录 |
 
-历史分析绑定当时的 `taxonomy_version`，禁止静默改旧标签定义导致口径漂移。
+历史分析绑定当时的 `taxonomy_version`，禁止静默改旧标签定义。
+
+**兼容：** `taxonomy_v0.1` 的旧 Frame 词表（Economic Competition、Technology Competition 等）可映射到 v0.4 或保留只读；新分析默认写 v0.4。
 
 ---
 
@@ -64,11 +66,9 @@
 
 一篇文章可有 **Primary Topic + Secondary Topics**（多标签）。
 
-### 2.3 多语言与同义词（TBD 结构）
+### 2.3 多语言与同义词（TBD）
 
-每标签支持：`label_zh`、`label_en`、`synonyms[]`、`parent_id`、`status`（active/deprecated）。
-
-**TBD（需人工确认）：** 印地语等标签译名表；「中印关系」是否单列二级主题。
+每标签支持：`label_zh`、`label_en`、`synonyms[]`、`parent_id`、`status`。印地语等译名待确认。
 
 ---
 
@@ -86,43 +86,59 @@
 | chinese_foreign_policy | 中国外交政策 | Chinese Foreign Policy |
 | specific_entity | 特定实体/政策/公司 | Specific Entity / Policy / Company |
 
-`specific_entity` 须在分析中另填 `target_surface_form` 与可选 `normalized_entity_id`。
-
-Stance **必须**绑定 Target；一篇文章可对多个 Target 持不同立场。
+`specific_entity` 须另填 `target_surface_form` 与可选 `normalized_entity_id`。Stance **必须**绑定 Target。
 
 ---
 
-## 4. 叙事框架初始词表（Framing）
+## 4. 叙事框架词表（Framing）— taxonomy_v0.4
+
+V4 候选体系（试标后可调整）：
 
 | frame_id | 中文名 | 英文名 |
 |----------|--------|--------|
-| economic_competition | 经济竞争 | Economic Competition |
-| national_security | 国家安全 | National Security |
-| technology_competition | 技术竞争 | Technology Competition |
-| geopolitical_rivalry | 地缘政治竞争 | Geopolitical Rivalry |
-| ideology_values | 意识形态与价值观 | Ideology and Values |
+| competition_rivalry | 竞争 | Competition / Rivalry |
+| security_threat | 安全或威胁 | Security / Threat |
+| economic_impact | 经济影响 | Economic Impact |
 | cooperation | 合作 | Cooperation |
+| governance_ideology | 治理或制度 | Governance / Ideology |
+| development_innovation | 发展或创新 | Development / Innovation |
 | human_rights | 人权 | Human Rights |
-| global_development | 全球发展 | Global Development |
-| environmental_transition | 环境与绿色转型 | Environmental Transition |
-| domestic_politics | 国内政治 | Domestic Politics |
-| unknown | 未知/证据不足 | Unknown |
+| international_order | 国际秩序 | International Order |
+| other_unknown | 其他/未知 | Other / Unknown |
 
-允许多标签；新框架须进人工审核流程后升版本纳入。
+允许多标签；记录 Primary / Secondary。新框架须审核后升版本纳入。
+
+### 4.1 旧版 Frame（taxonomy_v0.1，只读兼容）
+
+`economic_competition`、`national_security`、`technology_competition`、`geopolitical_rivalry`、`ideology_values`、`cooperation`、`human_rights`、`global_development`、`environmental_transition`、`domestic_politics`、`unknown` — 历史结果可保留；新管线默认 v0.4。
 
 ---
 
-## 5. 情感与立场枚举（分析用，非主题）
+## 5. 情感与立场枚举
 
 **Sentiment：** positive / negative / neutral / mixed / unknown  
 
-**辅助情绪（可选）：** fear / concern / anger / optimism / praise / criticism / uncertainty  
+**Stance：** supportive / opposing / critical / cautious / neutral / no_explicit_stance / mixed / ambiguous / unknown  
 
-**Stance：** supportive / opposing / critical / cautious / neutral / ambiguous / unknown  
+辅助情绪（可选）：fear / concern / anger / optimism / praise / criticism / uncertainty  
 
 ---
 
-## 6. 与中国中心视角的关系
+## 6. China Relevance Level（相关，非 Frame）
 
-- 首期**筛选与报告**聚焦「与中国相关」文章（相关性规则 Phase 1 定义）。  
-- Taxonomy 中 Target 以中国相关为主，但模型字段保持通用（未来可增加其他国家 Target 集）。  
+| level | 说明 | 初始权重区间（待标定） |
+|-------|------|------------------------|
+| core | 中国为核心对象 | 0.85–1.00 |
+| major | 重要议题之一 | 0.60–0.84 |
+| moderate | 明确次要议题 | 0.30–0.59 |
+| minor | 有限/背景讨论 | 0.10–0.29 |
+| incidental | 顺带提及 | 0.01–0.09 或可排除核心统计 |
+| not_relevant | 无实质关系 | 0.00 |
+
+详见 [METRICS.md](METRICS.md)、[AI_ANALYSIS.md](AI_ANALYSIS.md)。
+
+---
+
+## 7. 与中国中心视角
+
+首期筛选与报告聚焦实质涉华文章；Taxonomy 字段保持通用，便于未来扩展其他 Central Target。

@@ -1,48 +1,52 @@
 # 产品需求文档（PRD）
 
 **产品：** Global Narrative Intelligence（GNI）  
-**版本：** 0.1（Phase 0 冻结）  
-**状态：** 已冻结，供 Phase 1 实施依据  
-**语言：** 中文
+**版本：** 0.4（对齐 Blueprint V4）  
+**状态：** V4 口径冻结；供监测型 Phase 1 实施  
+**语言：** 中文  
+**设计权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（**§22 及以后冲突时优先**；前文数据治理/证据/合规原则仍有效）
 
 ---
 
 ## 1. 产品定位
 
-GNI 是**全球官方媒体舆论信号采集与叙事监测研究系统**。
+GNI 是以 **Agent / 编排为交付核心** 的全球官方媒体对华舆情**监测**系统。
 
-核心价值不是「新闻聚合 + LLM 摘要」，而是：
+系统持续监测他国官方媒体及经审核官方传播来源，自动收集涉华报道，识别涉华内容与相关度，分析情感、Target 立场、主题与框架，计算可解释指标，发现重大新闻候选与异常，并自动生成日报/周报/月报与规则预警。
 
-1. 可管理、可审计的跨国官方来源体系  
-2. 可验证的文章级结构化分析（主题 / 情感 / 立场 / 框架 / 证据）  
-3. 可比较的统计口径（分母、时区、去重、样本范围公开）  
-4. 长期可扩展到事件级与叙事级分析，以及证据驱动的研究 Agent  
+- **固定研究中心：** China（Central Target）  
+- **观察样本：** 其他国家官方媒体及相关政府传播来源  
+- **默认研究单元：** `Country × Source × Topic × Target × Time`（默认 Target=China）  
+- **「全球」含义：** 跨国监测覆盖，≠ 全球所有议题，≠ 公众民意  
 
-媒体叙事 **≠** 国家政策意图 **≠** 社会民意。系统不得把报道直接解释为国家决策或全民观点。
+产品第一价值是**持续监测与自动交付**，不是让用户先掌握复杂研究工具。深度叙事研究保留，但**不是 MVP 首要目标**。
+
+媒体叙事 **≠** 国家政策意图 **≠** 社会民意。
 
 ---
 
-## 2. 目标用户与核心问题
+## 2. 目标用户与核心工作流
 
 ### 2.1 用户
 
-- 国际媒体叙事研究人员  
-- 政策 / 战略分析人员  
-- 内部研究团队  
+国际媒体/政策研究人员、内部分析与值班监测团队。
 
-### 2.2 核心问题（MVP 必须能回答）
+### 2.2 默认工作流
 
-1. 某周/某月，短名单国家官方媒体主要关注中国哪些议题？  
-2. 不同国家对同一议题的情感、立场、叙事框架有何差异？  
-3. 关注度上升是原创增加还是转载增加？（MVP 先区分精确重复与单语言近重；跨语言转载 Phase 2）  
-4. 对某一 Stance Target（如 Chinese Technology Industry）的立场分布如何？  
-5. 当前样本是否足以支持结论？来源覆盖是否偏斜？  
+`打开总览 / 接收提醒 → 整体对华舆情 → 国家与媒体变化 → 重点新闻/事件候选 → 代表性文章与证据 → 日报/月报 → 按需深入分析`
 
-### 2.3 Phase 2+ 才完整回答的问题
+### 2.3 Phase 1 必须能回答
 
-- 同一事件下各国叙事如何分化？  
-- 相对历史基线是否出现 Narrative Shift？  
-- 自然语言多步骤专题研究  
+1. 近期被监测官媒如何报道中国？量与加权贡献如何？  
+2. 正/负/中/混合分布（原始 + 加权）如何？  
+3. 哪些国家/来源/议题/Target 驱动变化？  
+4. 有哪些重大新闻候选与规则预警？为何触发？  
+5. 样本覆盖与数据质量是否足以支持结论？  
+
+### 2.4 Phase 2+ 才完整回答
+
+- 可控 False-Merge 的跨语言事件系统、Narrative Shift 等  
+- 开放式多步骤研究 Agent  
 
 ---
 
@@ -52,120 +56,78 @@ GNI 是**全球官方媒体舆论信号采集与叙事监测研究系统**。
 
 | 期次 | 摘要 |
 |------|------|
-| Phase 1 / MVP | 采集入库、文章分析、基础指标、Dashboard、日报周报、质量与成本面板 |
-| Phase 2 | 跨语言转载、事件聚类、叙事漂移与基线异常 |
-| Phase 3 | 研究 Agent、证据验证增强、可配置综合指数 |
+| Phase 1 / MVP | 采集、涉华理解 + **China Relevance Weight**、7 项研究指标 + 加权/运营监测指标、规则型重大新闻候选与 Alerts、V4 Dashboard、日报/周报/月报 |
+| Phase 2 | 跨语言故事、完整事件聚类、叙事变化指标、预警校准 |
+| Phase 3 | 开放式研究 Agent、高级专题与 Risk 深化 |
 
-**MVP 国家：** 美国、俄罗斯、德国、印度、澳大利亚  
-**接通顺序：** 美 → 俄 → 德 → 印 → 澳  
+**MVP 国家短名单：** US / RU / DE / IN / AU  
+**P1-A 门槛：** ≥5 **监测国家**各 ≥1 个 verified+active 源（不以「≥5 个来源」替代）  
 
 ---
 
 ## 4. MVP 功能需求
 
-### 4.1 来源治理
+### 4.1–4.3 来源、采集、文章理解
 
-- 注册国家、组织、来源  
-- 记录 ownership、government_control_level、editorial_independence 等及证据  
-- 审核、停用、属性变更历史  
-- 来源健康：成功率、最近成功时间、错误类型  
+Registry、RSS 优先、清洗去重；**先定位涉华内容再结构化**；产出 Topic / Sentiment / Target-bound Stance / Frame / Claims·Evidence；**China Relevance Level + Weight**；允许 Unknown 等状态。摘要不得替代结构化分析。
 
-### 4.2 采集与处理
+### 4.4 指标
 
-- 可插拔 Adapter（RSS 优先；API/Web 基础接口）  
-- 调度、重试、任务状态与日志  
-- 正文提取、清洗、语言识别、UTC 标准化  
-- URL / Hash 精确去重；单语言近似去重  
-- 原始与清洗正文分存；版本可追溯  
+- **研究核心 7 项：** Article Count、Unique Story Count、Attention Share、Sentiment / Stance / Frame Distribution、Topic Share  
+- **监测增补：** Weighted Article Volume、Weighted Sentiment Score/Distribution、N/P Ratio 等（见 [METRICS.md](METRICS.md)）  
+- **硬约束：** 原始与加权**并列**；分母不可靠时**禁止发布正式 Attention Share**；**不做**黑盒综合总分；LLM 不得直接出正式指标数值  
 
-### 4.3 文章级 AI 分析
+### 4.5 Dashboard（V4 导航）
 
-- 统一 Analysis Schema  
-- Topic（受控词表）、Sentiment、Target-bound Stance、Framing、Entities、Evidence Spans  
-- Per-field Confidence；允许 Unknown / Ambiguous / Insufficient Evidence  
-- 模型 / Prompt / Schema / Taxonomy 版本化；禁止静默覆盖  
-- 缓存、日预算、失败降级  
+Overview、Countries、News & Events、Articles、Reports、Alerts、Sources & Quality、Research（后置增强）。详见 [DASHBOARD.md](DASHBOARD.md)。
 
-### 4.4 指标与报告
+### 4.6 报告与预警
 
-- 独立展示 Sentiment / Stance / Framing / Attention（基础版）  
-- 所有比例公开分母与统计范围  
-- 日报、周报；事实结论绑定 article_id / evidence / metric_run  
-- 冷启动期不发布确定性异常结论  
+日报/周报/月报模板 + 证据校验；规则型 Alerts（见 [ALERTS.md](ALERTS.md)）；P1 重大新闻为**规则/相似度候选**，非完整事件图谱。
 
-### 4.5 Dashboard（MVP 页面）
+### 4.7 Agent 边界
 
-1. 全球总览：主题分布、国家覆盖、重点文章  
-2. 国家分析：情感、立场、基础框架分布  
-3. 数据质量：采集/提取/重复/分析成功率、成本  
-4. 报告：日报周报与证据链接  
+MVP = **确定性流水线 + 规则预警 + 模板/辅助生成报告**（可有轻量任务编排）。**开放式研究 Agent 不在 MVP。**
 
 ---
 
 ## 5. 非功能需求
 
-| 类别 | 要求 |
-|------|------|
-| 可追溯 | 结论可回溯原文、来源、分析版本 |
-| 可观测 | 任务日志、来源健康、分析失败可定位 |
-| 成本可控 | Daily Budget、Token 上限、优先级队列 |
-| 时区 | DB 存 UTC；报表时区可配置 |
-| 合规 | 来源准入审查；内部研究默认；限制全文再分发 |
-| 部署 | Docker Compose 单机可运行 |
-| 测试 | pytest；关键逻辑单测；分析/聚类后续要评估集 |
+可追溯、可观测、成本可控、UTC 存储、合规准入、Docker Compose 可运行、pytest。
 
 ---
 
-## 6. 可视化信息架构（摘要）
+## 6. 验收标准（MVP / 对齐 V4）
 
-详见 [VISUALIZATION_SPEC.md](VISUALIZATION_SPEC.md)。
+1. 来源可管理、审核、停用、属性有证据  
+2. **≥5 监测国家**首批源可运行  
+3. 采集有状态、日志、重试、健康  
+4. 文章规范化、语言、时间、去重、可追溯  
+5. 涉华识别 + Relevance Level/Weight（有理由、版本、置信度）  
+6. Topic / Sentiment / Stance / Frame / Evidence 可运行；情感≠立场  
+7. Unknown / ambiguous 等状态支持  
+8. 7 项研究指标 + 原始/加权监测指标可复核；Attention Share 分母门禁  
+9. Dashboard 含 Overview / Countries / News·Events 候选 / Articles / Reports / Alerts / Quality  
+10. 图表可下钻至文章与原文；raw 与 weighted 并列  
+11. 模型/Prompt/Schema/Taxonomy/权重规则/指标版本可追溯  
+12. LLM 成本控制  
+13. 日报/周报（月报模板）有证据；规则预警可去重与反馈  
+14. 单篇失败不阻断批次  
+15. 数据质量与舆情预警分开展示  
 
-约束：情感与立场分图；质量指标不与舆情结论混排；图表标注样本量与时间窗口。
-
----
-
-## 7. 验收标准（MVP）
-
-1. 来源可注册、分类、审核、停用  
-2. ≥5 个稳定来源可持续采集  
-3. 采集任务有状态、日志、重试  
-4. 文章可规范化并按国家/来源/时间查询  
-5. 精确去重与基础近似去重可用  
-6. 文章级主题/情感/立场/框架可用，立场绑定 Target  
-7. 证据可定位原文  
-8. 分析记录模型与 Prompt 等版本  
-9. LLM 有缓存、预算、降级  
-10. Dashboard 展示主题、情感、立场、覆盖与质量  
-11. 日报/周报可生成并追溯证据  
-12. 比例展示分母与范围  
-13. 数据质量与分析质量分开评估  
-14. 单条失败不终止整批  
-
-事件聚类、Narrative Shift、复杂风险、研究 Agent **不在** MVP 验收内。
+完整跨语言事件系统、Narrative Shift、开放式研究 Agent **不在** MVP。
 
 ---
 
-## 8. 风险与依赖
+## 7. 风险与依赖
 
-| 风险 | 控制 |
-|------|------|
-| 来源不稳定 / 俄印可达性 | 准入门槛、接通顺序、健康监控 |
-| 媒体分类错误 | 证据、审核、变更史、定期复核 |
-| LLM 成本 | 分级分析、缓存、预算 |
-| 冷启动误报 | 0–30 / 30–90 / 90+ 规则 |
-| 版权条款 | COMPLIANCE、必要内容保存、限制再分发 |
-| 过早复杂化 | Modular Monolith；推迟 Prefect/微服务 |
+权重误判、情感偏差、引用归因、样本结构变化、事件误合并、预警疲劳、Agent 幻觉——控制措施见 Blueprint V4 §34–35。
 
-**依赖：** PostgreSQL、可替换 LLM API（默认 DeepSeek 抽象）、首批可核验 RSS/API 来源。
+**依赖：** PostgreSQL、可替换 LLM、已核验 RSS/API。
 
 ---
 
-## 9. 相关文档
+## 8. 相关文档
 
-- [PRODUCT_SCOPE.md](PRODUCT_SCOPE.md)  
-- [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)  
-- [COMPETITIVE_ANALYSIS.md](COMPETITIVE_ANALYSIS.md)  
-- [SOURCE_REGISTRY.md](SOURCE_REGISTRY.md)  
-- [COMPLIANCE.md](COMPLIANCE.md)  
-- [ARCHITECTURE.md](ARCHITECTURE.md)（段 2）  
-- [METRICS.md](METRICS.md)（段 2）  
+- [BLUEPRINT_V4.md](BLUEPRINT_V4.md) · [PHASE0_REPOSITORY_AUDIT_V4.md](PHASE0_REPOSITORY_AUDIT_V4.md)  
+- [PRODUCT_SCOPE.md](PRODUCT_SCOPE.md) · [METRICS.md](METRICS.md) · [DASHBOARD.md](DASHBOARD.md) · [ALERTS.md](ALERTS.md) · [PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md)  
