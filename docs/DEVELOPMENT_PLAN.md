@@ -32,8 +32,8 @@
 | 段 | 内容 | 状态 |
 |----|------|------|
 | **P1-A** | 来源 + RSS 采集；≥5 监测国家 | **已验收（不重写）** |
-| **P1-B** | 清洗、标准化、去重 | 待授权 |
-| **P1-C** | 涉华片段 + Relevance Weight + 六维分析 | 待授权 |
+| **P1-B** | 清洗/抽取/去重 + 规则 L1；见 Addendum A1 | **已验收** |
+| **P1-C** | L2/L3 + Relevance Weight + 六维分析 | 待授权 |
 | **P1-D** | 七项研究指标 + 加权/运营指标；Attention 分母门禁 | 待授权 |
 | **P1-E** | V4 Dashboard 导航（含 Articles/Alerts/News 候选） | 待授权 |
 | **P1-F** | 日/周/月报 + 规则预警 + 重大新闻候选 | 待授权 |
@@ -48,6 +48,7 @@
 - Phase 3：开放式研究 Agent、高级专题与 Risk 深化  
 - **2026-11-24 确认：** 在 **P1-F 完成前**只保留路线图，**不**写独立 P2/P3 任务书。  
 - Provisional 参数与公开评测代理：[PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)  
+- 三级筛选补充：[BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)  
 
 ---
 

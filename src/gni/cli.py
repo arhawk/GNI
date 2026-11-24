@@ -1,4 +1,4 @@
-"""CLI entrypoint for GNI Phase 1-A."""
+"""CLI entrypoint for GNI Phase 1-A/B."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def cmd_health(_: argparse.Namespace) -> int:
         "llm_provider": settings.llm_provider,
         "llm_api_configured": bool(settings.llm_api_key),
         "database_url_scheme": settings.database_url.split("://", 1)[0],
-        "phase": "1A",
+        "phase": "1B",
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -52,12 +52,20 @@ def cmd_db_upgrade(_: argparse.Namespace) -> int:
 
 def cmd_db_init(_: argparse.Namespace) -> int:
     """Create schema via SQLAlchemy metadata (SQLite local / emergency bootstrap)."""
-    from gni.infrastructure.db import get_engine
+    from gni.infrastructure.db import ensure_schema
     from gni.infrastructure.models import Base
 
-    engine = get_engine()
-    Base.metadata.create_all(engine)
-    print(json.dumps({"status": "ok", "tables": sorted(Base.metadata.tables.keys())}, indent=2))
+    altered = ensure_schema()
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "tables": sorted(Base.metadata.tables.keys()),
+                "sqlite_columns_added": altered,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -113,6 +121,31 @@ def cmd_ingest_run(args: argparse.Namespace) -> int:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     failed = sum(1 for j in payload if j["status"] != "success")
     return 1 if failed and not args.allow_partial else 0
+
+
+def cmd_process_run(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.processing.service import run_processing
+
+    ensure_schema()
+    with session_scope() as session:
+        job = run_processing(
+            session,
+            limit=None if args.article else args.limit,
+            source_id=args.source,
+            article_id=args.article,
+            skip_fetch=args.skip_fetch,
+            reprocess=args.reprocess,
+        )
+        payload = {
+            "job_id": job.id,
+            "status": job.status,
+            "error": job.error,
+            "stats": job.stats,
+        }
+        status = job.status
+    print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    return 0 if status in {"success", "partial"} else 1
 
 
 def cmd_ingest_health(_: argparse.Namespace) -> int:
@@ -196,6 +229,30 @@ def main(argv: list[str] | None = None) -> None:
     p_run.set_defaults(func=cmd_ingest_run)
     p_ihealth = ingest_sub.add_parser("health", help="Show source_health rows")
     p_ihealth.set_defaults(func=cmd_ingest_health)
+
+    p_process = sub.add_parser("process", help="P1-B article processing")
+    process_sub = p_process.add_subparsers(dest="process_command", required=True)
+    p_prun = process_sub.add_parser("run", help="Extract/clean/dedup/L1 for pending articles")
+    p_prun.add_argument("--source", help="Limit to one source_id")
+    p_prun.add_argument("--article", help="Process a single article id")
+    p_prun.add_argument("--limit", type=int, default=50, help="Max articles (default 50)")
+    p_prun.add_argument(
+        "--skip-fetch",
+        action="store_true",
+        help="Do not HTTP-fetch; use RSS stub text only (offline/dev)",
+    )
+    p_prun.add_argument(
+        "--reprocess",
+        action="store_true",
+        help="Include already processed articles",
+    )
+    p_prun.add_argument(
+        "--once",
+        action="store_true",
+        default=True,
+        help="Single batch (default)",
+    )
+    p_prun.set_defaults(func=cmd_process_run)
 
     args = parser.parse_args(argv)
     raise SystemExit(args.func(args))

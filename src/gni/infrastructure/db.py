@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -55,3 +55,33 @@ def reset_engine() -> None:
         _engine.dispose()
     _engine = None
     _SessionLocal = None
+
+
+def ensure_schema() -> list[str]:
+    """Create missing tables; on SQLite also ADD missing P1-B columns on articles."""
+    from gni.infrastructure.models import Base
+
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    applied: list[str] = []
+    if not engine.url.get_backend_name().startswith("sqlite"):
+        return applied
+
+    insp = inspect(engine)
+    if "articles" not in insp.get_table_names():
+        return applied
+    existing = {c["name"] for c in insp.get_columns("articles")}
+    alters = [
+        ("processing_status", "VARCHAR(32) DEFAULT 'pending'"),
+        ("duplicate_of_article_id", "VARCHAR(36)"),
+        ("exclude_from_metrics", "BOOLEAN DEFAULT 0"),
+        ("processed_at", "DATETIME"),
+        ("title_screening_label", "VARCHAR(32)"),
+        ("title_screening_priority", "VARCHAR(8)"),
+    ]
+    with engine.begin() as conn:
+        for name, ddl in alters:
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE articles ADD COLUMN {name} {ddl}"))
+                applied.append(name)
+    return applied

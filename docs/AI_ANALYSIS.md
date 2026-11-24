@@ -17,11 +17,15 @@
 
 ---
 
-## 2. 推荐流程
+## 2. 推荐流程（含三级筛选）
 
-`原文整理 → 涉华范围识别 → Relevance Level/Weight → Topic/Target 拆分 → Sentiment/Stance → Frame/Claims/Evidence → 阅读摘要 → 质检 → 确定性聚合`
+详见 [BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)：
 
-**不得**先压缩成摘要再只根据摘要打全部标签。
+`采集持久化 → 规范化 → L1 标题初筛（调度） → 正文提取 → L2 正文涉华判断 → L3 片段提取 → Relevance Level/Weight → Topic/Target → Sentiment/Stance → Frame/Claims/Evidence → 质检 → 聚合`
+
+- L1：**不**终裁；`no_match` 不永久丢弃（P1-B 规则实现）  
+- L2/L3 + Weight：P1-C  
+- **不得**先压缩成摘要再只根据摘要打全部标签  
 
 ---
 

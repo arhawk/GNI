@@ -29,9 +29,9 @@ Source Layer        国家/组织/来源/合规属性
      ↓
 Ingestion Layer     RSS / API / Web Adapter
      ↓
-Processing Layer    提取、清洗、语言、时间、去重、质检
+Processing Layer    提取、清洗、语言、时间、去重、质检、规则型 L1 标题初筛
      ↓
-Intelligence Layer  涉华片段、Relevance Weight、文章分析；Embedding/事件（Phase 2+）
+Intelligence Layer  L2/L3、Relevance Weight、六维分析（P1-C）；Embedding/事件（Phase 2+）
      ↓
 Metrics / Alert     确定性聚合、规则预警、重大新闻候选打分
      ↓
@@ -86,8 +86,8 @@ src/gni/
   core/             配置、日志、异常
   sources/          来源注册与治理
   ingestion/        Adapter 与采集任务
-  processing/       清洗与去重
-  analysis/         LLM 分析 + relevance weight
+  processing/       清洗、去重、抽取、规则 L1
+  analysis/         L2/L3 + LLM 分析 + relevance weight（P1-C）
   metrics/          指标计算
   alerts/           规则预警（P1-F）
   news/             重大新闻候选（P1-F）
@@ -123,7 +123,9 @@ class BaseAdapter(ABC):
 
 ## 7. 数据流（监测型 MVP）
 
-`Fetch → Parse → Normalize → Extract → Relevance → Analyze → Quality Gate → Metrics → News Triage → Alerts → Report → Evidence Validation → Delivery`
+`Fetch → Persist → Normalize → Title L1 → Full-text Extract → L2 Screen → L3 Spans → Relevance → Analyze → Metrics → News/Alerts → Report → Evidence Validation`
+
+（L1 可与提取并行；P1-B 交付至 Extract + L1；L2/L3 起为 P1-C。）
 
 每步可观测；ingestion_jobs / analysis_runs / metric_runs / alerts 留痕。
 

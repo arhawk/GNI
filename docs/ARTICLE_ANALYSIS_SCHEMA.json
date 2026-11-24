@@ -33,13 +33,13 @@
           "type": "string",
           "enum": [
             "core",
-            "major",
-            "moderate",
-            "minor",
+            "substantial",
+            "secondary",
             "incidental",
-            "not_relevant",
-            "unknown"
-          ]
+            "none",
+            "uncertain"
+          ],
+          "description": "Addendum A1 levels; legacy major/moderate/minor/not_relevant map to substantial/secondary/incidental/none"
         },
         "weight": {
           "type": ["number", "null"],

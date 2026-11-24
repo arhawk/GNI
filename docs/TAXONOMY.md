@@ -126,16 +126,18 @@ V4 候选体系（试标后可调整）：
 
 ## 6. China Relevance Level（相关，非 Frame）
 
-| level | 说明 | 初始权重区间（待标定） |
-|-------|------|------------------------|
-| core | 中国为核心对象 | 0.85–1.00 |
-| major | 重要议题之一 | 0.60–0.84 |
-| moderate | 明确次要议题 | 0.30–0.59 |
-| minor | 有限/背景讨论 | 0.10–0.29 |
-| incidental | 顺带提及 | 0.01–0.09 或可排除核心统计 |
-| not_relevant | 无实质关系 | 0.00 |
+权威词表见 Addendum A1 / [PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)：
 
-详见 [METRICS.md](METRICS.md)、[AI_ANALYSIS.md](AI_ANALYSIS.md)、[PROVISIONAL_CALIBRATION.md](PROVISIONAL_CALIBRATION.md)（provisional 中点与纳入规则）。
+| level | 说明 | 初始权重区间（provisional） |
+|-------|------|------------------------------|
+| core | 主要讨论对象 | 0.80–1.00 |
+| substantial | 重要参与方/分析对象 | 0.50–0.79 |
+| secondary | 实质次要对象/背景 | 0.20–0.49 |
+| incidental | 简短提及 | 0.01–0.19（默认不进核心统计） |
+| none | 无实质涉华 | 0.00 |
+| uncertain | 证据不足 | 不分配正式权重 |
+
+旧名 major/moderate/minor/not_relevant 仅作历史映射。
 
 ---
 

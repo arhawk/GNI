@@ -34,25 +34,29 @@ A 采集 → B 处理 → C 涉华理解+Weight → D 原始/加权指标 → E 
 
 ---
 
-## P1-B：文章处理与存储
+## P1-B：文章处理与存储（+ 规则型 L1）
 
 ### 目标
 
-正文提取、清洗、语言、UTC、URL/Hash/单语言近重、质量检查。
+- 正文 HTTP 提取、清洗、语言检测、UTC、URL/Hash、单语言近重、质量检查  
+- `article_versions` 保留清洗正文版本  
+- **规则型 L1 标题初筛**（词典/别名；无 LLM）：`explicit_relevant / likely_relevant / no_match / uncertain`；`no_match` **不**永久丢弃  
+- 依据：[BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)
 
 ### 验收
 
 - 可按国家/来源/时间查询，URL 可回溯  
-- 重复不重复进统计口径；单篇失败不中断整批  
-- **未**实现 P1-C+  
+- 重复不进主统计口径（标记清晰）；单篇失败不中断整批  
+- L1 结果可查；**未**实现 L2/L3/LLM Weight（属 P1-C）  
 
 ---
 
-## P1-C：涉华文章理解与 China Relevance Weight
+## P1-C：L2/L3 与 China Relevance Weight + 六维分析
 
 ### 目标
 
-- 涉华片段定位；`china_relevance_level` / `china_relevance_weight` + 特征、理由、置信度、权重规则版本  
+- **L2** 正文涉华判断；**L3** 涉华片段提取与原文定位校验  
+- `china_relevance_level` / `china_relevance_weight`（Addendum 等级：core/substantial/secondary/incidental/none/uncertain）  
 - Topic；Sentiment（含可选连续分）；**Target-bound Stance**；Frame（`taxonomy_v0.4`）；Entities；Claims/Evidence  
 - Unknown / Mixed / Ambiguous 等状态；版本与预算  
 
@@ -138,7 +142,7 @@ P1-F 通过即 **Phase 1 / 监测型 MVP** 完成；Phase 2 另授权。
 | 段 | 状态 |
 |----|------|
 | P1-A | 已完成（不重写） |
-| P1-B | 待授权 |
+| P1-B | 已完成 |
 | P1-C → F | 依次授权 |
 
 验收文档：`PHASE1{A,B,C,D,E,F}_ACCEPTANCE.md`。

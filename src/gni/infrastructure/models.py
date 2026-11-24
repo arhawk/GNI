@@ -1,4 +1,4 @@
-"""SQLAlchemy models for P1-A."""
+"""SQLAlchemy models for P1-A / P1-B."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -182,3 +183,75 @@ class Article(Base):
     quality_status: Mapped[str] = mapped_column(String(32), default="rss_stub")
     source_timezone: Mapped[str | None] = mapped_column(String(64))
     time_precision: Mapped[str | None] = mapped_column(String(32))
+    processing_status: Mapped[str] = mapped_column(String(32), default="pending")
+    duplicate_of_article_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("articles.id"), nullable=True
+    )
+    exclude_from_metrics: Mapped[bool] = mapped_column(Boolean, default=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    title_screening_label: Mapped[str | None] = mapped_column(String(32))
+    title_screening_priority: Mapped[str | None] = mapped_column(String(8))
+
+    versions: Mapped[list["ArticleVersion"]] = relationship(
+        "ArticleVersion", back_populates="article"
+    )
+    screenings: Mapped[list["ArticleScreening"]] = relationship(
+        "ArticleScreening", back_populates="article"
+    )
+
+
+class ArticleVersion(Base):
+    __tablename__ = "article_versions"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    extraction_method: Mapped[str | None] = mapped_column(String(64))
+    raw_html_excerpt: Mapped[str | None] = mapped_column(Text)
+    content_clean: Mapped[str | None] = mapped_column(Text)
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    language: Mapped[str | None] = mapped_column(String(32))
+    char_count: Mapped[int | None] = mapped_column(Integer)
+    quality_status: Mapped[str] = mapped_column(String(32), default="ok")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    article: Mapped[Article] = relationship(back_populates="versions")
+
+
+class ArticleScreening(Base):
+    __tablename__ = "article_screenings"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    article_version_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("article_versions.id"), nullable=True
+    )
+    stage: Mapped[str] = mapped_column(String(32), nullable=False)  # title | fulltext
+    screening_label: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason_codes: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    matched_entities: Mapped[list[Any] | dict[str, Any] | None] = mapped_column(PortableJSON)
+    supporting_paragraph_ids: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    requires_human_review: Mapped[bool] = mapped_column(Boolean, default=False)
+    priority: Mapped[str | None] = mapped_column(String(8))
+    rule_version: Mapped[str | None] = mapped_column(String(64))
+    entity_dictionary_version: Mapped[str | None] = mapped_column(String(64))
+    schema_version: Mapped[str | None] = mapped_column(String(64))
+    input_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    article: Mapped[Article] = relationship(back_populates="screenings")
+
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    stats: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
