@@ -65,7 +65,8 @@ INTL_TITLE_RE = re.compile(
 DESK_HINT_RE = re.compile(
     r"(?:asia|asien|china|world|international|foreign|external.?affairs|"
     r"west.?asia|indo.?pacific|pacific|diplomat|sputnik|tass\.com|"
-    r"rfa\.org|mid\.ru|mea\.|dfat|foreignminister)",
+    r"rfa\.org|mid\.ru|mea\.|dfat|foreignminister|kremlin|rt\.com|"
+    r"feed/26458|feed/1556)",
     re.IGNORECASE,
 )
 

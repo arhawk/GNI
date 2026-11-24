@@ -89,6 +89,12 @@ organizations:
   organization_type: state_news_agency
   ownership_type: state
   government_control_level: high
+- id: org_ru_kremlin
+  country_id: RU
+  name: Office of the President of Russia (Kremlin)
+  organization_type: government_office
+  ownership_type: government
+  government_control_level: high
 - id: org_in_president
   country_id: IN
   name: President of India
@@ -266,14 +272,13 @@ sources:
   evidence_url: https://sputnikglobe.com/
   classification_confidence: high
   reviewed_by: editorial_probe_20261124
-  active_status: active
+  active_status: inactive
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://sputnikglobe.com/export/rss2/index.xml
-  notes: 'Active panel 2/2 RU. Probe 2026-11-24: HTTP 200, intl_or_china≈0.68–0.72 world mix. ria.ru world/politics
-    paths 404; site-wide RIA demoted. editorial_focus=international_or_china.
-
-    '
+  notes: >
+    Demoted 2026-11-24 panel upgrade: slot freed for RT + Kremlin EN (≤3 active/RU).
+    Still verified world mix intl≈0.68–0.72; keep as backup.
 - source_id: ru_tass_russian
   name: TASS (Russian RSS)
   country_id: RU
@@ -345,14 +350,39 @@ sources:
   evidence_url: https://www.rt.com/
   classification_confidence: medium
   reviewed_by: editorial_probe_20261124
-  active_status: inactive
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://www.rt.com/rss/news
-  notes: 'Inactive verified backup. Probe 2026-11-24: intl_or_china≈0.64. Panel uses TASS EN + Sputnik;
-    RT held as spare. Organization tagged under Rossiya Segodnya family for seed FK.
+  notes: >
+    Active RU panel. Probe 2026-11-24: intl_or_china≈0.40–0.64. Activated from quota spare.
 
-    '
+- source_id: ru_kremlin_english
+  name: Kremlin — presidential events (English RSS)
+  country_id: RU
+  organization_id: org_ru_kremlin
+  canonical_url: https://en.kremlin.ru/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://en.kremlin.ru/
+  compliance_status: allowed_internal
+  evidence_url: https://en.kremlin.ru/
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: http://en.kremlin.ru/events/all/feed
+  notes: >
+    Active RU panel. Probe 2026-11-24: HTTP 200, china≈2/20, intl_or_china≈0.30–0.40
+    (presidential foreign-policy desk). Replaces Sputnik slot in ≤3 active set.
 - source_id: de_dw_asia
   name: Deutsche Welle (English Asia)
   country_id: DE
@@ -598,11 +628,9 @@ sources:
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://www.pm.gov.au/rss.xml
-  notes: 'Active panel 1/2 AU. Probe 2026-11-24: intl_or_china≈0.76 (Australia-China joint statements,
-    Singapore/Solomon bilateral). Retained — not domestic-admin dominant. DFAT / foreignminister feeds
-    timeout or 404. editorial_focus=international_or_china.
-
-    '
+  notes: >
+    Active AU panel with ABC China + ABC Foreign Affairs. Probe intl≈0.76 bilateral/China.
+    DFAT / foreignminister RSS still timeout from this network.
 - source_id: au_sbs_world
   name: SBS News — World
   country_id: AU
@@ -622,14 +650,68 @@ sources:
   evidence_url: https://www.sbs.com.au/aboutus
   classification_confidence: medium
   reviewed_by: editorial_probe_20261124
-  active_status: active
+  active_status: inactive
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://www.sbs.com.au/news/topic/world/feed
-  notes: 'Active panel 2/2 AU. Probe 2026-11-24: intl_or_china≈0.40, china≈3/25. Replaces ABC Top Stories
-    (domestic). ABC World feed IDs return HTTP 500. Public broadcaster. editorial_focus=international_or_china.
+  notes: >
+    Demoted 2026-11-24: slot freed for ABC China + ABC Foreign Affairs topic RSS
+    (higher China density). Kept verified backup.
 
-    '
+- source_id: au_abc_china
+  name: ABC News — China topic RSS
+  country_id: AU
+  organization_id: org_au_abc
+  canonical_url: https://www.abc.net.au/news/topic/china
+  source_type: public_service
+  ownership_type: public
+  funding_type: public
+  government_control_level: low
+  editorial_independence: medium
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.abc.net.au/conditions/
+  compliance_status: allowed_internal
+  evidence_url: https://www.abc.net.au/news/topic/china
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.abc.net.au/news/feed/26458/rss.xml
+  notes: >
+    Active AU panel. Probe 2026-11-24: HTTP 200, china≈5/20, intl_or_china≈0.45–0.68.
+    Topic desk ContentId=26458 (not Top Stories).
+
+- source_id: au_abc_foreign_affairs
+  name: ABC News — Foreign Affairs topic RSS
+  country_id: AU
+  organization_id: org_au_abc
+  canonical_url: https://www.abc.net.au/news/topic/foreign-affairs
+  source_type: public_service
+  ownership_type: public
+  funding_type: public
+  government_control_level: low
+  editorial_independence: medium
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.abc.net.au/conditions/
+  compliance_status: allowed_internal
+  evidence_url: https://www.abc.net.au/news/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.abc.net.au/news/feed/1556/rss.xml
+  notes: >
+    Active AU panel. Probe 2026-11-24: HTTP 200, china≈8/20, intl_or_china≈0.60–0.68.
+    Topic desk ContentId=1556.
+
 - source_id: au_abc_top
   name: ABC News — Top Stories RSS
   country_id: AU
@@ -652,10 +734,9 @@ sources:
   active_status: inactive
   verification_status: verified
   feed_or_api_url: https://www.abc.net.au/news/feed/45910/rss.xml
-  notes: 'Inactive. Probe 2026-11-24: intl_or_china≈0.28–0.36 domestic Top Stories. World feed 5115588
-    HTTP 500. Denylisted for active; replaced by SBS World.
-
-    '
+  notes: >
+    Inactive. Top Stories domestic-heavy (intl≈0.24–0.36). Denylisted; use China/FA
+    topic feeds instead.
 - source_id: ru_sputnik_en
   name: Sputnik (English World RSS) — duplicate alias
   country_id: RU
