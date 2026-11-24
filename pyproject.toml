@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gni"
-version = "0.1.4"
+version = "0.1.6"
 description = "Global Narrative Intelligence — official media narrative monitoring"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -30,6 +30,7 @@ dependencies = [
 dev = [
   "pytest>=8.0",
   "ruff>=0.6",
+  "playwright>=1.48",
 ]
 api = [
   "fastapi>=0.115",
@@ -50,6 +51,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
   "integration: tests that need PostgreSQL or network",
+  "e2e: playwright end-to-end browser tests",
 ]
 
 [tool.ruff]

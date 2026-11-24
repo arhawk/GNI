@@ -41,14 +41,33 @@ pytest
 
 Cron：`gni ingest run --once --allow-partial`
 
+### 看板（P1-E）
+
+```bash
+source .venv/bin/activate
+pip install -e ".[dashboard]"
+# Postgres 若缺 P1-B/C 列：看板启动会自动 ensure_schema；也可 gni db upgrade / gni db init
+gni dashboard
+```
+
+浏览器：`http://localhost:8501`
+
+### Playwright E2E
+
+```bash
+pip install -e ".[dev,dashboard]"
+python -m playwright install chromium
+pytest tests/e2e -m e2e
+```
+
 ## 阶段边界
 
 | 阶段 | 状态 |
 |------|------|
 | Phase 0 + V3/V4 文档对齐 | 完成 |
-| P1-A 来源 + RSS | 完成 |
-| P1-B 抽取清洗 + 规则 L1 | 完成 |
-| P1-C～F | 未开始 |
+| P1-A～P1-E | 完成 |
+| P1-F 报告/预警/重大新闻候选 | 待授权 |
+
 ## 许可证
 
 Proprietary — 内部研究。合规见 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)。

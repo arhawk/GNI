@@ -8,7 +8,7 @@ def test_cli_version(capsys):
         main(["version"])
     except SystemExit as e:
         assert e.code == 0
-    assert "0.1.4" in capsys.readouterr().out
+    assert "0.1.6" in capsys.readouterr().out
 
 
 def test_cli_health(capsys):

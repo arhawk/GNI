@@ -1,4 +1,4 @@
-"""CLI entrypoint for GNI Phase 1-A/B/C/D."""
+"""CLI entrypoint for GNI Phase 1-A/B/C/D/E."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def cmd_health(_: argparse.Namespace) -> int:
         "llm_provider": settings.llm_provider,
         "llm_api_configured": bool(settings.llm_api_key),
         "database_url_scheme": settings.database_url.split("://", 1)[0],
-        "phase": "1D",
+        "phase": "1E",
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -146,6 +146,31 @@ def cmd_process_run(args: argparse.Namespace) -> int:
         status = job.status
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
     return 0 if status in {"success", "partial"} else 1
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Launch Streamlit dashboard (requires optional [dashboard] extra)."""
+    try:
+        import streamlit  # noqa: F401
+    except ImportError:
+        print(
+            "Streamlit not installed. Run: pip install -e '.[dashboard]'",
+            file=sys.stderr,
+        )
+        return 2
+    app = Path(__file__).resolve().parent / "dashboard" / "app.py"
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app),
+        "--server.headless",
+        "true",
+    ]
+    if args.port:
+        cmd.extend(["--server.port", str(args.port)])
+    return subprocess.run(cmd, check=False).returncode
 
 
 def cmd_metrics_run(args: argparse.Namespace) -> int:
@@ -341,6 +366,10 @@ def main(argv: list[str] | None = None) -> None:
     p_mrun.add_argument("--target", default="china", help="Target scope (default china)")
     p_mrun.add_argument("--timezone", default="UTC", help="Display timezone label (data filtered in UTC)")
     p_mrun.set_defaults(func=cmd_metrics_run)
+
+    p_dash = sub.add_parser("dashboard", help="Launch Streamlit dashboard (P1-E)")
+    p_dash.add_argument("--port", type=int, default=8501, help="Server port (default 8501)")
+    p_dash.set_defaults(func=cmd_dashboard)
 
     args = parser.parse_args(argv)
     raise SystemExit(args.func(args))

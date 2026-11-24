@@ -35,7 +35,7 @@
 | **P1-B** | 清洗/抽取/去重 + 规则 L1；见 Addendum A1 | **已验收** |
 | **P1-C** | L2/L3 + Relevance Weight + 六维分析 | **完成** |
 | **P1-D** | 七项研究指标 + 加权/运营指标；Attention 分母门禁 | **完成** |
-| **P1-E** | V4 Dashboard 导航（含 Articles/Alerts/News 候选） | 待授权 |
+| **P1-E** | V4 Dashboard 导航（含 Articles/Alerts/News 候选） | **完成** |
 | **P1-F** | 日/周/月报 + 规则预警 + 重大新闻候选 | 待授权 |
 
 详见 [PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md)。
