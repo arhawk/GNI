@@ -121,10 +121,10 @@ organizations:
   government_control_level: medium
 sources:
 - source_id: us_voa_english
-  name: Voice of America (English RSS)
+  name: Voice of America — China News (RSS)
   country_id: US
   organization_id: org_usagm
-  canonical_url: https://www.voanews.com/
+  canonical_url: https://www.voanews.com/z/6715
   source_type: state_controlled
   ownership_type: government
   funding_type: public
@@ -136,17 +136,17 @@ sources:
   adapter_type: rss_adapter
   terms_url: https://www.voanews.com/
   compliance_status: allowed_internal
-  evidence_url: https://www.voanews.com/
+  evidence_url: https://www.voanews.com/rssfeeds
   classification_confidence: high
-  reviewed_by: editorial_probe_20261124
+  reviewed_by: voa_rssfeeds_20261124
   active_status: active
   verification_status: verified
   editorial_focus: international_or_china
-  feed_or_api_url: https://www.voanews.com/api/z-$otevtiq
-  notes: 'Active panel 1/2 US. Probe 2026-11-24: feed title "Africa - VOA"; intl_or_china≈0.40 on top
-    titles (international desk, not US domestic). Asia-specific VOA API paths empty. editorial_focus=international_or_china.
-
-    '
+  feed_or_api_url: https://www.voanews.com/api/zmjuqtl-vomx-tpey_jqq
+  notes: >
+    Active US panel. Full URL from https://www.voanews.com/rssfeeds (China News / z/6715).
+    Truncated id zmjuqtl-vomx alone returns empty; suffix -tpey_jqq required.
+    Probe 2026-11-24: china≈19/20, intl_or_china≈0.95. Replaces Africa desk feed.
 - source_id: us_rfa_english
   name: Radio Free Asia (English RSS)
   country_id: US
