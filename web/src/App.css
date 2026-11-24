@@ -10,6 +10,109 @@
   min-width: 0;
 }
 
+.topbar {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+}
+
+.topbar-brand-line {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.topbar-status {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #3d8f5a 55%, var(--line));
+  color: #9dceb0;
+  background: color-mix(in srgb, #1d3a28 70%, transparent);
+  white-space: nowrap;
+}
+
+.top-search {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  justify-self: center;
+}
+
+.top-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.top-search-input:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
+.top-search-dropdown {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.top-search-dropdown li {
+  margin: 0;
+}
+
+.top-search-hit {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.55rem;
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.top-search-hit:hover {
+  background: var(--bg-elev);
+}
+
+.top-search-kind {
+  font-size: 0.7rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+}
+
+.top-search-title {
+  flex: 1 1 180px;
+}
+
 .time-filter {
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
@@ -112,8 +215,7 @@
 .brand-sub {
   color: var(--muted);
   font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 
 .nav-group {
@@ -123,9 +225,8 @@
 }
 
 .nav-group-label {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   color: var(--muted);
   padding: 0.35rem 0.5rem;
 }

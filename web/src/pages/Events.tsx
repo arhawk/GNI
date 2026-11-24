@@ -25,8 +25,8 @@ export function EventsPage() {
 
   return (
     <div className="panel">
-      <h2>News & Events</h2>
-      <p className="muted small">Sorted by event time (newest first). Location pins are not required.</p>
+      <h2>新闻中心 · 事件</h2>
+      <p className="muted small">按事件时间倒序；无地理坐标也可出现在列表中。</p>
       <ul className="event-list">
         {events.map((e) => (
           <li key={e.id}>

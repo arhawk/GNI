@@ -343,3 +343,16 @@ export function fetchDailyReport(date?: string) {
   const q = params.toString()
   return get<DailyReport>(`/api/reports/daily${q ? `?${q}` : ''}`)
 }
+
+export type SearchHit = {
+  kind: 'event' | 'article'
+  id: string
+  title: string
+  subtitle?: string | null
+  url?: string | null
+}
+
+export function fetchSearch(q: string, limit = 12) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  return get<{ query: string; results: SearchHit[] }>(`/api/search?${params.toString()}`)
+}

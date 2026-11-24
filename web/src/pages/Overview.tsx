@@ -80,7 +80,7 @@ export function OverviewPage() {
       </p>
 
       <section className="block">
-        <h2>A · Snapshot</h2>
+        <h2>A · 快照</h2>
         <div className="kpi-grid">
           <Kpi label="Total articles" value={k.total_articles_universe} hint="in window" />
           <Kpi label="China article count" value={k.china_article_count} hint="raw count" />
@@ -116,8 +116,8 @@ export function OverviewPage() {
 
       <section className="block">
         <div className="block-head">
-          <h2>B · Board</h2>
-          <div className="seg" role="group" aria-label="Board mode">
+          <h2>B · 看板</h2>
+          <div className="seg" role="group" aria-label="看板模式">
             <button
               type="button"
               className={mode === 'event_time_list' ? 'active' : ''}
@@ -126,14 +126,14 @@ export function OverviewPage() {
                 setAttitudeDetail(null)
               }}
             >
-              Latest events
+              最新事件
             </button>
             <button
               type="button"
               className={mode === 'country_china_attitude' ? 'active' : ''}
               onClick={() => setMode('country_china_attitude')}
             >
-              China attitude (sample)
+              对华态度（样本）
             </button>
           </div>
         </div>
@@ -210,8 +210,8 @@ export function OverviewPage() {
       </section>
 
       <section className="block">
-        <h2>C · Sentiment distribution</h2>
-        <p className="muted small">Sentiment labels only — stance is a separate signal.</p>
+        <h2>C · 情感分布</h2>
+        <p className="muted small">情感与立场分列，此处仅情感标签。</p>
         <div className="bars">
           {sentEntries.length === 0 && <p className="muted">No sentiment data in window.</p>}
           {sentEntries.map(([label, n]) => (
@@ -221,8 +221,8 @@ export function OverviewPage() {
       </section>
 
       <section className="block">
-        <h2>D · Topic share</h2>
-        <p className="muted small">taxonomy_v0.4 — not threat-intelligence classes.</p>
+        <h2>D · 议题结构</h2>
+        <p className="muted small">taxonomy_v0.4 主题占比（非威胁分类）。</p>
         <div className="bars">
           {topicEntries.length === 0 && <p className="muted">No topic data in window.</p>}
           {topicEntries.slice(0, 12).map(([label, n]) => (
@@ -232,7 +232,7 @@ export function OverviewPage() {
       </section>
 
       <section className="block">
-        <h2>E · Important events & anomalies</h2>
+        <h2>E · 重要事件与异常</h2>
         <p className="muted small">{data.anomalies.note}</p>
         <ul className="event-list">
           {data.anomalies.items.map((item) => (

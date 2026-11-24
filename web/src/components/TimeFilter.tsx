@@ -57,8 +57,8 @@ export function TimeFilter() {
   return (
     <div className="time-filter">
       <div className="time-filter-row">
-        <span className="time-filter-label">Time window</span>
-        <div className="seg time-presets" role="group" aria-label="Time presets">
+        <span className="time-filter-label">时间窗</span>
+        <div className="seg time-presets" role="group" aria-label="时间预设">
           {PRESETS.map((p) => (
             <button
               key={p.days}

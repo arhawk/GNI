@@ -113,3 +113,66 @@ def api_daily_report(
             return build_daily_report(session, day=date, polish=polish)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/api/search")
+def api_search(
+    q: str = Query(..., min_length=1, description="Search query"),
+    limit: int = Query(12, ge=1, le=40),
+) -> dict:
+    """Title search over events (priority) and articles."""
+    from sqlalchemy import or_, select
+
+    from gni.infrastructure.models import Article, Event, Source
+
+    term = q.strip()
+    if len(term) < 2:
+        return {"query": term, "results": []}
+    pattern = f"%{term}%"
+    with session_scope() as session:
+        events = list(
+            session.scalars(
+                select(Event)
+                .where(or_(Event.title.ilike(pattern), Event.summary.ilike(pattern)))
+                .order_by(Event.updated_at.desc())
+                .limit(limit)
+            ).all()
+        )
+        results: list[dict] = [
+            {
+                "kind": "event",
+                "id": e.id,
+                "title": e.title,
+                "subtitle": e.status,
+                "url": None,
+            }
+            for e in events
+        ]
+        remain = max(0, limit - len(results))
+        if remain:
+            articles = list(
+                session.scalars(
+                    select(Article)
+                    .where(Article.title.ilike(pattern))
+                    .order_by(Article.first_seen_at.desc())
+                    .limit(remain)
+                ).all()
+            )
+            sources = {
+                s.id: s
+                for s in session.scalars(
+                    select(Source).where(Source.id.in_({a.source_id for a in articles}))
+                ).all()
+            } if articles else {}
+            for a in articles:
+                src = sources.get(a.source_id)
+                results.append(
+                    {
+                        "kind": "article",
+                        "id": a.id,
+                        "title": a.title,
+                        "subtitle": (src.country_id if src else None) or a.source_id,
+                        "url": a.url,
+                    }
+                )
+        return {"query": term, "results": results}
