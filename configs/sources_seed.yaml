@@ -1,11 +1,10 @@
 meta:
-  verified_at_utc: '2026-11-24T08:45:00Z'
+  verified_at_utc: '2026-11-24T11:30:00Z'
   user_agent: GNI-ResearchBot/0.1 (+internal-research)
-  notes: '2026-11-24 editorial realign + race restore: active feeds must be international_or_china (not
-    domestic livelihood/admin). Demoted RU TASS/RIA site-wide, IN PIB Hindi/NITI, DE DW-de-all, AU ABC
-    Top Stories. Active panel (~2/country): US RFA+VOA; RU TASS EN+Sputnik; DE DW Asia+DW EN-all; IN AIR
-    International+PIB West Asia; AU PM media+SBS World. Restored after seed race that briefly zeroed IN
-    / dropped SBS.'
+  notes: >
+    2026-11-24 connect crossed sources: per-country active cap raised to ≤5.
+    US: VOA China + RFA + State.gov press + VOA East Asia (4). RU: TASS EN + RT + Kremlin EN + Sputnik (4).
+    DE/IN/AU unchanged. B-class MID/AU FM/DE AA/MoD still unreachable — see data/source_collaboration_needed.md.
 countries:
 - id: US
   code: US
@@ -39,6 +38,12 @@ organizations:
   country_id: US
   name: National Archives — Federal Register
   organization_type: government_publisher
+  ownership_type: government
+  government_control_level: high
+- id: org_us_state
+  country_id: US
+  name: U.S. Department of State
+  organization_type: government_department
   ownership_type: government
   government_control_level: high
 - id: org_dw
@@ -170,10 +175,90 @@ sources:
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://www.rfa.org/english/rss
-  notes: 'Active panel 2/2 US. Asia/China-focused official media desk. Occasional HTTP 429; keep verified.
+  notes: 'Active US panel. Asia/China-focused official media desk. Occasional HTTP 429; keep verified.
     editorial_focus=international_or_china.
 
     '
+- source_id: us_state_press
+  name: U.S. Department of State — Press Releases (RSS)
+  country_id: US
+  organization_id: org_us_state
+  canonical_url: https://www.state.gov/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.state.gov/
+  compliance_status: allowed_internal
+  evidence_url: https://www.state.gov/rss-feed/press-releases/feed/
+  classification_confidence: high
+  reviewed_by: connect_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.state.gov/rss-feed/press-releases/feed/
+  config:
+    user_agent: Mozilla/5.0 (compatible; GNI-ResearchBot/0.1; +internal-research)
+  notes: >
+    Active US panel (gov). Probe 2026-11-24: HTTP 200 with browser-compatible UA, n=10,
+    intl_or_china≈0.30. Prefer this path over empty /press-releases/feed/. Bare bot UA → 403.
+- source_id: us_voa_east_asia
+  name: Voice of America — East Asia News (RSS)
+  country_id: US
+  organization_id: org_usagm
+  canonical_url: https://www.voanews.com/
+  source_type: state_controlled
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.voanews.com/
+  compliance_status: allowed_internal
+  evidence_url: https://www.voanews.com/rssfeeds
+  classification_confidence: high
+  reviewed_by: connect_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.voanews.com/api/zobo_l-vomx-tpepvmv
+  notes: >
+    Active US panel. Probe 2026-11-24: n=20, china≈14, intl_or_china≈0.75.
+    Complements VOA China desk; broader East Asia coverage.
+- source_id: us_rfa_mandarin
+  name: Radio Free Asia (Mandarin RSS)
+  country_id: US
+  organization_id: org_usagm
+  canonical_url: https://www.rfa.org/mandarin/
+  source_type: state_controlled
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: zh
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.rfa.org/
+  compliance_status: allowed_internal
+  evidence_url: https://www.rfa.org/mandarin/
+  classification_confidence: medium
+  reviewed_by: connect_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.rfa.org/mandarin/rss
+  notes: >
+    Inactive backup (5th US slot spare). Probe 2026-11-24: HTTP 429 rate-limited from this network.
+    Prefer English RFA when quota allows.
 - source_id: us_defense_news
   name: U.S. Department of Defense News Feed
   country_id: US
@@ -272,13 +357,13 @@ sources:
   evidence_url: https://sputnikglobe.com/
   classification_confidence: high
   reviewed_by: editorial_probe_20261124
-  active_status: inactive
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://sputnikglobe.com/export/rss2/index.xml
   notes: >
-    Demoted 2026-11-24 panel upgrade: slot freed for RT + Kremlin EN (≤3 active/RU).
-    Still verified world mix intl≈0.68–0.72; keep as backup.
+    Re-activated 2026-11-24 (cap ≤5): RU panel TASS+RT+Kremlin+Sputnik=4.
+    Probe: HTTP 200, intl_or_china≈0.70.
 - source_id: ru_tass_russian
   name: TASS (Russian RSS)
   country_id: RU
@@ -382,7 +467,7 @@ sources:
   feed_or_api_url: http://en.kremlin.ru/events/all/feed
   notes: >
     Active RU panel. Probe 2026-11-24: HTTP 200, china≈2/20, intl_or_china≈0.30–0.40
-    (presidential foreign-policy desk). Replaces Sputnik slot in ≤3 active set.
+    (presidential foreign-policy desk).
 - source_id: de_dw_asia
   name: Deutsche Welle (English Asia)
   country_id: DE

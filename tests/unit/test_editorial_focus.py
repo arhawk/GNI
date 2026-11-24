@@ -86,4 +86,4 @@ def test_active_panel_has_target_countries():
         by_country.setdefault(s["country_id"], []).append(s["source_id"])
     for code in ("US", "RU", "DE", "IN", "AU"):
         assert code in by_country, f"no active source for {code}"
-        assert 1 <= len(by_country[code]) <= 3, by_country
+        assert 1 <= len(by_country[code]) <= 5, by_country
