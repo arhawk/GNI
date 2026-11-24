@@ -1,7 +1,7 @@
 def test_package_version():
     import gni
 
-    assert gni.__version__ == "0.1.3"
+    assert gni.__version__ == "0.1.4"
 
 
 def test_core_and_interfaces_importable():

@@ -1,4 +1,4 @@
-"""CLI entrypoint for GNI Phase 1-A/B/C."""
+"""CLI entrypoint for GNI Phase 1-A/B/C/D."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def cmd_health(_: argparse.Namespace) -> int:
         "llm_provider": settings.llm_provider,
         "llm_api_configured": bool(settings.llm_api_key),
         "database_url_scheme": settings.database_url.split("://", 1)[0],
-        "phase": "1C",
+        "phase": "1D",
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -146,6 +146,26 @@ def cmd_process_run(args: argparse.Namespace) -> int:
         status = job.status
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
     return 0 if status in {"success", "partial"} else 1
+
+
+def cmd_metrics_run(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.metrics.service import metric_run_to_dict, run_metrics
+
+    ensure_schema()
+    with session_scope() as session:
+        run = run_metrics(
+            session,
+            days=args.days,
+            country=args.country,
+            source_id=args.source,
+            target=args.target,
+            timezone_name=args.timezone,
+        )
+        payload = metric_run_to_dict(run)
+        status = run.status
+    print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    return 0 if status == "success" else 1
 
 
 def cmd_analyze_run(args: argparse.Namespace) -> int:
@@ -311,6 +331,16 @@ def main(argv: list[str] | None = None) -> None:
         help="Single batch (default)",
     )
     p_arun.set_defaults(func=cmd_analyze_run)
+
+    p_metrics = sub.add_parser("metrics", help="P1-D research/weighted/ops metrics")
+    metrics_sub = p_metrics.add_subparsers(dest="metrics_command", required=True)
+    p_mrun = metrics_sub.add_parser("run", help="Compute metrics for a time window")
+    p_mrun.add_argument("--days", type=int, default=7, help="Rolling window in days (default 7)")
+    p_mrun.add_argument("--country", help="Country id filter (e.g. US)")
+    p_mrun.add_argument("--source", help="Source id filter")
+    p_mrun.add_argument("--target", default="china", help="Target scope (default china)")
+    p_mrun.add_argument("--timezone", default="UTC", help="Display timezone label (data filtered in UTC)")
+    p_mrun.set_defaults(func=cmd_metrics_run)
 
     args = parser.parse_args(argv)
     raise SystemExit(args.func(args))

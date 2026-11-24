@@ -1,6 +1,6 @@
 # 数据 Schema 总览（DATA_SCHEMA）
 
-**版本：** 0.6（P1-C）  
+**版本：** 0.7（P1-D）  
 **查询路径：** Country × Source × Topic × Target × Time  
 **详见：** [DATABASE.md](DATABASE.md)、[ARTICLE_ANALYSIS_SCHEMA.json](ARTICLE_ANALYSIS_SCHEMA.json)、[BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)
 
@@ -32,6 +32,12 @@ articles、ingestion_jobs、…
 `articles` 扩展：`analysis_status`、`fulltext_screening_label`、`china_relevance_level`、`china_relevance_weight`、`analyzed_at`。  
 实体词典仍为 YAML（`configs/china_entity_dictionary_v0.1.yaml`）。
 
-## 4. 分析 JSON
+## 4. P1-D 新增
+
+| 表 | 用途 |
+|----|------|
+| `metric_runs` | 窗口/范围/版本 + `results`（研究核心 / 加权 / 运营；raw+weighted 双视图） |
+
+## 5. 分析 JSON
 
 `article_analysis_v0.2`：`china_relevance.level` = core/substantial/secondary/incidental/none/uncertain。

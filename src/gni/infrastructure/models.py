@@ -348,3 +348,27 @@ class ArticleAnalysis(Base):
     estimated_cost_usd: Mapped[float | None] = mapped_column(Float)
     structured_result: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MetricRun(Base):
+    __tablename__ = "metric_runs"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="success")
+    metric_definition_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    relevance_weight_version: Mapped[str | None] = mapped_column(String(64))
+    deduplication_method: Mapped[str | None] = mapped_column(String(64))
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    country_scope: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    source_scope: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    topic_scope: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    target_scope: Mapped[str | None] = mapped_column(String(64))
+    numerator: Mapped[float | None] = mapped_column(Float)
+    denominator: Mapped[float | None] = mapped_column(Float)
+    excluded_count: Mapped[int | None] = mapped_column(Integer)
+    missing_count: Mapped[int | None] = mapped_column(Integer)
+    results: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    stats: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
