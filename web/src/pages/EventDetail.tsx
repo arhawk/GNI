@@ -41,7 +41,21 @@ export function EventDetailPage() {
           </span>
           <span>Importance: {e.importance_score ?? '—'}</span>
           <span>Physical location: {e.has_physical_location ? 'yes' : 'no'}</span>
+          {(e.actor_key || e.action_key) && (
+            <span>
+              Fingerprint: {e.actor_key ?? '?'} / {e.action_key ?? '?'} / {e.object_key ?? '?'}
+            </span>
+          )}
         </div>
+        {data.metrics?.sentiment_shares && (
+          <p className="muted small">
+            Rolled-up sentiment (equal article share):{' '}
+            {Object.entries(data.metrics.sentiment_shares)
+              .map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`)
+              .join(' · ')}
+            {data.metrics.article_count != null && ` · ${data.metrics.article_count} articles`}
+          </p>
+        )}
         {data.participants.length > 0 && (
           <p className="participants">
             Participants:{' '}
@@ -108,7 +122,6 @@ export function EventDetailPage() {
                 lon: l.lon as number,
                 layer: 'event_geography',
               }))}
-            reportingPins={[]}
           />
         </section>
       )}

@@ -179,8 +179,27 @@ def cmd_events_rebuild(args: argparse.Namespace) -> int:
 
     ensure_schema()
     with session_scope() as session:
-        stats = rebuild_proto_events(session, min_articles=args.min_articles, limit=args.limit)
+        stats = rebuild_proto_events(
+            session,
+            min_articles=args.min_articles,
+            limit=args.limit,
+            legacy_title=bool(getattr(args, "legacy_title", False)),
+            extract=not bool(getattr(args, "skip_extract", False)),
+        )
     print(json.dumps({"status": "ok", **stats}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_events_extract(args: argparse.Namespace) -> int:
+    from gni.events.extract import extract_for_articles
+    from gni.infrastructure.db import ensure_schema, session_scope
+
+    ensure_schema()
+    with session_scope() as session:
+        stats = extract_for_articles(session, limit=args.limit)
+    # cards are not JSON-serializable
+    out = {k: v for k, v in stats.items() if k != "cards"}
+    print(json.dumps({"status": "ok", **out}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -397,12 +416,27 @@ def main(argv: list[str] | None = None) -> None:
     p_dash.add_argument("--port", type=int, default=8501, help="Server port (default 8501)")
     p_dash.set_defaults(func=cmd_dashboard)
 
-    p_events = sub.add_parser("events", help="Event Intelligence / proto-Event commands")
+    p_events = sub.add_parser("events", help="Event Intelligence / fingerprint commands")
     events_sub = p_events.add_subparsers(dest="events_command", required=True)
-    p_ereb = events_sub.add_parser("rebuild", help="Rebuild proto-Events from China articles")
+    p_ereb = events_sub.add_parser(
+        "rebuild", help="Rebuild events via fingerprint match (default) or legacy titles"
+    )
     p_ereb.add_argument("--min-articles", type=int, default=1, help="Min articles per cluster")
-    p_ereb.add_argument("--limit", type=int, default=50, help="Max proto-Events to keep")
+    p_ereb.add_argument("--limit", type=int, default=50, help="Max events to keep")
+    p_ereb.add_argument(
+        "--legacy-title",
+        action="store_true",
+        help="Use legacy title Jaccard clustering instead of fingerprint",
+    )
+    p_ereb.add_argument(
+        "--skip-extract",
+        action="store_true",
+        help="Skip writing new article_event_candidates (use existing / on-the-fly)",
+    )
     p_ereb.set_defaults(func=cmd_events_rebuild)
+    p_eext = events_sub.add_parser("extract", help="Extract event fingerprint candidates")
+    p_eext.add_argument("--limit", type=int, default=500, help="Max articles to extract")
+    p_eext.set_defaults(func=cmd_events_extract)
 
     p_api = sub.add_parser("api", help="HTTP API for React UI")
     api_sub = p_api.add_subparsers(dest="api_command", required=True)

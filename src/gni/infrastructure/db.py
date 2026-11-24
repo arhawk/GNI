@@ -45,6 +45,25 @@ _ARTICLES_EXTRA_COLUMNS: dict[str, dict[str, str]] = {
     },
 }
 
+_EVENTS_EXTRA_COLUMNS: dict[str, dict[str, str]] = {
+    "sqlite": {
+        "actor_key": "VARCHAR(128)",
+        "action_key": "VARCHAR(64)",
+        "object_key": "VARCHAR(256)",
+        "event_time": "DATETIME",
+        "qualifiers": "JSON",
+        "fingerprint_hash": "VARCHAR(64)",
+    },
+    "postgresql": {
+        "actor_key": "VARCHAR(128)",
+        "action_key": "VARCHAR(64)",
+        "object_key": "VARCHAR(256)",
+        "event_time": "TIMESTAMP WITH TIME ZONE",
+        "qualifiers": "JSONB",
+        "fingerprint_hash": "VARCHAR(64)",
+    },
+}
+
 
 def get_engine(*, echo: bool = False) -> Engine:
     global _engine, _SessionLocal
@@ -109,25 +128,30 @@ def ensure_schema() -> list[str]:
         return applied
 
     insp = inspect(engine)
-    if "articles" not in insp.get_table_names():
-        return applied
-    existing = {c["name"] for c in insp.get_columns("articles")}
-    alters = _ARTICLES_EXTRA_COLUMNS[dialect_key]
+    tables = set(insp.get_table_names())
     with engine.begin() as conn:
-        for name, ddl in alters.items():
-            if name not in existing:
-                conn.execute(text(f"ALTER TABLE articles ADD COLUMN {name} {ddl}"))
-                applied.append(name)
-        # Best-effort FK for duplicate_of on Postgres (ignore if already present)
-        if dialect_key == "postgresql" and "duplicate_of_article_id" in applied:
-            try:
-                conn.execute(
-                    text(
-                        "ALTER TABLE articles ADD CONSTRAINT fk_articles_duplicate_of "
-                        "FOREIGN KEY (duplicate_of_article_id) REFERENCES articles (id)"
+        if "articles" in tables:
+            existing = {c["name"] for c in insp.get_columns("articles")}
+            for name, ddl in _ARTICLES_EXTRA_COLUMNS[dialect_key].items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE articles ADD COLUMN {name} {ddl}"))
+                    applied.append(f"articles.{name}")
+            if dialect_key == "postgresql" and "articles.duplicate_of_article_id" in applied:
+                try:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE articles ADD CONSTRAINT fk_articles_duplicate_of "
+                            "FOREIGN KEY (duplicate_of_article_id) REFERENCES articles (id)"
+                        )
                     )
-                )
-            except Exception:  # noqa: BLE001
-                pass
+                except Exception:  # noqa: BLE001
+                    pass
+
+        if "events" in tables:
+            existing_ev = {c["name"] for c in insp.get_columns("events")}
+            for name, ddl in _EVENTS_EXTRA_COLUMNS[dialect_key].items():
+                if name not in existing_ev:
+                    conn.execute(text(f"ALTER TABLE events ADD COLUMN {name} {ddl}"))
+                    applied.append(f"events.{name}")
 
     return applied

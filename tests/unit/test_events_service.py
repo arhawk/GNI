@@ -75,11 +75,14 @@ def test_rebuild_proto_no_forced_coords(db):
     with session_scope() as session:
         _seed_two_articles(session)
         session.flush()
-        stats = rebuild_proto_events(session, min_articles=1, limit=20)
+        # Legacy title path never invents EVENT_LOCATION coords
+        stats = rebuild_proto_events(
+            session, min_articles=1, limit=20, legacy_title=True
+        )
         assert stats["created"] >= 1
+        assert stats["path"] == "legacy_title"
         events = list_events(session, limit=20)
         assert events
-        # Proto clusters must not invent EVENT_LOCATION pins
         assert all(e["has_physical_location"] is False for e in events)
         from sqlalchemy import func, select
 
@@ -92,11 +95,14 @@ def test_rebuild_proto_no_forced_coords(db):
         assert "who_reports" in detail["views"]
         assert "how_they_frame" in detail["views"]
         assert isinstance(detail["timeline"], list)
-        # Reporting map uses source countries, not event geography
         for pin in detail["views"]["who_reports"]["reporting_map"]:
             assert pin["layer"] == "reporting_source"
 
         overview = overview_payload(session, days=30)
-        assert overview["meta"]["map_modes"] == ["event_geography", "reporting_source"]
+        assert overview["meta"]["map_modes"] == [
+            "event_geography",
+            "country_china_attitude",
+        ]
         assert overview["kpis"]["major_events"] >= 1
         assert overview["maps"]["event_geography"] == []
+        assert "country_china_attitude" in overview["maps"]

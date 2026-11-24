@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MapPin, ReportingPin } from '../api'
+import type { AttitudePin, MapPin, ReportingPin } from '../api'
 
-export type MapMode = 'event_geography' | 'reporting_source'
+export type MapMode = 'event_geography' | 'country_china_attitude' | 'reporting_source'
 
 type Props = {
   mode: MapMode
   eventPins: MapPin[]
-  reportingPins: ReportingPin[]
+  attitudePins?: AttitudePin[]
+  /** EventDetail Who-reports layer only (not Overview primary) */
+  reportingPins?: ReportingPin[]
+  onEventClick?: (eventId: string) => void
+  onCountryClick?: (countryId: string) => void
 }
 
 const STYLE = {
@@ -22,8 +26,23 @@ const STYLE = {
   layers: [{ id: 'osm', type: 'raster' as const, source: 'osm' }],
 }
 
+const ATTITUDE_COLOR: Record<string, string> = {
+  positive: '#2f6f4e',
+  neutral: '#8a7a4b',
+  negative: '#8b3a3a',
+  unknown: '#6b6b6b',
+  none: '#c4c4c4',
+}
+
 /** Lazy MapLibre — keeps initial shell paint independent of the map bundle. */
-export function DualMap({ mode, eventPins, reportingPins }: Props) {
+export function DualMap({
+  mode,
+  eventPins,
+  attitudePins = [],
+  reportingPins = [],
+  onEventClick,
+  onCountryClick,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<import('maplibre-gl').Map | null>(null)
   const markersRef = useRef<import('maplibre-gl').Marker[]>([])
@@ -74,10 +93,56 @@ export function DualMap({ mode, eventPins, reportingPins }: Props) {
           const el = document.createElement('div')
           el.className = 'map-pin event'
           el.title = `${p.title} (${p.location_type})`
+          el.style.cursor = 'pointer'
+          el.addEventListener('click', (ev) => {
+            ev.stopPropagation()
+            onEventClick?.(p.event_id)
+          })
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat([p.lon, p.lat])
             .setPopup(
-              new maplibregl.Popup({ offset: 12 }).setText(`${p.title} · ${p.location_type}`),
+              new maplibregl.Popup({ offset: 12 }).setText(
+                `${p.title} · ${p.location_type}${
+                  p.article_count != null ? ` · ${p.article_count} articles` : ''
+                }`,
+              ),
+            )
+            .addTo(map)
+          markersRef.current.push(marker)
+        }
+      } else if (mode === 'country_china_attitude') {
+        for (const p of attitudePins) {
+          if (p.lat == null || p.lon == null) continue
+          const el = document.createElement('div')
+          const label = p.label || 'none'
+          el.className = `map-pin attitude ${label}${p.clickable ? ' clickable' : ' muted'}`
+          el.style.background = ATTITUDE_COLOR[label] || ATTITUDE_COLOR.none
+          const total =
+            (p.counts?.positive || 0) +
+            (p.counts?.neutral || 0) +
+            (p.counts?.negative || 0) +
+            (p.counts?.unknown || 0)
+          const size = p.clickable ? 14 + Math.min(22, Math.sqrt(total) * 3) : 10
+          el.style.width = `${size}px`
+          el.style.height = `${size}px`
+          el.title = p.clickable
+            ? `${p.country_id}: ${label} (${total} articles)`
+            : `${p.country_id}: no sample`
+          if (p.clickable) {
+            el.style.cursor = 'pointer'
+            el.addEventListener('click', (ev) => {
+              ev.stopPropagation()
+              onCountryClick?.(p.country_id)
+            })
+          }
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([p.lon, p.lat])
+            .setPopup(
+              new maplibregl.Popup({ offset: 12 }).setText(
+                p.clickable
+                  ? `${p.country_id} attitude (sample): ${label} — +${p.counts.positive}/~${p.counts.neutral}/−${p.counts.negative}`
+                  : `${p.country_id}: no monitored sample`,
+              ),
             )
             .addTo(map)
           markersRef.current.push(marker)
@@ -105,7 +170,7 @@ export function DualMap({ mode, eventPins, reportingPins }: Props) {
     return () => {
       cancelled = true
     }
-  }, [mode, eventPins, reportingPins, ready])
+  }, [mode, eventPins, attitudePins, reportingPins, ready, onEventClick, onCountryClick])
 
   return (
     <div className="dual-map">
@@ -113,8 +178,13 @@ export function DualMap({ mode, eventPins, reportingPins }: Props) {
       {mapError && <p className="map-empty">Map failed: {mapError}</p>}
       {!mapError && mode === 'event_geography' && eventPins.length === 0 && (
         <p className="map-empty">
-          No EVENT_LOCATION pins — proto-events without verified physical coordinates are listed
+          No EVENT_LOCATION pins — events without verified physical coordinates are listed
           below, not forced onto the map.
+        </p>
+      )}
+      {!mapError && mode === 'country_china_attitude' && attitudePins.every((p) => !p.clickable) && (
+        <p className="map-empty">
+          No China-attitude samples yet — run analyze + events rebuild.
         </p>
       )}
     </div>

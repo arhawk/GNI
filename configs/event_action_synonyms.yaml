@@ -1,0 +1,90 @@
+# Minimal action synonym table for Event Fingerprint MVP.
+# Surface forms → canonical ACTION_KEY (UPPER_SNAKE).
+
+ANNOUNCE:
+  - announce
+  - announces
+  - announced
+  - unveils
+  - unveil
+  - unveiled
+  - 宣布
+  - 公布
+  - 发布
+
+SIGN:
+  - sign
+  - signs
+  - signed
+  - 签署
+  - 签订
+
+MEET:
+  - meet
+  - meets
+  - met
+  - meeting
+  - talks
+  - summit
+  - 会晤
+  - 会见
+  - 谈判
+
+SANCTION:
+  - sanction
+  - sanctions
+  - sanctioned
+  - 制裁
+
+INVEST:
+  - invest
+  - invests
+  - invested
+  - investment
+  - 投资
+
+LAUNCH:
+  - launch
+  - launches
+  - launched
+  - 启动
+  - 推出
+
+VISIT:
+  - visit
+  - visits
+  - visited
+  - 访问
+  - 出访
+
+ACCUSE:
+  - accuse
+  - accuses
+  - accused
+  - allege
+  - alleges
+  - 指责
+  - 指控
+
+RESPOND:
+  - respond
+  - responds
+  - response
+  - reply
+  - 回应
+  - 反驳
+
+WARN:
+  - warn
+  - warns
+  - warned
+  - 警告
+
+APPROVE:
+  - approve
+  - approves
+  - approved
+  - pass
+  - passes
+  - 批准
+  - 通过

@@ -59,7 +59,7 @@
 | 块 | 内容 |
 |----|------|
 | A KPI | 总文章、涉华 Article Count、监测国家、活跃来源、重大事件(Event/候选数)、预警数；**Weighted Volume 与 Article Count 分列** |
-| B 地图 | **默认全球事件地图**（发生/宣布/影响地点）；可切换 **国家报道分布**（来源国热力）。两模式互斥 |
+| B 地图 | **默认事件地图**（发生/宣布地钉）；可切换 **对华态度地图**（监测国媒体情感汇总色，无样本灰）。`reporting_source` API 保留、UI 不主推。互斥；态度文案须注明「被监测官媒样本」 |
 | C 趋势 | 涉华量 + 情感分线（Sentiment ≠ Stance） |
 | D 主题 | `taxonomy_v0.4` 分布（非威胁八类） |
 | E 重要与异常 | 重大候选、量突增国、主题异动、基线异常 |
@@ -120,8 +120,10 @@
 ## 4. 交互路径
 
 ```text
-Overview → Event pin / 异常列表 → Event 三视图 → Articles / Evidence → Report
-Overview → 报道分布地图 → Country → Media → Articles
+Overview → Event pin / 异常列表 → Event 三视图（多源文章 + 上卷情感）→ Articles / Evidence → Report
+Overview → 对华态度地图 → Country 下钻（正/中/负/未知篇数 + 文章抽样）
+
+日报数据口径：**事件主线 + 文章证据**（见 [EVENT_FINGERPRINT.md](EVENT_FINGERPRINT.md)）；生成器可后置。
 ```
 
 ---

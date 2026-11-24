@@ -42,7 +42,7 @@
 | L2 | `articles`, `article_versions`；`articles.pipeline_state` |
 | L3 | `article_screenings`, `article_china_spans`, `article_relevance_assessments` |
 | L4 | `article_analyses`, `analysis_runs`（情感/立场等暂在 `structured_result` JSON） |
-| L5 | `events*`, `narrative_clusters`, `event_narrative_evidence`, `metric_runs`；日报文件暂存 `data/`（`reports*` 表后置） |
+| L5 | `events*`（含 fingerprint 字段）、`article_event_candidates`、`event_metric_snapshots`、`country_china_attitude_snapshots`、`narrative_*`、`metric_runs`；指纹规范见 [EVENT_FINGERPRINT.md](EVENT_FINGERPRINT.md) |
 | 治理 | `countries`, `organizations`, `sources`, `source_*` |
 
 对象存储：`raw_documents.object_key` 预留（R2 后置）；MVP 用 `payload_text` 截断保存。

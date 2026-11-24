@@ -1,4 +1,4 @@
-"""Persist and query proto-Events (P1-F major-news candidates)."""
+"""Persist and query proto-Events (fingerprint MVP + legacy title cluster)."""
 
 from __future__ import annotations
 
@@ -11,12 +11,22 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from gni.events.cluster import ArticleSeed, ProtoCluster, cluster_articles, dominant
+from gni.events.extract import extract_for_articles, load_latest_cards
 from gni.events.geo import centroid
+from gni.events.match import FingerprintCluster, cluster_fingerprints
+from gni.events.rollup import (
+    attitude_map_rows,
+    country_china_attitude_detail,
+    rollup_country_china_attitude,
+    rollup_event_metrics,
+)
 from gni.infrastructure.models import (
     Article,
+    CountryChinaAttitudeSnapshot,
     Event,
     EventArticle,
     EventLocation,
+    EventMetricSnapshot,
     EventNarrativeEvidence,
     EventParticipant,
     NarrativeCluster,
@@ -60,38 +70,175 @@ def _seeds_from_db(session: Session) -> list[ArticleSeed]:
     return seeds
 
 
-def rebuild_proto_events(session: Session, *, min_articles: int = 1, limit: int = 50) -> dict[str, Any]:
-    """Replace proto events with freshly clustered candidates. Does not touch non-proto events."""
-    seeds = _seeds_from_db(session)
-    clusters = [c for c in cluster_articles(seeds) if len(c.article_ids) >= min_articles][:limit]
-
-    # Clear existing proto graph
-    proto_ids = list(session.scalars(select(Event.id).where(Event.status == "proto")).all())
-    if proto_ids:
-        narr_ids = list(
-            session.scalars(
-                select(NarrativeCluster.id).where(NarrativeCluster.event_id.in_(proto_ids))
-            ).all()
-        )
-        if narr_ids:
-            session.execute(
-                delete(EventNarrativeEvidence).where(
-                    EventNarrativeEvidence.narrative_cluster_id.in_(narr_ids)
-                )
+def _clear_proto_graph(session: Session) -> list[str]:
+    """Remove proto (+ fingerprint-active rebuilt) events and dependent rows. Returns cleared ids."""
+    # MVP rebuild owns status in {proto, active} created by fingerprint/legacy rebuild.
+    # Preserve closed / manually curated later; for now clear proto and active from rebuild.
+    proto_ids = list(
+        session.scalars(select(Event.id).where(Event.status.in_(["proto", "active"]))).all()
+    )
+    if not proto_ids:
+        return []
+    narr_ids = list(
+        session.scalars(
+            select(NarrativeCluster.id).where(NarrativeCluster.event_id.in_(proto_ids))
+        ).all()
+    )
+    if narr_ids:
+        session.execute(
+            delete(EventNarrativeEvidence).where(
+                EventNarrativeEvidence.narrative_cluster_id.in_(narr_ids)
             )
-            session.execute(delete(NarrativeCluster).where(NarrativeCluster.id.in_(narr_ids)))
-        session.execute(delete(EventArticle).where(EventArticle.event_id.in_(proto_ids)))
-        session.execute(delete(EventLocation).where(EventLocation.event_id.in_(proto_ids)))
-        session.execute(delete(EventParticipant).where(EventParticipant.event_id.in_(proto_ids)))
-        session.execute(delete(Event).where(Event.id.in_(proto_ids)))
-        session.flush()
+        )
+        session.execute(delete(NarrativeCluster).where(NarrativeCluster.id.in_(narr_ids)))
+    session.execute(delete(EventMetricSnapshot).where(EventMetricSnapshot.event_id.in_(proto_ids)))
+    session.execute(delete(EventArticle).where(EventArticle.event_id.in_(proto_ids)))
+    session.execute(delete(EventLocation).where(EventLocation.event_id.in_(proto_ids)))
+    session.execute(delete(EventParticipant).where(EventParticipant.event_id.in_(proto_ids)))
+    session.execute(delete(Event).where(Event.id.in_(proto_ids)))
+    session.flush()
+    return proto_ids
+
+
+def rebuild_proto_events(
+    session: Session,
+    *,
+    min_articles: int = 1,
+    limit: int = 50,
+    legacy_title: bool = False,
+    extract: bool = True,
+    use_llm: bool = True,
+) -> dict[str, Any]:
+    """Rebuild events. Default: fingerprint extract→match→rollup. `--legacy-title` uses Jaccard."""
+    if legacy_title:
+        return _rebuild_legacy_title(session, min_articles=min_articles, limit=limit)
+
+    if extract:
+        extract_stats = extract_for_articles(session, limit=500)
+    else:
+        extract_stats = {"articles": 0, "candidates_written": 0}
+
+    cards = load_latest_cards(session, limit_articles=500)
+    clusters = [
+        c
+        for c in cluster_fingerprints(cards, use_llm=use_llm)
+        if len(c.article_ids) >= min_articles
+    ][:limit]
+
+    _clear_proto_graph(session)
 
     created = 0
+    event_ids: list[str] = []
     for cl in clusters:
-        _persist_cluster(session, cl)
+        eid = _persist_fingerprint_cluster(session, cl)
+        event_ids.append(eid)
         created += 1
     session.flush()
-    return {"created": created, "seed_articles": len(seeds)}
+    rollup_event_metrics(session, event_ids=event_ids)
+    attitude_n = rollup_country_china_attitude(session, window="30d")
+    return {
+        "created": created,
+        "seed_articles": len({c.article_id for c in cards}),
+        "candidates_written": extract_stats.get("candidates_written", 0),
+        "path": "fingerprint",
+        "attitude_snapshots": attitude_n,
+    }
+
+
+def _rebuild_legacy_title(
+    session: Session, *, min_articles: int = 1, limit: int = 50
+) -> dict[str, Any]:
+    seeds = _seeds_from_db(session)
+    clusters = [c for c in cluster_articles(seeds) if len(c.article_ids) >= min_articles][:limit]
+    _clear_proto_graph(session)
+    created = 0
+    event_ids: list[str] = []
+    for cl in clusters:
+        eid = _persist_cluster(session, cl)
+        event_ids.append(eid)
+        created += 1
+    session.flush()
+    rollup_event_metrics(session, event_ids=event_ids)
+    attitude_n = rollup_country_china_attitude(session, window="30d")
+    return {
+        "created": created,
+        "seed_articles": len(seeds),
+        "path": "legacy_title",
+        "attitude_snapshots": attitude_n,
+    }
+
+
+def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> str:
+    event_id = str(uuid4())
+    status = "active" if cl.high_confidence else "proto"
+    loc_label = cl.location_label
+    loc_cid = cl.location_country_id
+    coords = centroid(loc_cid) if loc_cid else None
+    has_phys = coords is not None
+    event = Event(
+        id=event_id,
+        title=cl.title,
+        summary=(
+            f"Fingerprint event from {len(cl.article_ids)} article(s); "
+            f"actor={cl.actor_key} action={cl.action_key}. "
+            + (
+                f"Location hint: {loc_label} ({loc_cid})."
+                if loc_label
+                else "No verified physical EVENT_LOCATION."
+            )
+        ),
+        event_type=cl.cards[0].event_type,
+        status=status,
+        importance_score=cl.importance_score,
+        window_start=cl.window_start,
+        window_end=cl.window_end,
+        has_physical_location=has_phys,
+        actor_key=cl.actor_key,
+        action_key=cl.action_key,
+        object_key=cl.object_key,
+        event_time=cl.event_time,
+        qualifiers=cl.cards[0].qualifiers or {},
+        fingerprint_hash=cl.fingerprint_hash,
+        schema_version="event_v0.2",
+    )
+    session.add(event)
+    session.add(
+        EventParticipant(
+            id=str(uuid4()),
+            event_id=event_id,
+            participant_id="china",
+            participant_name="China",
+            role="central_target",
+        )
+    )
+    if cl.actor_key and cl.actor_key != "china":
+        session.add(
+            EventParticipant(
+                id=str(uuid4()),
+                event_id=event_id,
+                participant_id=cl.actor_key,
+                participant_name=cl.actor_key,
+                role="actor",
+            )
+        )
+    if has_phys and coords:
+        session.add(
+            EventLocation(
+                id=str(uuid4()),
+                event_id=event_id,
+                location_type="EVENT_LOCATION",
+                label=loc_label,
+                country_id=loc_cid,
+                lat=coords[0],
+                lon=coords[1],
+                notes="Heuristic place dictionary — not a geocoder.",
+            )
+        )
+    for aid in cl.article_ids:
+        session.add(
+            EventArticle(id=str(uuid4()), event_id=event_id, article_id=aid, relation="covers")
+        )
+    return event_id
 
 
 def _persist_cluster(session: Session, cl: ProtoCluster) -> str:
@@ -319,6 +466,13 @@ def get_event_detail(session: Session, event_id: str) -> dict[str, Any] | None:
             )
     timeline.sort(key=lambda x: x["at"])
 
+    metric = session.scalar(
+        select(EventMetricSnapshot).where(
+            EventMetricSnapshot.event_id == event_id,
+            EventMetricSnapshot.window == "all",
+        )
+    )
+
     return {
         "event": {
             "id": event.id,
@@ -331,6 +485,21 @@ def get_event_detail(session: Session, event_id: str) -> dict[str, Any] | None:
             "window_end": event.window_end.isoformat() if event.window_end else None,
             "has_physical_location": event.has_physical_location,
             "schema_version": event.schema_version,
+            "actor_key": getattr(event, "actor_key", None),
+            "action_key": getattr(event, "action_key", None),
+            "object_key": getattr(event, "object_key", None),
+            "event_time": event.event_time.isoformat()
+            if getattr(event, "event_time", None)
+            else None,
+            "fingerprint_hash": getattr(event, "fingerprint_hash", None),
+        },
+        "metrics": {
+            "article_count": metric.article_count if metric else len(article_ids),
+            "source_count": metric.source_count if metric else None,
+            "country_count": metric.country_count if metric else None,
+            "sentiment_shares": metric.sentiment_shares if metric else None,
+            "stance_shares": metric.stance_shares if metric else None,
+            "by_country": metric.by_country if metric else None,
         },
         "views": {
             "where": {
@@ -395,7 +564,7 @@ def overview_payload(
     data_min, data_max = article_data_range(session)
     events = list_events(session, limit=30)
 
-    # Event map pins: only locations with coords and type != reporting
+    # Event map pins: only locations with coords (no coords → list only, not map)
     event_pins = []
     for e in events:
         for loc in e.get("locations") or []:
@@ -407,11 +576,13 @@ def overview_payload(
                         "location_type": loc["location_type"],
                         "lat": loc["lat"],
                         "lon": loc["lon"],
+                        "article_count": e.get("article_count"),
+                        "importance": e.get("importance_score"),
                         "layer": "event_geography",
                     }
                 )
 
-    # Reporting distribution across all proto events' articles
+    # Reporting distribution (API retained; UI does not promote)
     report_counts: Counter[str] = Counter()
     for e in events:
         detail = get_event_detail(session, e["id"])
@@ -433,6 +604,14 @@ def overview_payload(
                 }
             )
 
+    # Ensure attitude snapshots exist for window label used by UI
+    existing_att = session.scalar(select(CountryChinaAttitudeSnapshot.id).limit(1))
+    if not existing_att:
+        rollup_country_china_attitude(
+            session, window="30d", window_start=start, window_end=end
+        )
+    attitude_rows = attitude_map_rows(session, window="30d")
+
     research = metrics.get("research") or {}
     weighted = metrics.get("weighted") or {}
     ops = metrics.get("operational") or {}
@@ -447,8 +626,11 @@ def overview_payload(
             "data_max": data_max.isoformat() if data_max else None,
             "metric_definition_version": metrics.get("metric_definition_version"),
             "relevance_weight_version": metrics.get("relevance_weight_version"),
-            "map_modes": ["event_geography", "reporting_source"],
-            "map_modes_note": "Mutually exclusive layers — do not mix on one semantic map.",
+            "map_modes": ["event_geography", "country_china_attitude"],
+            "map_modes_note": (
+                "Mutually exclusive: event geography vs China-attitude (monitored media sample, "
+                "not official state position). reporting_source retained in maps payload only."
+            ),
             "time_window": metrics.get("time_window"),
         },
         "kpis": {
@@ -467,6 +649,7 @@ def overview_payload(
         },
         "maps": {
             "event_geography": event_pins,
+            "country_china_attitude": attitude_rows,
             "reporting_source": reporting_pins,
         },
         "topics": research.get("topic_share", {}).get("value") or {},
@@ -487,3 +670,12 @@ def overview_payload(
         },
         "views_raw_weighted": metrics.get("views"),
     }
+
+
+def get_country_china_attitude(
+    session: Session,
+    country_id: str,
+    *,
+    window: str = "30d",
+) -> dict[str, Any]:
+    return country_china_attitude_detail(session, country_id, window=window)

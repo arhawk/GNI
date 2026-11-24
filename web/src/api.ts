@@ -36,7 +36,8 @@ export type Overview = {
   }
   maps: {
     event_geography: MapPin[]
-    reporting_source: ReportingPin[]
+    country_china_attitude: AttitudePin[]
+    reporting_source?: ReportingPin[]
   }
   topics: Record<string, unknown> | { counts?: Record<string, number> }
   sentiment: Record<string, unknown> | { counts?: Record<string, number> }
@@ -59,6 +60,23 @@ export type MapPin = {
   location_type: string
   lat: number
   lon: number
+  article_count?: number | null
+  importance?: number | null
+  layer: string
+}
+
+export type AttitudePin = {
+  country_id: string
+  label: string
+  counts: {
+    positive: number
+    neutral: number
+    negative: number
+    unknown: number
+  }
+  clickable: boolean
+  lat?: number
+  lon?: number
   layer: string
 }
 
@@ -68,6 +86,29 @@ export type ReportingPin = {
   lon: number
   article_count: number
   layer: string
+}
+
+export type CountryAttitudeDetail = {
+  country_id: string
+  window: string
+  label: string
+  counts: {
+    positive: number
+    neutral: number
+    negative: number
+    unknown: number
+  }
+  clickable: boolean
+  disclaimer: string
+  articles: Array<{
+    article_id: string
+    title: string | null
+    url: string | null
+    source_id: string
+    source_name: string
+    sentiment: string | null
+    published_at: string | null
+  }>
 }
 
 export type EventSummary = {
@@ -102,6 +143,19 @@ export type EventDetail = {
     window_end: string | null
     has_physical_location: boolean
     schema_version: string
+    actor_key?: string | null
+    action_key?: string | null
+    object_key?: string | null
+    event_time?: string | null
+    fingerprint_hash?: string | null
+  }
+  metrics?: {
+    article_count: number
+    source_count: number | null
+    country_count: number | null
+    sentiment_shares: Record<string, number> | null
+    stance_shares: Record<string, number> | null
+    by_country: Record<string, unknown> | null
   }
   views: {
     where: {
@@ -187,4 +241,10 @@ export function fetchEvents(limit = 50) {
 
 export function fetchEventDetail(id: string) {
   return get<EventDetail>(`/api/events/${id}`)
+}
+
+export function fetchCountryChinaAttitude(countryId: string, window = '30d') {
+  return get<CountryAttitudeDetail>(
+    `/api/countries/${encodeURIComponent(countryId)}/china-attitude?window=${encodeURIComponent(window)}`,
+  )
 }

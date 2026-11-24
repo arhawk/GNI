@@ -54,15 +54,18 @@ articles、ingestion_jobs、…
 |----|------|
 | `metric_runs` | 窗口指标（研究 / 加权 / 运营） |
 
-## 5. Event Intelligence（P1-F proto / Phase 2 完善）
+## 5. Event Intelligence（P1-F proto / Fingerprint MVP）
 
 | 表 | 用途 |
 |----|------|
-| `events` | 唯一事件 |
+| `events` | 唯一事件；MVP 含 `actor_key`/`action_key`/`object_key`/`event_time`/`fingerprint_hash`/`qualifiers` |
+| `article_event_candidates` | 文章事件候选指纹（追加） |
+| `event_metric_snapshots` | 事件级上卷指标 |
+| `country_china_attitude_snapshots` | 国家对华态度汇总（地图） |
 | `event_locations` / `event_participants` / `event_articles` | 地点 / 参与方 / 关联 |
 | `narrative_clusters` / `event_narrative_evidence` | 叙事与证据 |
 
-**禁止**在 `events` 上存单一「国家观点」字段。
+**禁止**在 `events` 上存单一「国家观点」字段。详见 [EVENT_FINGERPRINT.md](EVENT_FINGERPRINT.md)。
 
 ## 6. 分析 JSON
 

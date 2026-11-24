@@ -1,14 +1,24 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { fetchOverview, type Overview as OverviewData } from '../api'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  fetchCountryChinaAttitude,
+  fetchOverview,
+  type CountryAttitudeDetail,
+  type Overview as OverviewData,
+} from '../api'
 import { DualMap, type MapMode } from '../components/DualMap'
 import { useTimeWindow } from '../TimeWindowContext'
 
+type OverviewMapMode = Extract<MapMode, 'event_geography' | 'country_china_attitude'>
+
 export function OverviewPage() {
   const { window, setDataExtent } = useTimeWindow()
+  const navigate = useNavigate()
   const [data, setData] = useState<OverviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<MapMode>('event_geography')
+  const [mode, setMode] = useState<OverviewMapMode>('event_geography')
+  const [attitudeDetail, setAttitudeDetail] = useState<CountryAttitudeDetail | null>(null)
+  const [attitudeError, setAttitudeError] = useState<string | null>(null)
 
   useEffect(() => {
     setError(null)
@@ -31,6 +41,20 @@ export function OverviewPage() {
       })
       .catch((e: Error) => setError(e.message))
   }, [window.startMs, window.endMs, window.presetDays, setDataExtent])
+
+  const onEventClick = useCallback(
+    (eventId: string) => {
+      navigate(`/events/${eventId}`)
+    },
+    [navigate],
+  )
+
+  const onCountryClick = useCallback((countryId: string) => {
+    setAttitudeError(null)
+    fetchCountryChinaAttitude(countryId)
+      .then(setAttitudeDetail)
+      .catch((e: Error) => setAttitudeError(e.message))
+  }, [])
 
   if (error) {
     return (
@@ -100,16 +124,19 @@ export function OverviewPage() {
             <button
               type="button"
               className={mode === 'event_geography' ? 'active' : ''}
-              onClick={() => setMode('event_geography')}
+              onClick={() => {
+                setMode('event_geography')
+                setAttitudeDetail(null)
+              }}
             >
-              Event geography (Where)
+              Event geography
             </button>
             <button
               type="button"
-              className={mode === 'reporting_source' ? 'active' : ''}
-              onClick={() => setMode('reporting_source')}
+              className={mode === 'country_china_attitude' ? 'active' : ''}
+              onClick={() => setMode('country_china_attitude')}
             >
-              Reporting sources (Who)
+              China attitude (sample)
             </button>
           </div>
         </div>
@@ -117,8 +144,52 @@ export function OverviewPage() {
         <DualMap
           mode={mode}
           eventPins={data.maps.event_geography}
-          reportingPins={data.maps.reporting_source}
+          attitudePins={data.maps.country_china_attitude || []}
+          onEventClick={onEventClick}
+          onCountryClick={onCountryClick}
         />
+        {mode === 'country_china_attitude' && (
+          <div className="attitude-panel">
+            {attitudeError && <p className="error">{attitudeError}</p>}
+            {!attitudeDetail && !attitudeError && (
+              <p className="muted small">
+                Click a colored country for positive / neutral / negative / unknown article counts.
+                Grey = no monitored sample (not clickable).
+              </p>
+            )}
+            {attitudeDetail && (
+              <>
+                <h3>{attitudeDetail.country_id} · {attitudeDetail.label}</h3>
+                <p className="muted small">{attitudeDetail.disclaimer}</p>
+                <div className="kpi-grid compact">
+                  <Kpi label="Positive" value={attitudeDetail.counts.positive} />
+                  <Kpi label="Neutral" value={attitudeDetail.counts.neutral} />
+                  <Kpi label="Negative" value={attitudeDetail.counts.negative} />
+                  <Kpi label="Unknown" value={attitudeDetail.counts.unknown} />
+                </div>
+                <ul className="event-list">
+                  {attitudeDetail.articles.slice(0, 12).map((a) => (
+                    <li key={a.article_id}>
+                      {a.url ? (
+                        <a href={a.url} target="_blank" rel="noreferrer">
+                          {a.title || a.article_id}
+                        </a>
+                      ) : (
+                        <span>{a.title || a.article_id}</span>
+                      )}
+                      <span className="meta">
+                        {a.source_name} · {a.sentiment ?? '—'}
+                      </span>
+                    </li>
+                  ))}
+                  {attitudeDetail.articles.length === 0 && (
+                    <li className="muted">No article sample for this country.</li>
+                  )}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="block">
@@ -157,7 +228,7 @@ export function OverviewPage() {
           ))}
           {data.anomalies.items.length === 0 && (
             <li className="muted">
-              No proto-events yet — run <code>gni events rebuild</code>.
+              No events yet — run <code>gni events rebuild</code>.
             </li>
           )}
         </ul>

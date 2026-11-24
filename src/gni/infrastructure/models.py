@@ -440,7 +440,7 @@ class MetricRun(Base):
 
 
 class Event(Base):
-    """Unique real-world event (Phase 1: proto from major-news rules; Phase 2: full clustering)."""
+    """Unique real-world event (Phase 1: proto / fingerprint MVP; Phase 2: full clustering)."""
 
     __tablename__ = "events"
 
@@ -456,11 +456,81 @@ class Event(Base):
     window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     has_physical_location: Mapped[bool] = mapped_column(Boolean, default=False)
-    schema_version: Mapped[str] = mapped_column(String(64), default="event_v0.1")
+    # Event Fingerprint canonical keys (MVP)
+    actor_key: Mapped[str | None] = mapped_column(String(128), index=True)
+    action_key: Mapped[str | None] = mapped_column(String(64), index=True)
+    object_key: Mapped[str | None] = mapped_column(String(256), index=True)
+    event_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    qualifiers: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    fingerprint_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    schema_version: Mapped[str] = mapped_column(String(64), default="event_v0.2")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ArticleEventCandidate(Base):
+    """Per-article event candidate fingerprint (append-only)."""
+
+    __tablename__ = "article_event_candidates"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    article_version_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("article_versions.id"), nullable=True
+    )
+    analysis_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("article_analyses.id"), nullable=True
+    )
+    fingerprint: Mapped[dict[str, Any]] = mapped_column(PortableJSON, nullable=False)
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    schema_version: Mapped[str] = mapped_column(String(64), default="event_fingerprint_v0.1")
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EventMetricSnapshot(Base):
+    """Rolled-up article metrics for an event (recomputable)."""
+
+    __tablename__ = "event_metric_snapshots"
+    __table_args__ = (
+        UniqueConstraint("event_id", "window", name="uq_event_metric_snapshots_event_window"),
+    )
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    window: Mapped[str] = mapped_column(String(32), nullable=False, default="all")
+    article_count: Mapped[int] = mapped_column(Integer, default=0)
+    source_count: Mapped[int] = mapped_column(Integer, default=0)
+    country_count: Mapped[int] = mapped_column(Integer, default=0)
+    sentiment_shares: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    stance_shares: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    by_country: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CountryChinaAttitudeSnapshot(Base):
+    """Country-level China-attitude rollup for attitude map (monitored media sample)."""
+
+    __tablename__ = "country_china_attitude_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "country_id", "window", name="uq_country_china_attitude_country_window"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    country_id: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    window: Mapped[str] = mapped_column(String(32), nullable=False, default="30d")
+    positive_count: Mapped[int] = mapped_column(Integer, default=0)
+    neutral_count: Mapped[int] = mapped_column(Integer, default=0)
+    negative_count: Mapped[int] = mapped_column(Integer, default=0)
+    unknown_count: Mapped[int] = mapped_column(Integer, default=0)
+    dominant_label: Mapped[str | None] = mapped_column(String(32))  # positive|neutral|negative|none
+    sample_article_ids: Mapped[list[Any] | None] = mapped_column(PortableJSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class EventLocation(Base):

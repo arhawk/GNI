@@ -9,7 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from gni import __version__
 from gni.dashboard.data import MAX_WINDOW_DAYS
-from gni.events.service import get_event_detail, list_events, overview_payload, rebuild_proto_events
+from gni.events.service import (
+    get_country_china_attitude,
+    get_event_detail,
+    list_events,
+    overview_payload,
+    rebuild_proto_events,
+)
 from gni.infrastructure.db import ensure_schema, session_scope
 
 app = FastAPI(title="GNI API", version=__version__)
@@ -77,6 +83,20 @@ def api_event_detail(event_id: str) -> dict:
 
 
 @app.post("/api/events/rebuild")
-def api_rebuild_events(min_articles: int = Query(1, ge=1, le=20)) -> dict:
+def api_rebuild_events(
+    min_articles: int = Query(1, ge=1, le=20),
+    legacy_title: bool = Query(False, description="Use legacy title Jaccard clustering"),
+) -> dict:
     with session_scope() as session:
-        return rebuild_proto_events(session, min_articles=min_articles)
+        return rebuild_proto_events(
+            session, min_articles=min_articles, legacy_title=legacy_title
+        )
+
+
+@app.get("/api/countries/{country_id}/china-attitude")
+def api_country_china_attitude(
+    country_id: str,
+    window: str = Query("30d"),
+) -> dict:
+    with session_scope() as session:
+        return get_country_china_attitude(session, country_id.upper(), window=window)

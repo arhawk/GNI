@@ -308,6 +308,26 @@ h4 {
   opacity: 0.85;
 }
 
+.map-pin.attitude {
+  opacity: 0.9;
+}
+
+.map-pin.attitude.muted {
+  opacity: 0.35;
+  border-color: #ddd;
+}
+
+.attitude-panel {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.kpi-grid.compact {
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  margin: 0.5rem 0 0.75rem;
+}
+
 .bars {
   display: flex;
   flex-direction: column;
