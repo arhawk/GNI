@@ -1,7 +1,8 @@
 # 报告治理与证据约束（REPORT_GOVERNANCE）
 
-**版本：** 0.4（对齐 Blueprint V4 §27）  
-**阶段：** MVP 实现日报/周报/月报模板 + 规则预警投递；开放式研究 Agent 在 Phase 3
+**版本：** 0.5（对齐 Blueprint V4 §27 + 数据五层）  
+**阶段：** MVP 实现日报/周报/月报模板 + 规则预警投递；开放式研究 Agent 在 Phase 3  
+**数据层：** 报告属 [DATA_LAYERS.md](DATA_LAYERS.md) Layer 5；`reports*` 表后置，MVP 产物可落 `data/daily_report_*.md`。仅使用 `AVAILABLE_FOR_ANALYTICS` / 已分析涉华样本；禁止无证据编造。
 
 ---
 

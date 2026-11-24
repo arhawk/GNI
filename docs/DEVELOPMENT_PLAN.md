@@ -2,14 +2,14 @@
 
 **产品：** GNI  
 **版本：** 0.4（对齐 Blueprint V4）  
-**权威设计：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md) · 审计：[PHASE0_REPOSITORY_AUDIT_V4.md](PHASE0_REPOSITORY_AUDIT_V4.md)  
+**权威设计：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md) · 审计：[PHASE0_REPOSITORY_AUDIT_V4.md](PHASE0_REPOSITORY_AUDIT_V4.md) · 数据层：[DATA_LAYERS.md](DATA_LAYERS.md)  
 **说明：** 阶段表示能力交付顺序，不是固定人周工期。V3 蓝图保留作历史。
 
 ---
 
 ## 1. 总原则
 
-**可靠来源 → 涉华理解与 Weight → 原始/加权指标 → 重大新闻候选与预警 → 报告交付 → 深度叙事与研究 Agent**
+**可靠来源 → 原始/标准化（不覆盖）→ 涉华筛选提取 → AI 分析版本化 → 原始/加权指标 → 重大新闻候选与预警 → 报告交付 → 深度叙事与研究 Agent**
 
 - Central Target = China；维度 Country × Source × Topic × Target × Time  
 - 每次只推进当前授权阶段  

@@ -25,6 +25,14 @@ from gni.infrastructure.models import (
     ArticleRelevanceAssessment,
     ArticleScreening,
     ArticleVersion,
+    CollectionTask,
+)
+from gni.infrastructure.pipeline_state import (
+    ANALYTICS_RELEVANCE_LEVELS,
+    ANALYSIS_COMPLETED,
+    AVAILABLE_FOR_ANALYTICS,
+    FULLTEXT_SCREENED,
+    set_pipeline_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +89,7 @@ def analyze_article(
         session.add(screening)
         article.fulltext_screening_label = l2.label
         result["fulltext_screening"] = l2.label
+        set_pipeline_state(article, FULLTEXT_SCREENED)
 
         spans = extract_china_spans(content, l2, language=article.language)
         valid_n = sum(1 for s in spans if s.validation_status == "valid")
@@ -173,8 +182,17 @@ def analyze_article(
         article.analysis_status = analysis.analysis_status
         article.analyzed_at = datetime.now(timezone.utc)
         article.updated_at = datetime.now(timezone.utc)
+        if l2.label == "not_china_related":
+            set_pipeline_state(article, FULLTEXT_SCREENED)
+        elif (article.china_relevance_level or "") in ANALYTICS_RELEVANCE_LEVELS and (
+            analysis.analysis_status == "completed"
+        ):
+            set_pipeline_state(article, AVAILABLE_FOR_ANALYTICS)
+        else:
+            set_pipeline_state(article, ANALYSIS_COMPLETED)
         result["provider"] = used_provider
         result["analysis_status"] = analysis.analysis_status
+        result["pipeline_state"] = article.pipeline_state
         result["token_usage"] = tokens
         result["estimated_cost_usd"] = cost
     except Exception as exc:  # noqa: BLE001
@@ -228,6 +246,19 @@ def run_analysis(
     session.add(run)
     session.flush()
 
+    task = CollectionTask(
+        id=str(uuid4()),
+        task_type="analyze",
+        source_id=source_id,
+        status="running",
+        started_at=datetime.now(timezone.utc),
+        legacy_job_id=run.id,
+        code_version="analyze_v0.2_data_layers",
+        config_snapshot=f"provider={requested}",
+    )
+    session.add(task)
+    session.flush()
+
     budget = snapshot_budget(session, settings)
     if budget.exhausted and not article_id:
         run.status = "budget_exhausted"
@@ -239,6 +270,9 @@ def run_analysis(
             "skipped_budget": True,
             "budget": budget.__dict__,
         }
+        task.status = "budget_exhausted"
+        task.finished_at = run.finished_at
+        task.stats = {"skipped_budget": True}
         return run
 
     q = select(Article)
@@ -258,6 +292,9 @@ def run_analysis(
             run.status = "budget_exhausted"
             run.finished_at = datetime.now(timezone.utc)
             run.stats = {"attempted": 0, "ok": 0, "failed": 0, "skipped_budget": True}
+            task.status = "budget_exhausted"
+            task.finished_at = run.finished_at
+            task.stats = {"skipped_budget": True}
             return run
         q = q.limit(cap)
 
@@ -312,5 +349,13 @@ def run_analysis(
         "stopped_budget": stopped_budget,
         "budget": snapshot_budget(session, settings).__dict__,
         "details_sample": details[:20],
+    }
+    task.status = run.status
+    task.finished_at = run.finished_at
+    task.stats = {
+        "attempted": len(details),
+        "ok": ok,
+        "failed": failed,
+        "stopped_budget": stopped_budget,
     }
     return run

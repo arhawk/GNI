@@ -149,6 +149,68 @@ class SourceHealth(Base):
     source: Mapped[Source] = relationship(back_populates="health")
 
 
+class CollectionTask(Base):
+    """Cross-layer task lineage (dual-write with ingestion/processing/analysis jobs)."""
+
+    __tablename__ = "collection_tasks"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    task_type: Mapped[str] = mapped_column(String(32), nullable=False)  # ingest|process|analyze|backfill
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    stats: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    code_version: Mapped[str | None] = mapped_column(String(64))
+    config_snapshot: Mapped[str | None] = mapped_column(Text)
+    legacy_job_id: Mapped[str | None] = mapped_column(String(64))  # ingestion_jobs / etc.
+
+
+class RawDocument(Base):
+    """Layer 1 — immutable-ish raw capture (append-only)."""
+
+    __tablename__ = "raw_documents"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), nullable=False, index=True)
+    collection_task_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("collection_tasks.id"), nullable=True, index=True
+    )
+    discovered_article_id: Mapped[str | None] = mapped_column(PortableUUID, nullable=True, index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    content_type: Mapped[str] = mapped_column(String(32), default="rss_item")  # rss_item|api_json|html
+    payload_text: Mapped[str | None] = mapped_column(Text)
+    payload_hash: Mapped[str | None] = mapped_column(String(64))
+    object_key: Mapped[str | None] = mapped_column(String(512))  # R2 reserved
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DiscoveredArticle(Base):
+    """Layer 1 — discovery record before/alongside article promotion."""
+
+    __tablename__ = "discovered_articles"
+    __table_args__ = (UniqueConstraint("source_id", "url", name="uq_discovered_source_url"),)
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    canonical_url: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    raw_document_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("raw_documents.id"), nullable=True
+    )
+    article_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("articles.id"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(32), default="discovered")  # discovered|promoted|rejected
+    collection_task_id: Mapped[str | None] = mapped_column(
+        PortableUUID, ForeignKey("collection_tasks.id"), nullable=True
+    )
+
+
 class IngestionJob(Base):
     __tablename__ = "ingestion_jobs"
 
@@ -184,6 +246,9 @@ class Article(Base):
     source_timezone: Mapped[str | None] = mapped_column(String(64))
     time_precision: Mapped[str | None] = mapped_column(String(32))
     processing_status: Mapped[str] = mapped_column(String(32), default="pending")
+    pipeline_state: Mapped[str] = mapped_column(String(48), default="DISCOVERED", index=True)
+    latest_raw_document_id: Mapped[str | None] = mapped_column(PortableUUID, nullable=True)
+    latest_article_version_id: Mapped[str | None] = mapped_column(PortableUUID, nullable=True)
     duplicate_of_article_id: Mapped[str | None] = mapped_column(
         PortableUUID, ForeignKey("articles.id"), nullable=True
     )

@@ -1,13 +1,15 @@
 # 来源注册表规范（SOURCE_REGISTRY）
 
-**版本：** 0.1  
-**相关文件：** [source_registry_template.csv](source_registry_template.csv)、[source_candidates.csv](source_candidates.csv)、[COMPLIANCE.md](COMPLIANCE.md)
+**版本：** 0.2  
+**相关文件：** [source_registry_template.csv](source_registry_template.csv)、[source_candidates.csv](source_candidates.csv)、[COMPLIANCE.md](COMPLIANCE.md)、[DATA_LAYERS.md](DATA_LAYERS.md)
 
 ---
 
 ## 1. 目标
 
 建立可审计、可扩展的跨国媒体/政府传播来源体系。分类必须有证据，禁止仅凭名称猜测。
+
+**与数据五层：** `sources` 属治理实体；采集时每个 URL 进入 Layer 1 的 `discovered_articles` / `raw_documents`，再晋升为 Layer 2 `articles`（见 DATA_LAYERS）。
 
 ---
 

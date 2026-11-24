@@ -1,7 +1,8 @@
 # 事件情报信息架构（Event / Geography / Narratives）
 
-**版本：** 0.1（2026-11-24）  
-**权威对齐：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)、[DASHBOARD.md](DASHBOARD.md)、[TAXONOMY.md](TAXONOMY.md)  
+**版本：** 0.2（2026-11-24）  
+**权威对齐：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)、[DASHBOARD.md](DASHBOARD.md)、[TAXONOMY.md](TAXONOMY.md)、[DATA_LAYERS.md](DATA_LAYERS.md)  
+**数据层：** Event / Narrative 属 **Layer 5 Intelligence**；文章关联后可推进 `pipeline_state=EVENT_LINKED`（可选）。  
 **原则摘要：** 地图答 Where；国家视图答 Who reports；叙事视图答 How they frame；三者共享一个 Event。
 
 ---

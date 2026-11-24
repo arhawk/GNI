@@ -4,7 +4,8 @@
 **版本：** 0.4（对齐 Blueprint V4）  
 **状态：** V4 口径冻结；供监测型 Phase 1 实施  
 **语言：** 中文  
-**设计权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（**§22 及以后冲突时优先**；前文数据治理/证据/合规原则仍有效）
+**设计权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（**§22 及以后冲突时优先**；前文数据治理/证据/合规原则仍有效）  
+**数据生命周期：** [DATA_LAYERS.md](DATA_LAYERS.md)（Raw→Normalized→Screening→AI Analysis→Intelligence）
 
 ---
 

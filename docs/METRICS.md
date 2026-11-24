@@ -1,7 +1,8 @@
 # 指标定义（METRICS）
 
-**版本：** metrics_v0.4（对齐 Blueprint V4）  
-**原则：** 研究 7 项保留；增补加权/运营监测指标；原始与加权**并列**；不做黑盒综合总分；**禁止 LLM 直接输出正式指标数值**。
+**版本：** metrics_v0.5（对齐 Blueprint V4 + 数据五层）  
+**原则：** 研究 7 项保留；增补加权/运营监测指标；原始与加权**并列**；不做黑盒综合总分；**禁止 LLM 直接输出正式指标数值**。  
+**数据层：** 指标与报告属 [DATA_LAYERS.md](DATA_LAYERS.md) **Layer 5**；纳入口径优先 `pipeline_state=AVAILABLE_FOR_ANALYTICS`（及相关度等级），兼容既有 `china_relevance_level` 过滤。
 
 默认研究单元：`Country × Source × Topic × Target × Time`（默认 Target=China）。
 

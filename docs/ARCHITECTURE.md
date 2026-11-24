@@ -1,7 +1,7 @@
 # 技术架构（ARCHITECTURE）
 
-**版本：** 0.4（对齐 Blueprint V4）  
-**权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（§22+ 冲突优先）  
+**版本：** 0.5（对齐 Blueprint V4 + 数据五层）  
+**权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（§22+ 冲突优先）；**数据分层：** [DATA_LAYERS.md](DATA_LAYERS.md)  
 **风格：** Modular Monolith + Asynchronous Data Pipeline  
 **研究查询路径：** `Country × Source × Topic × Target × Time`（默认 Target=China）  
 **非目标：** 微服务、Kafka、Neo4j、Prefect（MVP 非强制）、Celery、Redis（非必要不引入）
@@ -24,21 +24,28 @@
 
 ## 2. 逻辑分层
 
+### 2.1 系统分层（运行时模块，Blueprint §14.3）
+
 ```text
 Source Layer        国家/组织/来源/合规属性
      ↓
 Ingestion Layer     RSS / API / Web Adapter
      ↓
-Processing Layer    提取、清洗、语言、时间、去重、质检、规则型 L1 标题初筛
+Processing Layer    提取、清洗、语言、时间、去重、质检、规则型标题初筛
      ↓
-Intelligence Layer  L2/L3、Relevance Weight、六维分析（P1-C）；Embedding/事件（Phase 2+）
+Intelligence Layer  正文筛选/涉华提取、Relevance、六维分析；Embedding/事件（Phase 2+）
      ↓
 Metrics / Alert     确定性聚合、规则预警、重大新闻候选打分
      ↓
-Storage Layer       PostgreSQL（+ pgvector Phase 2）
+Storage Layer       PostgreSQL（+ pgvector Phase 2）；表按「数据五层」组织
      ↓
 Application Layer   FastAPI、Streamlit、报告投递、轻量任务编排
 ```
+
+### 2.2 数据五层（同一库内的逻辑数据层）
+
+见 **[DATA_LAYERS.md](DATA_LAYERS.md)**：Raw → Normalized → Screening & Extraction → AI Analysis → Intelligence。  
+筛选「L1/L2/L3」属于数据层 Layer 3，**不是**系统分层编号。
 
 ---
 

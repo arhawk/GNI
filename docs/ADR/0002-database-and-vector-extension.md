@@ -9,7 +9,8 @@
 
 ## 决策
 
-- **主存储：** PostgreSQL  
+- **主存储：** PostgreSQL（**单库**；逻辑上按 [DATA_LAYERS.md](../DATA_LAYERS.md) 五层组织表，非五个独立数据库）
+- **原始大文件：** MVP 截断存 `raw_documents.payload_text`；`object_key` 预留对象存储（R2 后置） 
 - **向量：** pgvector，在 Phase 2 启用；Phase 0/1 不阻塞于向量索引  
 - **不用** Neo4j 作为 MVP 依赖  
 

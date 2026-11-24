@@ -1,7 +1,9 @@
 # AI 分析规范（AI_ANALYSIS）
 
-**版本：** analysis_design_v0.4（对齐 Blueprint V4 §23–25）  
-**相关：** [ARTICLE_ANALYSIS_SCHEMA.json](ARTICLE_ANALYSIS_SCHEMA.json)、[TAXONOMY.md](TAXONOMY.md)、[METRICS.md](METRICS.md)
+**版本：** analysis_design_v0.5（对齐 Blueprint V4 §23–25 + 数据五层）  
+**相关：** [ARTICLE_ANALYSIS_SCHEMA.json](ARTICLE_ANALYSIS_SCHEMA.json)、[TAXONOMY.md](TAXONOMY.md)、[METRICS.md](METRICS.md)、[DATA_LAYERS.md](DATA_LAYERS.md)
+
+**输入前提（数据层）：** 标准化正文（Layer 2）+ 涉华筛选/片段（Layer 3）；分析结果写入 Layer 4（`article_analyses` **追加**，保留 model/prompt 版本）。筛选 L1/L2/L3 ≠ 本节「分析单位三层」。
 
 ---
 

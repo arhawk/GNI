@@ -3,13 +3,14 @@
 **产品：** Global Narrative Intelligence（GNI）  
 **文档语言：** 中文  
 **版本：** 0.4（对齐 Blueprint V4）  
-**权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（§22+ 冲突优先）
+**权威：** [BLUEPRINT_V4.md](BLUEPRINT_V4.md)（§22+ 冲突优先）  
+**数据分层：** [DATA_LAYERS.md](DATA_LAYERS.md)
 
 ---
 
 ## 1. 产品一句话
 
-以 **China** 为固定研究对象，由监测流水线（可含轻量 Agent 编排）持续采集他国官方媒体，理解涉华内容并按 **China Relevance Weight** 量化，发现重大新闻候选与异常，自动交付报告与规则预警。
+以 **China** 为固定研究对象，由监测流水线（可含轻量 Agent 编排）持续采集他国官方媒体，理解涉华内容并按 **China Relevance Weight** 量化，发现重大新闻候选与异常，自动交付报告与规则预警。文章经发现→原始保存→标准化→涉华筛选提取→AI 分析→情报统计的数据链（见 DATA_LAYERS），不覆盖历史分析版本。
 
 ---
 

@@ -925,6 +925,8 @@ Prefect 非 MVP 强制依赖，任务复杂度上升后再评估。
 
 ## 14.3 分层
 
+**系统分层（运行时模块）：**
+
 1. Source Layer：国家、组织、来源注册表、治理和合规属性。
 2. Ingestion Layer：RSS / API / Web Adapter。
 3. Processing Layer：正文提取、规范化、语言、时间、去重、质量检查。
@@ -932,6 +934,9 @@ Prefect 非 MVP 强制依赖，任务复杂度上升后再评估。
 5. Storage Layer：原始数据、规范化文章、分析、证据、Story、事件和指标。
 6. Application Layer：FastAPI、Dashboard、报告、Agent、告警。
 7. Cross-cutting Governance：任务、日志、模型/Prompt 版本、权限、成本、质量。
+
+**数据五层（同一 PostgreSQL 内的逻辑数据层；与上表并存、勿与筛选 L1/L2/L3 混用）：**  
+见实施文档 [DATA_LAYERS.md](DATA_LAYERS.md) — Raw → Normalized → Screening & Extraction → AI Analysis → Intelligence & Analytics。筛选「标题/正文/片段」三级流程见 [BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)，对应数据层 Layer 3。
 
 ## 14.4 Adapter
 

@@ -1,97 +1,94 @@
 # 数据库设计（DATABASE）
 
-**版本：** 0.1  
+**版本：** 0.2（数据五层 + 核心 Schema）  
 **引擎：** PostgreSQL 16+（Docker 建议 16）  
-**向量：** pgvector 为 Phase 2 扩展，Phase 0/1 MVP 表可不启用  
+**向量：** pgvector 为 Phase 2 扩展  
+**数据分层权威：** [DATA_LAYERS.md](DATA_LAYERS.md)  
+**字段级现状：** [DATA_SCHEMA.md](DATA_SCHEMA.md)
 
 ---
 
 ## 1. 设计原则
 
-1. 逻辑表清单 ≠ 一次建全字段；Phase 1 按迁移迭代  
-2. **不预建**大量 Phase 2 空表  
-3. 分析与指标结果追加版本，禁止无记录覆盖  
+1. 逻辑表清单 ≠ 一次建全字段；按迁移迭代  
+2. **不预建**大量空表；L4 子表 / reports* 可后置  
+3. 分析与筛选结果**追加版本**，禁止无记录覆盖  
 4. 时间戳统一 UTC（`timestamptz`）  
-5. 灵活枚举与分布可用 JSONB，但外键关系保持规范化  
+5. 灵活枚举与分布可用 JSONB，外键关系保持规范化  
+6. **同一 PostgreSQL** 内按五层组织；大文件可用 `object_key` 指对象存储（R2 后置）
 
 ---
 
-## 2. MVP 表说明
+## 2. 按数据五层的表说明
 
-### 2.1 来源治理
-
-| 表 | 作用 |
-|----|------|
-| countries | id, code, name |
-| organizations | id, country_id, name, organization_type, ownership_type, government_control_level |
-| sources | 见 SOURCE_REGISTRY 字段；config JSONB |
-| source_reviews | source_id, reviewer, decision, notes, reviewed_at |
-| source_attribute_history | source_id, field, old_value, new_value, reason, changed_at, changed_by |
-| source_health | source_id PK, last_success_at, last_failure_at, success_rate, error_message, updated_at |
-
-### 2.2 文章
+### 2.0 编排（跨层）
 
 | 表 | 作用 |
 |----|------|
-| articles | source_id, title, content_original, content_clean, language, published_at, first_seen_at, updated_at, url, canonical_url, content_hash, title_hash, quality_status, source_timezone, time_precision |
-| article_versions | article_id, title, content, version, captured_at |
-| article_entities | article_id, entity_text, entity_type, normalized_id, confidence, analysis_id |
-| article_topics | article_id, topic_id, role (primary/secondary), confidence, analysis_id |
+| collection_tasks | 统一任务 lineage：`task_type`=ingest/process/analyze/backfill；status/stats/error |
+| ingestion_jobs / processing_jobs / analysis_runs | **保留**；与 collection_tasks **双写过渡** |
 
-唯一性建议：`(source_id, url)` 与/或 `content_hash` 在业务层去重。
-
-### 2.3 Taxonomy
+### 2.1 Layer 1 — Raw
 
 | 表 | 作用 |
 |----|------|
-| taxonomy_versions | version, effective_from, notes |
-| topics | topic_id, parent_id, labels JSONB, status, taxonomy_version |
-| topic_relations | parent/child 或 related |
-| stance_targets | target_id, labels JSONB, status, taxonomy_version |
+| raw_documents | 原始 RSS 条目 / API / HTML 截断文本；payload_hash；object_key 预留 |
+| discovered_articles | 发现的 URL/标题/时间；晋升后回填 article_id；status=discovered/promoted/rejected |
 
-### 2.4 分析
+### 2.2 Layer 2 — Normalized + 来源治理
 
 | 表 | 作用 |
 |----|------|
-| model_versions | name, version, provider, meta |
-| prompt_versions | name, version, content_hash, meta |
-| analysis_runs | task_type, model, prompt_version, status, cost, duration, created_at |
-| article_analyses | article_id, analysis_version, model_*, prompt_version, schema_version, taxonomy_version, sentiment, stance JSONB, framing JSONB, confidence, structured_result JSONB, token_usage, status, analyzed_at |
-| article_evidence | id, analysis_id, article_id, field_path, quote, start_offset, end_offset, evidence_type, confidence |
+| countries / organizations / sources / source_* | 来源治理（见 SOURCE_REGISTRY） |
+| articles | 稳定文章身份；**pipeline_state**；兼容 processing_status / analysis_status / quality_status |
+| article_versions | 正文提取版本（追加）；raw_html_excerpt 截断 |
 
-### 2.5 指标与报告
+唯一性：`(source_id, url)`；业务层 content_hash 去重。
 
-| 表 | 作用 |
-|----|------|
-| metric_definitions | key, version, formula_doc_ref, meta |
-| metric_runs | definition_version, window, timezone, scopes, numerator, denominator, excluded_count, missing_count, deduplication_method, value JSONB, computed_at |
-| reports | type, period, timezone, scopes, content, versions, created_at |
-| report_claims | report_id, claim_type, text, validation_status |
-| report_evidence | report_id, claim_id, article_id, evidence_id, metric_run_id, source_id, evidence_type |
-
-### 2.6 作业
+### 2.3 Layer 3 — Screening & Extraction
 
 | 表 | 作用 |
 |----|------|
-| ingestion_jobs | source_id, status, started_at, finished_at, error, stats JSONB |
+| article_screenings | 标题/正文筛选运行记录（stage=title\|fulltext）；不覆盖 |
+| article_china_spans | 涉华片段 + 原文定位 |
+| article_relevance_assessments | 相关度等级/权重 |
+
+### 2.4 Layer 4 — AI Analysis
+
+| 表 | 作用 |
+|----|------|
+| analysis_runs | 分析批次与预算 |
+| article_analyses | 六维结果 `structured_result` JSON（追加行；model/prompt 版本字段） |
+
+独立 sentiment/stance/topic/evidence 关系表：**后置**（仍见规划清单）。
+
+### 2.5 Layer 5 — Intelligence
+
+| 表 | 作用 |
+|----|------|
+| metric_runs | 窗口指标快照 |
+| events / event_* / narrative_clusters / event_narrative_evidence | 事件与叙事 |
+| reports* | **后置**；MVP 日报见 `data/daily_report_*.md` |
+
+### 2.6 Taxonomy / 模型注册（规划，未全建）
+
+taxonomy_versions、topics、stance_targets、model_versions、prompt_versions、metric_definitions — 版本字符串现写在分析/指标行上。
 
 ---
 
-## 3. Phase 2 表（仅规划）
+## 3. Phase 2+ 规划（节选）
 
-story_clusters、article_story_relations、events、event_articles、event_embeddings、event_relations、event_analyses、event_metrics、event_corrections  
-
-`event_embeddings`：多代表性向量（representation_type + 可选 country/topic/source/article），**不为每国硬编码列**。
+story_clusters、article_story_relations、event_embeddings、event_relations、event_analyses、event_metrics、event_corrections、reports / report_claims / report_evidence  
 
 ---
 
 ## 4. ERD
 
-见 [ERD.mmd](ERD.mmd)（Mermaid）。
+见 [ERD.mmd](ERD.mmd)。
 
 ---
 
 ## 5. 迁移策略
 
-- 使用 Alembic（Phase 1 引入；Phase 0 骨架可先占位 `migrations/`）  
-- 所有生产库变更必须有 Migration  
+- Alembic；生产变更必须有 Migration  
+- 五层核心：`alembic/versions/20261124_0006_data_layers_core.py`（raw / discovered / collection_tasks / pipeline_state）

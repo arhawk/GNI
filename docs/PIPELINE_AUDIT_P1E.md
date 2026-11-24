@@ -1,13 +1,16 @@
 # 处理/分析管线审计（P1-E 后）
 
 **日期：** 2026-11-24  
-**库：** Postgres `localhost:5432/gni`
+**库：** Postgres `localhost:5432/gni`  
+**更新：** 数据五层核心 Schema 见 [DATA_LAYERS.md](DATA_LAYERS.md)；`articles.pipeline_state` + `raw_documents` / `discovered_articles` / `collection_tasks`。
 
 ---
 
 ## 结论（一句话）
 
 **不是“不能做”，而是之前没对 Postgres 跑过 process/analyze**；schema 修好后管线可跑。主要质量风险是：仅 `--skip-fetch` 时 RSS stub 过短 → L2 `insufficient_text` → relevance=`uncertain`（不进核心 KPI）。
+
+**补充（数据五层）：** ingest 写 raw/discovered；process/analyze 推进 `pipeline_state`；与 `processing_status`/`analysis_status` 双轨兼容。
 
 ---
 

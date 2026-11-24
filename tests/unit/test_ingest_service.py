@@ -38,8 +38,23 @@ def test_upsert_article_insert_then_update():
         content_hash=None,
         title_hash=None,
         updated_at=None,
+        pipeline_state="RAW_STORED",
     )
     session.scalar.return_value = existing
     article2, created2 = upsert_article(session, source, {**item, "title": "New"})
     assert created2 is False
     assert existing.title == "New"
+    assert existing.pipeline_state == "RAW_STORED"
+
+
+def test_upsert_article_sets_raw_stored_on_insert():
+    session = MagicMock()
+    session.scalar.return_value = None
+    source = SimpleNamespace(id="us_voa_english", language="en", timezone="UTC")
+    article, created = upsert_article(
+        session,
+        source,
+        {"title": "T", "url": "https://example.test/b", "content_original": "x"},
+    )
+    assert created is True
+    assert article.pipeline_state == "RAW_STORED"

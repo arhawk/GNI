@@ -2,7 +2,8 @@
 
 **日期：** 2026-11-24  
 **结论：** P1-B 通过（抽取/清洗/去重/规则 L1）；**停止**。进入 P1-C（L2/L3/Weight）须用户明确授权。  
-**依据：** [PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md)、[BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)
+**依据：** [PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md)、[BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md)  
+**数据五层补充：** 后续核心 Schema（`pipeline_state` / raw / discovered）见 [DATA_LAYERS.md](DATA_LAYERS.md)；不改写本验收勾选结论。
 
 ---
 

@@ -14,8 +14,14 @@ from gni.infrastructure.models import (
     Article,
     ArticleScreening,
     ArticleVersion,
+    CollectionTask,
     ProcessingJob,
     Source,
+)
+from gni.infrastructure.pipeline_state import (
+    DEDUPLICATED,
+    EXTRACTION_COMPLETED,
+    set_pipeline_state,
 )
 from gni.processing.extractor import fetch_and_extract
 from gni.processing.hashutil import sha256_text
@@ -158,23 +164,30 @@ def process_article(
 
         title_norm = normalize_title_for_dedup(article.title)
         dup = _find_duplicate(session, article, content_hash=content_hash, title_norm=title_norm)
+        article.latest_article_version_id = version.id
         if dup is not None:
             article.duplicate_of_article_id = dup.id
             article.exclude_from_metrics = True
             article.quality_status = "duplicate"
             result["duplicate_of"] = dup.id
+            set_pipeline_state(article, DEDUPLICATED)
         elif extraction.quality_status in {"insufficient_text", "fetch_failed"}:
             article.quality_status = "insufficient_text"
+            # Title screened + extraction attempted; final MVP state.
+            set_pipeline_state(article, EXTRACTION_COMPLETED)
         else:
             article.quality_status = (
                 "processed_stub" if extraction.method == "rss_summary" else "processed"
             )
+            # MVP merges NORMALIZED → TITLE_SCREENED → EXTRACTION_COMPLETED into final state.
+            set_pipeline_state(article, EXTRACTION_COMPLETED)
 
         article.processing_status = "done"
         article.processed_at = datetime.now(timezone.utc)
         article.updated_at = datetime.now(timezone.utc)
         result["quality_status"] = article.quality_status
         result["version_id"] = version.id
+        result["pipeline_state"] = article.pipeline_state
     except Exception as exc:  # noqa: BLE001
         logger.exception("process_article failed article_id=%s", article.id)
         article.processing_status = "failed"
@@ -201,6 +214,18 @@ def run_processing(
         stats={},
     )
     session.add(job)
+    session.flush()
+
+    task = CollectionTask(
+        id=str(uuid4()),
+        task_type="process",
+        source_id=source_id,
+        status="running",
+        started_at=datetime.now(timezone.utc),
+        legacy_job_id=job.id,
+        code_version="process_v0.2_data_layers",
+    )
+    session.add(task)
     session.flush()
 
     q = select(Article)
@@ -243,5 +268,12 @@ def run_processing(
         "failed": failed,
         "skip_fetch": skip_fetch,
         "details_sample": details[:20],
+    }
+    task.status = job.status
+    task.finished_at = job.finished_at
+    task.stats = {
+        "attempted": len(articles),
+        "ok": ok,
+        "failed": failed,
     }
     return job
