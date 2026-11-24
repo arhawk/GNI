@@ -34,11 +34,18 @@ def page_overview(session, filters: DashboardFilters, metrics: dict[str, Any]) -
     weighted = metrics["weighted"]
     ops = metrics["operational"]
 
+    from gni.dashboard.data import monitoring_panel_counts
+
+    panel = monitoring_panel_counts(session)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Article Count (raw)", research["article_count"]["value"])
     c2.metric("Weighted Volume", weighted["weighted_article_volume"]["value"])
-    c3.metric("Countries", ops["country_count"]["value"])
-    c4.metric("Active sources (in set)", ops["source_count"]["value"])
+    c3.metric("Monitoring countries", panel["monitoring_countries"])
+    c4.metric("Active sources (registry)", panel["active_sources_registry"])
+
+    c3b, c4b = st.columns(2)
+    c3b.metric("China-set countries", ops["country_count"]["value"])
+    c4b.metric("China-set sources", ops["source_count"]["value"])
 
     c5, c6, c7, c8 = st.columns(4)
     with c5:
@@ -135,6 +142,8 @@ def page_countries(session, filters: DashboardFilters, metrics: dict[str, Any]) 
     pick = st.selectbox("Focus country", options, index=options.index(default) if default in options else 0)
     focus = DashboardFilters(
         days=filters.days,
+        window_start=filters.window_start,
+        window_end=filters.window_end,
         countries=[pick],
         source_ids=filters.source_ids,
         target=filters.target,

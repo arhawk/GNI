@@ -11,13 +11,24 @@ async function get<T>(path: string): Promise<T> {
 export type Overview = {
   meta: {
     days: number
+    preset_days: number | null
+    window_start: string
+    window_end: string
+    data_min: string | null
+    data_max: string | null
     map_modes: string[]
     map_modes_note: string
+    metric_definition_version?: string
+    relevance_weight_version?: string
   }
   kpis: {
     total_articles_universe: number | null
     china_article_count: number | null
     weighted_article_volume: number | null
+    monitoring_countries: number | null
+    active_sources_registry: number | null
+    china_reporting_countries: number | null
+    china_reporting_sources: number | null
     country_count: number | null
     source_count: number | null
     major_events: number
@@ -153,8 +164,21 @@ export type EventDetail = {
   }>
 }
 
-export function fetchOverview(days = 30) {
-  return get<Overview>(`/api/overview?days=${days}`)
+export type OverviewQuery = {
+  days?: number
+  start?: string
+  end?: string
+}
+
+export function fetchOverview(q: OverviewQuery = { days: 30 }) {
+  const params = new URLSearchParams()
+  if (q.start && q.end) {
+    params.set('start', q.start)
+    params.set('end', q.end)
+  } else if (q.days != null) {
+    params.set('days', String(q.days))
+  }
+  return get<Overview>(`/api/overview?${params.toString()}`)
 }
 
 export function fetchEvents(limit = 50) {

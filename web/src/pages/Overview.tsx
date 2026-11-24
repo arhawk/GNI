@@ -2,23 +2,43 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchOverview, type Overview as OverviewData } from '../api'
 import { DualMap, type MapMode } from '../components/DualMap'
+import { useTimeWindow } from '../TimeWindowContext'
 
 export function OverviewPage() {
+  const { window, setDataExtent } = useTimeWindow()
   const [data, setData] = useState<OverviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<MapMode>('event_geography')
 
   useEffect(() => {
-    fetchOverview(30)
-      .then(setData)
+    setError(null)
+    const q =
+      window.presetDays != null
+        ? { days: window.presetDays }
+        : {
+            start: new Date(window.startMs).toISOString(),
+            end: new Date(window.endMs).toISOString(),
+          }
+    fetchOverview(q)
+      .then((payload) => {
+        setData(payload)
+        const min = payload.meta.data_min ? Date.parse(payload.meta.data_min) : null
+        const max = payload.meta.data_max ? Date.parse(payload.meta.data_max) : null
+        setDataExtent(
+          Number.isFinite(min) ? min : null,
+          Number.isFinite(max) ? max : Date.now(),
+        )
+      })
       .catch((e: Error) => setError(e.message))
-  }, [])
+  }, [window.startMs, window.endMs, window.presetDays, setDataExtent])
 
   if (error) {
     return (
       <div className="panel">
         <p className="error">Failed to load overview: {error}</p>
-        <p className="muted">Start API: <code>gni api serve</code> then rebuild events.</p>
+        <p className="muted">
+          Start API: <code>gni api serve</code> then rebuild events.
+        </p>
       </div>
     )
   }
@@ -32,21 +52,47 @@ export function OverviewPage() {
 
   return (
     <div className="overview">
-      {/* A — KPIs */}
+      <p className="muted small">
+        Window {data.meta.window_start?.slice(0, 16).replace('T', ' ')} →{' '}
+        {data.meta.window_end?.slice(0, 16).replace('T', ' ')} UTC · universe{' '}
+        {k.total_articles_universe ?? '—'}
+      </p>
+
       <section className="block">
         <h2>A · Snapshot</h2>
         <div className="kpi-grid">
-          <Kpi label="Total articles" value={k.total_articles_universe} />
+          <Kpi label="Total articles" value={k.total_articles_universe} hint="in window" />
           <Kpi label="China article count" value={k.china_article_count} hint="raw count" />
-          <Kpi label="Weighted volume" value={fmtNum(k.weighted_article_volume)} hint="≠ article count" />
-          <Kpi label="Countries" value={k.country_count} />
-          <Kpi label="Active sources" value={k.source_count} />
+          <Kpi
+            label="Weighted volume"
+            value={fmtNum(k.weighted_article_volume)}
+            hint="≠ article count"
+          />
+          <Kpi
+            label="Monitoring countries"
+            value={k.monitoring_countries}
+            hint="active panel"
+          />
+          <Kpi
+            label="Active sources (registry)"
+            value={k.active_sources_registry}
+            hint="active_status"
+          />
+          <Kpi
+            label="China-set countries"
+            value={k.china_reporting_countries ?? k.country_count}
+            hint="in window"
+          />
+          <Kpi
+            label="China-set sources"
+            value={k.china_reporting_sources ?? k.source_count}
+            hint="in window"
+          />
           <Kpi label="Major events" value={k.major_events} hint="proto / Event" />
           <Kpi label="Alerts" value={k.alerts} />
         </div>
       </section>
 
-      {/* B — Dual map (mutually exclusive) */}
       <section className="block">
         <div className="block-head">
           <h2>B · Map</h2>
@@ -75,7 +121,6 @@ export function OverviewPage() {
         />
       </section>
 
-      {/* C — Trends (sentiment ≠ stance) */}
       <section className="block">
         <h2>C · Sentiment distribution</h2>
         <p className="muted small">Sentiment labels only — stance is a separate signal.</p>
@@ -87,7 +132,6 @@ export function OverviewPage() {
         </div>
       </section>
 
-      {/* D — Topics taxonomy_v0.4 */}
       <section className="block">
         <h2>D · Topic share</h2>
         <p className="muted small">taxonomy_v0.4 — not threat-intelligence classes.</p>
@@ -99,7 +143,6 @@ export function OverviewPage() {
         </div>
       </section>
 
-      {/* E — Important events & anomalies */}
       <section className="block">
         <h2>E · Important events & anomalies</h2>
         <p className="muted small">{data.anomalies.note}</p>
@@ -113,7 +156,9 @@ export function OverviewPage() {
             </li>
           ))}
           {data.anomalies.items.length === 0 && (
-            <li className="muted">No proto-events yet — run <code>gni events rebuild</code>.</li>
+            <li className="muted">
+              No proto-events yet — run <code>gni events rebuild</code>.
+            </li>
           )}
         </ul>
       </section>
@@ -157,7 +202,6 @@ function fmtNum(n: number | null | undefined) {
   return Number.isInteger(n) ? n : n.toFixed(2)
 }
 
-/** metrics_v0.4 returns {counts, shares} — not a flat label→number map. */
 function countsFrom(blob: unknown): Record<string, number> {
   if (!blob || typeof blob !== 'object') return {}
   const obj = blob as Record<string, unknown>

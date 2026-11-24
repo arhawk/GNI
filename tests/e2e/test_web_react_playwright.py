@@ -177,6 +177,10 @@ def test_react_overview_events_detail(react_stack):
         expect(page.get_by_role("link", name="Overview")).to_be_visible()
         expect(page.get_by_text("A · Snapshot")).to_be_visible(timeout=15000)
         expect(page.locator(".kpi-grid")).to_be_visible()
+        expect(page.get_by_text("Monitoring countries")).to_be_visible()
+        expect(page.get_by_text("China-set countries")).to_be_visible()
+        expect(page.get_by_role("button", name="1 month")).to_be_visible()
+        page.get_by_role("button", name="3 months").click()
         expect(page.get_by_role("button", name="Event geography (Where)")).to_be_visible()
         page.get_by_role("button", name="Reporting sources (Who)").click()
         expect(page.get_by_role("button", name="Reporting sources (Who)")).to_have_class(

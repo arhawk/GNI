@@ -163,7 +163,7 @@ def analyze_article(
             taxonomy_version=TAXONOMY_VERSION,
             relevance_weight_version=RELEVANCE_WEIGHT_VERSION,
             analysis_status=structured.get("analysis_status") or "completed",
-            confidence=(structured.get("confidence") or {}).get("overall"),
+            confidence=_overall_confidence(structured.get("confidence")),
             token_usage=tokens,
             estimated_cost_usd=cost,
             structured_result=structured,
@@ -184,6 +184,19 @@ def analyze_article(
         result["ok"] = False
         result["error"] = str(exc)[:500]
     return result
+
+
+def _overall_confidence(confidence: Any) -> float | None:
+    """DeepSeek sometimes returns confidence as a bare float instead of {overall: ...}."""
+    if confidence is None:
+        return None
+    if isinstance(confidence, (int, float)):
+        return float(confidence)
+    if isinstance(confidence, dict):
+        overall = confidence.get("overall")
+        if isinstance(overall, (int, float)):
+            return float(overall)
+    return None
 
 
 def run_analysis(

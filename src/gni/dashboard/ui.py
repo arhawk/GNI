@@ -6,7 +6,9 @@ from typing import Any
 
 import streamlit as st
 
-from gni.dashboard.data import NAV_PAGES, DashboardFilters
+from datetime import datetime, timedelta, timezone
+
+from gni.dashboard.data import NAV_PAGES, PRESET_DAYS, DashboardFilters
 from gni.metrics.definitions import (
     CHINA_INCLUDE_LEVELS,
     METRIC_DEFINITION_VERSION,
@@ -52,7 +54,18 @@ def render_sidebar_filters(
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Global filters")
-    days = st.sidebar.selectbox("Time window (days)", [1, 7, 14, 30, 90], index=1)
+    preset_labels = {1: "1 day", 7: "1 week", 30: "1 month", 90: "3 months", 365: "1 year"}
+    days = st.sidebar.selectbox(
+        "Time window",
+        list(PRESET_DAYS),
+        index=list(PRESET_DAYS).index(30),
+        format_func=lambda d: preset_labels.get(d, f"{d} days"),
+    )
+    end_date = st.sidebar.date_input(
+        "Window end (UTC date)",
+        value=datetime.now(timezone.utc).date(),
+        help="Drag observation window by changing end; start = end − duration.",
+    )
     country_ids = [c["id"] for c in countries]
     selected_countries = st.sidebar.multiselect(
         "Countries",
@@ -119,8 +132,14 @@ def render_sidebar_filters(
         default=[],
     )
 
+    end_dt = datetime(
+        end_date.year, end_date.month, end_date.day, 23, 59, 59, tzinfo=timezone.utc
+    )
+    start_dt = end_dt - timedelta(days=int(days))
     filters = DashboardFilters(
         days=int(days),
+        window_start=start_dt,
+        window_end=end_dt,
         countries=selected_countries,
         source_ids=selected_sources,
         target=target,

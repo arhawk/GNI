@@ -42,9 +42,9 @@ def _row_from_article(
     analysis: ArticleAnalysis | None,
 ) -> ArticleMetricRow:
     structured = (analysis.structured_result if analysis else None) or {}
-    sentiment = structured.get("sentiment") or {}
-    framing = structured.get("framing") or {}
-    topics = structured.get("topics") or {}
+    sentiment = _as_mapping(structured.get("sentiment"))
+    framing = _as_mapping(structured.get("framing"))
+    topics = _as_mapping(structured.get("topics"))
     stances = structured.get("stances") or []
     return ArticleMetricRow(
         id=article.id,
@@ -60,13 +60,31 @@ def _row_from_article(
         quality_status=article.quality_status,
         processing_status=article.processing_status,
         analysis_status=article.analysis_status,
-        sentiment_label=sentiment.get("label"),
-        sentiment_score=sentiment.get("score"),
-        sentiment_status=sentiment.get("status"),
+        sentiment_label=sentiment.get("label") if isinstance(sentiment.get("label"), str) else None,
+        sentiment_score=sentiment.get("score") if isinstance(sentiment.get("score"), (int, float)) else None,
+        sentiment_status=sentiment.get("status") if isinstance(sentiment.get("status"), str) else None,
         stances=list(stances) if isinstance(stances, list) else [],
-        frame_primary=framing.get("primary"),
-        topic_primary=topics.get("primary"),
+        frame_primary=_primary_label(framing, structured.get("framing")),
+        topic_primary=_primary_label(topics, structured.get("topics")),
     )
+
+
+def _as_mapping(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _primary_label(mapped: dict, raw: object) -> str | None:
+    primary = mapped.get("primary")
+    if isinstance(primary, str):
+        return primary
+    # DeepSeek occasionally returns a bare list of topic/frame ids
+    if isinstance(raw, list) and raw:
+        first = raw[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict) and isinstance(first.get("id"), str):
+            return first["id"]
+    return None
 
 
 def run_metrics(

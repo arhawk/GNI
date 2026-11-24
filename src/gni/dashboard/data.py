@@ -33,9 +33,17 @@ from gni.metrics.definitions import CHINA_INCLUDE_LEVELS, METRIC_DEFINITION_VERS
 from gni.metrics.service import _latest_analyses, _row_from_article
 
 
+MAX_WINDOW_DAYS = 366
+PRESET_DAYS = (1, 7, 30, 90, 365)
+
+
 @dataclass
 class DashboardFilters:
-    days: int = 7
+    days: int = 30
+    """Rolling length used when window_start/window_end are not both set."""
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    """Absolute UTC bounds. If either is set, resolves with days / now as needed."""
     countries: list[str] = field(default_factory=list)
     source_ids: list[str] = field(default_factory=list)
     target: str = "china"
@@ -69,10 +77,65 @@ class ArticleCard:
     structured_result: dict[str, Any] | None = None
 
 
-def window_bounds(days: int) -> tuple[datetime, datetime]:
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=days)
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def window_bounds(
+    days: int = 30,
+    *,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Resolve [start, end] UTC. Explicit bounds override rolling-from-now."""
+    end = _as_utc(window_end) if window_end is not None else datetime.now(timezone.utc)
+    if window_start is not None:
+        start = _as_utc(window_start)
+    else:
+        start = end - timedelta(days=max(1, min(int(days), MAX_WINDOW_DAYS)))
+    if start >= end:
+        raise ValueError("window_start must be before window_end")
+    span = (end - start).total_seconds() / 86400.0
+    if span > MAX_WINDOW_DAYS:
+        raise ValueError(f"window span exceeds {MAX_WINDOW_DAYS} days")
     return start, end
+
+
+def resolve_filter_window(filters: DashboardFilters) -> tuple[datetime, datetime]:
+    return window_bounds(
+        filters.days,
+        window_start=filters.window_start,
+        window_end=filters.window_end,
+    )
+
+
+def article_data_range(session: Session) -> tuple[datetime | None, datetime | None]:
+    """Min/max event times for timeline slider extents."""
+    rows = session.scalars(select(Article)).all()
+    times: list[datetime] = []
+    for a in rows:
+        t = a.published_at or a.first_seen_at
+        if t is not None:
+            times.append(_as_utc(t))
+    if not times:
+        return None, None
+    return min(times), max(times)
+
+
+def monitoring_panel_counts(session: Session) -> dict[str, int]:
+    """P1-A panel: active sources and distinct countries among them (not China-set)."""
+    active = [
+        s
+        for s in session.scalars(select(Source)).all()
+        if (s.active_status or "").lower() == "active"
+    ]
+    countries = {s.country_id for s in active if s.country_id}
+    return {
+        "monitoring_countries": len(countries),
+        "active_sources_registry": len(active),
+    }
 
 
 def load_countries(session: Session) -> list[dict[str, str]]:
@@ -140,7 +203,7 @@ def compute_dashboard_metrics(
     session: Session,
     filters: DashboardFilters,
 ) -> dict[str, Any]:
-    start, end = window_bounds(filters.days)
+    start, end = resolve_filter_window(filters)
     rows, _, sources, _ = _build_rows(session)
     health_orm = {h.source_id: h for h in session.scalars(select(SourceHealth)).all()}
     health_rows = [
@@ -193,12 +256,10 @@ def _passes_article_filters(card: ArticleCard, filters: DashboardFilters) -> boo
     return True
 
 
-def _in_days(dt: datetime | None, days: int) -> bool:
+def _in_window(dt: datetime | None, start: datetime, end: datetime) -> bool:
     if dt is None:
         return False
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    start, end = window_bounds(days)
+    dt = _as_utc(dt)
     return start <= dt <= end
 
 
@@ -210,12 +271,13 @@ def list_article_cards(
     limit: int = 200,
 ) -> list[ArticleCard]:
     rows, articles, sources, analyses = _build_rows(session)
+    start, end = resolve_filter_window(filters)
     include = frozenset(filters.relevance_levels) if filters.relevance_levels else CHINA_INCLUDE_LEVELS
     cards: list[ArticleCard] = []
     for row in rows:
         if row.exclude_from_metrics:
             continue
-        if not _in_days(row.published_at or row.first_seen_at, filters.days):
+        if not _in_window(row.published_at or row.first_seen_at, start, end):
             continue
         if china_only and not is_china_included(row, include):
             continue
@@ -318,6 +380,8 @@ def country_breakdown(
     for cid in countries:
         f = DashboardFilters(
             days=filters.days,
+            window_start=filters.window_start,
+            window_end=filters.window_end,
             countries=[cid],
             source_ids=filters.source_ids,
             target=filters.target,

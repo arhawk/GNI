@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -368,12 +369,30 @@ def get_event_detail(session: Session, event_id: str) -> dict[str, Any] | None:
     }
 
 
-def overview_payload(session: Session, *, days: int = 30) -> dict[str, Any]:
+def overview_payload(
+    session: Session,
+    *,
+    days: int = 30,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> dict[str, Any]:
     """Dashboard overview: KPIs + dual map layers + stub trends/topics/anomalies."""
-    from gni.dashboard.data import DashboardFilters, compute_dashboard_metrics
+    from gni.dashboard.data import (
+        DashboardFilters,
+        article_data_range,
+        compute_dashboard_metrics,
+        monitoring_panel_counts,
+        resolve_filter_window,
+    )
 
-    filters = DashboardFilters(days=days)
+    start_dt = window_start
+    end_dt = window_end
+    filters = DashboardFilters(days=days, window_start=start_dt, window_end=end_dt)
+    start, end = resolve_filter_window(filters)
+    span_days = max(1, int(round((end - start).total_seconds() / 86400.0)))
     metrics = compute_dashboard_metrics(session, filters)
+    panel = monitoring_panel_counts(session)
+    data_min, data_max = article_data_range(session)
     events = list_events(session, limit=30)
 
     # Event map pins: only locations with coords and type != reporting
@@ -420,16 +439,27 @@ def overview_payload(session: Session, *, days: int = 30) -> dict[str, Any]:
 
     return {
         "meta": {
-            "days": days,
+            "days": span_days,
+            "preset_days": days if start_dt is None and end_dt is None else None,
+            "window_start": start.isoformat(),
+            "window_end": end.isoformat(),
+            "data_min": data_min.isoformat() if data_min else None,
+            "data_max": data_max.isoformat() if data_max else None,
             "metric_definition_version": metrics.get("metric_definition_version"),
             "relevance_weight_version": metrics.get("relevance_weight_version"),
             "map_modes": ["event_geography", "reporting_source"],
             "map_modes_note": "Mutually exclusive layers — do not mix on one semantic map.",
+            "time_window": metrics.get("time_window"),
         },
         "kpis": {
             "total_articles_universe": metrics.get("universe_count"),
             "china_article_count": research.get("article_count", {}).get("value"),
             "weighted_article_volume": weighted.get("weighted_article_volume", {}).get("value"),
+            "monitoring_countries": panel["monitoring_countries"],
+            "active_sources_registry": panel["active_sources_registry"],
+            "china_reporting_countries": ops.get("country_count", {}).get("value"),
+            "china_reporting_sources": ops.get("source_count", {}).get("value"),
+            # Backward-compatible aliases (China-set) — prefer renamed fields above
             "country_count": ops.get("country_count", {}).get("value"),
             "source_count": ops.get("source_count", {}).get("value"),
             "major_events": len(events),

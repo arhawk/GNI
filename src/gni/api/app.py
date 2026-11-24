@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from gni import __version__
+from gni.dashboard.data import MAX_WINDOW_DAYS
 from gni.events.service import get_event_detail, list_events, overview_payload, rebuild_proto_events
 from gni.infrastructure.db import ensure_schema, session_scope
 
@@ -29,10 +32,33 @@ def health() -> dict:
     return {"status": "ok", "version": __version__}
 
 
+def _parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"invalid datetime: {value}") from e
+
+
 @app.get("/api/overview")
-def api_overview(days: int = Query(30, ge=1, le=365)) -> dict:
-    with session_scope() as session:
-        return overview_payload(session, days=days)
+def api_overview(
+    days: int = Query(30, ge=1, le=MAX_WINDOW_DAYS),
+    start: str | None = Query(None, description="ISO UTC window start"),
+    end: str | None = Query(None, description="ISO UTC window end (may be before now)"),
+) -> dict:
+    start_dt = _parse_iso(start)
+    end_dt = _parse_iso(end)
+    try:
+        with session_scope() as session:
+            return overview_payload(
+                session, days=days, window_start=start_dt, window_end=end_dt
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/events")

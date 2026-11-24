@@ -4,6 +4,88 @@
   min-height: 100%;
 }
 
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.time-filter {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  padding: 0.75rem 1.5rem 0.9rem;
+}
+
+.time-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.time-filter-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.time-filter-range {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-presets {
+  margin-bottom: 0;
+}
+
+.time-track {
+  position: relative;
+  height: 28px;
+  touch-action: none;
+  user-select: none;
+}
+
+.time-track-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+}
+
+.time-track-span {
+  position: absolute;
+  top: 8px;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  border: 1px solid var(--accent);
+  cursor: grab;
+}
+
+.time-track-span:active {
+  cursor: grabbing;
+}
+
+.time-thumb {
+  position: absolute;
+  top: 4px;
+  width: 14px;
+  height: 20px;
+  margin-left: -7px;
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid #fff;
+  background: var(--accent-2);
+  cursor: ew-resize;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
 .nav {
   background: linear-gradient(180deg, #141b22 0%, #10161c 100%);
   border-right: 1px solid var(--line);
@@ -349,5 +431,9 @@ h4 {
   }
   .timeline li {
     grid-template-columns: 1fr;
+  }
+  .time-filter-range {
+    margin-left: 0;
+    width: 100%;
   }
 }
