@@ -15,6 +15,18 @@ from gni.infrastructure.models import Country, Organization, Source, SourceHealt
 DEFAULT_SEED = Path(__file__).resolve().parents[3] / "configs" / "sources_seed.yaml"
 
 
+def _source_config(row: dict[str, Any]) -> dict[str, Any]:
+    """Build persisted Source.config; keep editorial_focus when declared in seed."""
+    cfg: dict[str, Any] = {
+        "feed_url": row.get("feed_or_api_url"),
+        **(row.get("config") or {}),
+    }
+    focus = row.get("editorial_focus")
+    if focus:
+        cfg["editorial_focus"] = focus
+    return cfg
+
+
 def load_seed_file(path: Path | None = None) -> dict[str, Any]:
     seed_path = path or DEFAULT_SEED
     with seed_path.open(encoding="utf-8") as f:
@@ -88,10 +100,7 @@ def seed_sources(session: Session, path: Path | None = None) -> dict[str, int]:
             verification_status=row.get("verification_status", "unverified"),
             feed_or_api_url=row.get("feed_or_api_url"),
             notes=row.get("notes"),
-            config={
-                "feed_url": row.get("feed_or_api_url"),
-                **(row.get("config") or {}),
-            },
+            config=_source_config(row),
         )
         if existing is None:
             session.add(Source(id=sid, **fields))

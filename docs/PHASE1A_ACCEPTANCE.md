@@ -21,7 +21,7 @@
 | 项 | 路径 / 说明 |
 |----|-------------|
 | Phase 1 任务书 A–D | [PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md) |
-| 已核验种子 | [configs/sources_seed.yaml](../configs/sources_seed.yaml)（平衡后面板约 **10** 个 active：各国 2；含 ru/de/hi） |
+| 已核验种子 | [configs/sources_seed.yaml](../configs/sources_seed.yaml)（约 **10** active：各国 2；议题须国际/对华，非国内民生） |
 | 候选表更新 | [source_candidates.csv](source_candidates.csv) |
 | 模型 + Alembic | `src/gni/infrastructure/`、`alembic/versions/20261123_0001_p1a_initial.py` |
 | RSS Adapter / 编排 | 支持 per-source `config.user_agent` |
@@ -33,19 +33,20 @@
 
 | 国家 | source_id | 状态 |
 |------|-----------|------|
-| 美国 | us_voa_english, us_rfa_english | active（en；defense/FR 降为 inactive 备份） |
-| 俄罗斯 | **ru_tass_russian**, **ru_ria** | active（**ru**；TASS EN 降为 inactive） |
-| 德国 | **de_dw_german**, de_dw_english | active（**de** + en） |
-| 印度 | **in_pib_hindi**, **in_niti** | active（**hi** + en；总统府降为 inactive） |
-| 澳大利亚 | au_pm_media, **au_abc_top** | active（en；当地官方语言） |
+| 美国 | us_voa_english, us_rfa_english | active（国际/亚洲 desk；defense 国内混杂已 inactive） |
+| 俄罗斯 | **ru_tass_english**, **ru_sputnik_world** | active（国际英；tass.ru/ria 全站国内混杂已 demote） |
+| 德国 | **de_dw_asia**, de_dw_english | active（Asia + en-all；de-all 低于议题门槛已 demote） |
+| 印度 | **in_air_international**, **in_pib_west_asia** | active（国际 desk；PIB Hindi/NITI 国内已 demote） |
+| 澳大利亚 | au_pm_media, **au_sbs_world** | active（双边/对华 + SBS World；ABC Top 国内偏重已 demote） |
 
-**平衡复探（2026-11-24）：** 各国 2 源；非英：RU/DE/IN 本地语 feed 已接通。  
+**议题复探（2026-11-24）：** 各国约 2 源；active 必须国际/对华议题密度达标（见 `editorial_focus` 测试）。  
 
 ### 仍未接通（保留候选，不强爬）
 
 - State.gov / White House：407/404  
-- 印度 PIB / MEA：持续 403  
-- 俄罗斯 Kremlin 官方 feed：超时/404（TASS 已覆盖该国）  
+- 印度 MEA 官网 RSS：持续 403（已用 AIR International + PIB West Asia 替代）  
+- 俄罗斯 Kremlin / MID 官方 feed：超时/HTML（TASS EN + Sputnik 已覆盖）  
+- ABC World 等 feed ID：HTTP 500；DFAT / foreignminister：404/超时  
 
 ### 印度 UA 说明
 

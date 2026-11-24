@@ -1,439 +1,704 @@
-# GNI source seed — balanced active set: ~2 sources / country; prefer local-language when available.
-# Do not invent feed URLs. Only feeds verified by live HTTP+feedparser probe.
-
 meta:
-  verified_at_utc: "2026-11-24T05:25:00Z"
-  user_agent: "GNI-ResearchBot/0.1 (+internal-research)"
-  notes: >
-    2026-11-24 rebalance: target 2 active sources per US/RU/DE/IN/AU.
-    Prefer non-English where feeds work (RU TASS/RIA, DE DW-de, IN PIB Hindi).
-    US defense/Federal Register and RU TASS English demoted to inactive (kept verified).
-
+  verified_at_utc: '2026-11-24T08:45:00Z'
+  user_agent: GNI-ResearchBot/0.1 (+internal-research)
+  notes: '2026-11-24 editorial realign + race restore: active feeds must be international_or_china (not
+    domestic livelihood/admin). Demoted RU TASS/RIA site-wide, IN PIB Hindi/NITI, DE DW-de-all, AU ABC
+    Top Stories. Active panel (~2/country): US RFA+VOA; RU TASS EN+Sputnik; DE DW Asia+DW EN-all; IN AIR
+    International+PIB West Asia; AU PM media+SBS World. Restored after seed race that briefly zeroed IN
+    / dropped SBS.'
 countries:
-  - { id: US, code: US, name: United States }
-  - { id: RU, code: RU, name: Russia }
-  - { id: DE, code: DE, name: Germany }
-  - { id: IN, code: IN, name: India }
-  - { id: AU, code: AU, name: Australia }
-
+- id: US
+  code: US
+  name: United States
+- id: RU
+  code: RU
+  name: Russia
+- id: DE
+  code: DE
+  name: Germany
+- id: IN
+  code: IN
+  name: India
+- id: AU
+  code: AU
+  name: Australia
 organizations:
-  - id: org_usagm
-    country_id: US
-    name: U.S. Agency for Global Media
-    organization_type: media_agency
-    ownership_type: government
-    government_control_level: high
-  - id: org_us_dod
-    country_id: US
-    name: U.S. Department of Defense
-    organization_type: government_department
-    ownership_type: government
-    government_control_level: high
-  - id: org_us_nara_fr
-    country_id: US
-    name: National Archives — Federal Register
-    organization_type: government_publisher
-    ownership_type: government
-    government_control_level: high
-  - id: org_dw
-    country_id: DE
-    name: Deutsche Welle
-    organization_type: public_broadcaster
-    ownership_type: public_law
-    government_control_level: medium
-  - id: org_au_pmc
-    country_id: AU
-    name: Office of the Prime Minister of Australia
-    organization_type: government_office
-    ownership_type: government
-    government_control_level: high
-  - id: org_au_abc
-    country_id: AU
-    name: Australian Broadcasting Corporation
-    organization_type: public_broadcaster
-    ownership_type: public
-    government_control_level: low
-  - id: org_ru_tass
-    country_id: RU
-    name: TASS
-    organization_type: state_news_agency
-    ownership_type: state
-    government_control_level: high
-  - id: org_ru_ria
-    country_id: RU
-    name: RIA Novosti
-    organization_type: state_news_agency
-    ownership_type: state
-    government_control_level: high
-  - id: org_in_president
-    country_id: IN
-    name: President of India
-    organization_type: government_office
-    ownership_type: government
-    government_control_level: high
-  - id: org_in_niti
-    country_id: IN
-    name: NITI Aayog
-    organization_type: government_agency
-    ownership_type: government
-    government_control_level: high
-  - id: org_in_pib
-    country_id: IN
-    name: Press Information Bureau
-    organization_type: government_agency
-    ownership_type: government
-    government_control_level: high
-
+- id: org_usagm
+  country_id: US
+  name: U.S. Agency for Global Media
+  organization_type: media_agency
+  ownership_type: government
+  government_control_level: high
+- id: org_us_dod
+  country_id: US
+  name: U.S. Department of Defense
+  organization_type: government_department
+  ownership_type: government
+  government_control_level: high
+- id: org_us_nara_fr
+  country_id: US
+  name: National Archives — Federal Register
+  organization_type: government_publisher
+  ownership_type: government
+  government_control_level: high
+- id: org_dw
+  country_id: DE
+  name: Deutsche Welle
+  organization_type: public_broadcaster
+  ownership_type: public_law
+  government_control_level: medium
+- id: org_au_pmc
+  country_id: AU
+  name: Office of the Prime Minister of Australia
+  organization_type: government_office
+  ownership_type: government
+  government_control_level: high
+- id: org_au_abc
+  country_id: AU
+  name: Australian Broadcasting Corporation
+  organization_type: public_broadcaster
+  ownership_type: public
+  government_control_level: low
+- id: org_au_sbs
+  country_id: AU
+  name: Special Broadcasting Service
+  organization_type: public_broadcaster
+  ownership_type: public
+  government_control_level: low
+- id: org_ru_tass
+  country_id: RU
+  name: TASS
+  organization_type: state_news_agency
+  ownership_type: state
+  government_control_level: high
+- id: org_ru_ria
+  country_id: RU
+  name: RIA Novosti
+  organization_type: state_news_agency
+  ownership_type: state
+  government_control_level: high
+- id: org_ru_sputnik
+  country_id: RU
+  name: Sputnik (Rossiya Segodnya)
+  organization_type: state_news_agency
+  ownership_type: state
+  government_control_level: high
+- id: org_ru_rt
+  country_id: RU
+  name: RT (TV-Novosti)
+  organization_type: state_news_agency
+  ownership_type: state
+  government_control_level: high
+- id: org_in_president
+  country_id: IN
+  name: President of India
+  organization_type: government_office
+  ownership_type: government
+  government_control_level: high
+- id: org_in_niti
+  country_id: IN
+  name: NITI Aayog
+  organization_type: government_agency
+  ownership_type: government
+  government_control_level: high
+- id: org_in_pib
+  country_id: IN
+  name: Press Information Bureau
+  organization_type: government_agency
+  ownership_type: government
+  government_control_level: high
+- id: org_in_air
+  country_id: IN
+  name: Akashvani (All India Radio) / Prasar Bharati
+  organization_type: public_broadcaster
+  ownership_type: public
+  government_control_level: medium
 sources:
-  # —— US (2 active): VOA + RFA ——
-  - source_id: us_voa_english
-    name: Voice of America (English RSS)
-    country_id: US
-    organization_id: org_usagm
-    canonical_url: https://www.voanews.com/
-    source_type: state_controlled
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: America/New_York
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.voanews.com/
-    compliance_status: allowed_internal
-    evidence_url: https://www.voanews.com/
-    classification_confidence: high
-    reviewed_by: phase1a_verifier
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: "https://www.voanews.com/api/z-$otevtiq"
-    notes: "Active panel slot 1/2 for US."
+- source_id: us_voa_english
+  name: Voice of America (English RSS)
+  country_id: US
+  organization_id: org_usagm
+  canonical_url: https://www.voanews.com/
+  source_type: state_controlled
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.voanews.com/
+  compliance_status: allowed_internal
+  evidence_url: https://www.voanews.com/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.voanews.com/api/z-$otevtiq
+  notes: 'Active panel 1/2 US. Probe 2026-11-24: feed title "Africa - VOA"; intl_or_china≈0.40 on top
+    titles (international desk, not US domestic). Asia-specific VOA API paths empty. editorial_focus=international_or_china.
 
-  - source_id: us_rfa_english
-    name: Radio Free Asia (English RSS)
-    country_id: US
-    organization_id: org_usagm
-    canonical_url: https://www.rfa.org/
-    source_type: state_controlled
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: America/New_York
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.rfa.org/
-    compliance_status: allowed_internal
-    evidence_url: https://www.rfa.org/english/
-    classification_confidence: high
-    reviewed_by: phase1a_verifier
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://www.rfa.org/english/rss
-    notes: "Active panel slot 2/2 for US. Asia-focused official media."
+    '
+- source_id: us_rfa_english
+  name: Radio Free Asia (English RSS)
+  country_id: US
+  organization_id: org_usagm
+  canonical_url: https://www.rfa.org/
+  source_type: state_controlled
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.rfa.org/
+  compliance_status: allowed_internal
+  evidence_url: https://www.rfa.org/english/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.rfa.org/english/rss
+  notes: 'Active panel 2/2 US. Asia/China-focused official media desk. Occasional HTTP 429; keep verified.
+    editorial_focus=international_or_china.
 
-  - source_id: us_defense_news
-    name: U.S. Department of Defense News Feed
-    country_id: US
-    organization_id: org_us_dod
-    canonical_url: https://www.defense.gov/
-    source_type: gov_comms
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: America/New_York
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.defense.gov/
-    compliance_status: allowed_internal
-    evidence_url: https://www.defense.gov/
-    classification_confidence: high
-    reviewed_by: phase1a_verifier
-    active_status: inactive
-    verification_status: verified
-    feed_or_api_url: "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=10&ContentType=1&Site=945"
-    notes: "Demoted 2026-11-24 for country balance; verified backup."
+    '
+- source_id: us_defense_news
+  name: U.S. Department of Defense News Feed
+  country_id: US
+  organization_id: org_us_dod
+  canonical_url: https://www.defense.gov/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.defense.gov/
+  compliance_status: allowed_internal
+  evidence_url: https://www.defense.gov/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=10&ContentType=1&Site=945
+  notes: 'Inactive. Probe 2026-11-24: intl_or_china≈0.0 — domestic DoD/ops mix; denylisted for active.
 
-  - source_id: us_federal_register_state
-    name: Federal Register — State Department documents
-    country_id: US
-    organization_id: org_us_nara_fr
-    canonical_url: https://www.federalregister.gov/
-    source_type: gov_comms
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: America/New_York
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.federalregister.gov/
-    compliance_status: allowed_internal
-    evidence_url: https://www.federalregister.gov/
-    classification_confidence: medium
-    reviewed_by: phase1a_verifier
-    active_status: inactive
-    verification_status: verified
-    feed_or_api_url: "https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bagencies%5D%5B%5D=state-department"
-    notes: "Demoted 2026-11-24 for country balance; verified backup."
+    '
+- source_id: us_federal_register_state
+  name: Federal Register — State Department documents
+  country_id: US
+  organization_id: org_us_nara_fr
+  canonical_url: https://www.federalregister.gov/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.federalregister.gov/
+  compliance_status: allowed_internal
+  evidence_url: https://www.federalregister.gov/
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bagencies%5D%5B%5D=state-department
+  notes: 'Inactive backup. Probe 2026-11-24: intl_or_china≈0.44 (State Dept notices); kept as verified
+    foreign-policy backup, not panel slot.
 
-  # —— RU (2 active): TASS Russian + RIA ——
-  - source_id: ru_tass_russian
-    name: TASS (Russian RSS)
-    country_id: RU
-    organization_id: org_ru_tass
-    canonical_url: https://tass.ru/
-    source_type: state_controlled
-    ownership_type: state
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: ru
-    timezone: Europe/Moscow
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://tass.ru/
-    compliance_status: allowed_internal
-    evidence_url: https://tass.ru/
-    classification_confidence: high
-    reviewed_by: balance_probe_20261124
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://tass.ru/rss/v2.xml
-    notes: "Probe 2026-11-24: HTTP 200, 100 entries. Local-language primary for RU."
+    '
+- source_id: ru_tass_english
+  name: TASS (English RSS)
+  country_id: RU
+  organization_id: org_ru_tass
+  canonical_url: https://tass.com/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://tass.com/
+  compliance_status: allowed_internal
+  evidence_url: https://tass.com/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://tass.com/rss/v2.xml
+  notes: 'Active panel 1/2 RU. Probe 2026-11-24: intl_or_china≈0.52–0.64. Prefer over tass.ru site-wide
+    (domestic). editorial_focus=international_or_china.
 
-  - source_id: ru_ria
-    name: RIA Novosti (Russian RSS)
-    country_id: RU
-    organization_id: org_ru_ria
-    canonical_url: https://ria.ru/
-    source_type: state_controlled
-    ownership_type: state
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: ru
-    timezone: Europe/Moscow
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://ria.ru/
-    compliance_status: allowed_internal
-    evidence_url: https://ria.ru/
-    classification_confidence: high
-    reviewed_by: balance_probe_20261124
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://ria.ru/export/rss2/index.xml
-    notes: "Probe 2026-11-24: HTTP 200, 20 entries."
+    '
+- source_id: ru_sputnik_world
+  name: Sputnik Globe (World RSS)
+  country_id: RU
+  organization_id: org_ru_sputnik
+  canonical_url: https://sputnikglobe.com/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://sputnikglobe.com/
+  compliance_status: allowed_internal
+  evidence_url: https://sputnikglobe.com/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://sputnikglobe.com/export/rss2/index.xml
+  notes: 'Active panel 2/2 RU. Probe 2026-11-24: HTTP 200, intl_or_china≈0.68–0.72 world mix. ria.ru world/politics
+    paths 404; site-wide RIA demoted. editorial_focus=international_or_china.
 
-  - source_id: ru_tass_english
-    name: TASS (English RSS)
-    country_id: RU
-    organization_id: org_ru_tass
-    canonical_url: https://tass.com/
-    source_type: state_controlled
-    ownership_type: state
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: Europe/Moscow
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://tass.com/
-    compliance_status: allowed_internal
-    evidence_url: https://tass.com/
-    classification_confidence: high
-    reviewed_by: phase1a_verifier
-    active_status: inactive
-    verification_status: verified
-    feed_or_api_url: https://tass.com/rss/v2.xml
-    notes: "Demoted 2026-11-24 in favor of Russian-language TASS/RIA panel."
+    '
+- source_id: ru_tass_russian
+  name: TASS (Russian RSS)
+  country_id: RU
+  organization_id: org_ru_tass
+  canonical_url: https://tass.ru/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: ru
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://tass.ru/
+  compliance_status: allowed_internal
+  evidence_url: https://tass.ru/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://tass.ru/rss/v2.xml
+  notes: 'Inactive. Probe 2026-11-24: site-wide domestic mix (intl_or_china≈0). Denylisted for active.
+    Section query params ignored (same domestic feed). Prefer tass.com English.
 
-  # —— DE (2 active): DW German + DW English ——
-  - source_id: de_dw_german
-    name: Deutsche Welle (German all)
-    country_id: DE
-    organization_id: org_dw
-    canonical_url: https://www.dw.com/de/
-    source_type: public_service
-    ownership_type: public_law
-    funding_type: public
-    government_control_level: medium
-    editorial_independence: medium
-    language: de
-    timezone: Europe/Berlin
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.dw.com/de/nutzungsbedingungen/a-15704087
-    compliance_status: allowed_internal
-    evidence_url: https://www.dw.com/de/über-uns/s-30604
-    classification_confidence: medium
-    reviewed_by: balance_probe_20261124
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://rss.dw.com/rdf/rss-de-all
-    notes: "Probe 2026-11-24: HTTP 200, 68 entries. Local-language primary for DE."
+    '
+- source_id: ru_ria
+  name: RIA Novosti (Russian RSS)
+  country_id: RU
+  organization_id: org_ru_ria
+  canonical_url: https://ria.ru/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: ru
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://ria.ru/
+  compliance_status: allowed_internal
+  evidence_url: https://ria.ru/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://ria.ru/export/rss2/index.xml
+  notes: 'Inactive. Probe 2026-11-24: site-wide domestic (ЕГЭ/traffic); world/politics export 404. Denylisted
+    for active. Replaced by Sputnik Globe world feed.
 
-  - source_id: de_dw_english
-    name: Deutsche Welle (English all)
-    country_id: DE
-    organization_id: org_dw
-    canonical_url: https://www.dw.com/
-    source_type: public_service
-    ownership_type: public_law
-    funding_type: public
-    government_control_level: medium
-    editorial_independence: medium
-    language: en
-    timezone: Europe/Berlin
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.dw.com/en/terms-of-use/a-16529300
-    compliance_status: allowed_internal
-    evidence_url: https://www.dw.com/en/about-dw/s-30606
-    classification_confidence: medium
-    reviewed_by: phase1a_verifier
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://rss.dw.com/rdf/rss-en-all
-    notes: "Active panel slot 2/2 for DE (English companion)."
+    '
+- source_id: ru_rt_english
+  name: RT World News (English RSS)
+  country_id: RU
+  organization_id: org_ru_rt
+  canonical_url: https://www.rt.com/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.rt.com/
+  compliance_status: allowed_internal
+  evidence_url: https://www.rt.com/
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.rt.com/rss/news
+  notes: 'Inactive verified backup. Probe 2026-11-24: intl_or_china≈0.64. Panel uses TASS EN + Sputnik;
+    RT held as spare. Organization tagged under Rossiya Segodnya family for seed FK.
 
-  # —— IN (2 active): PIB Hindi + NITI ——
-  - source_id: in_pib_hindi
-    name: Press Information Bureau (Hindi RSS)
-    country_id: IN
-    organization_id: org_in_pib
-    canonical_url: https://pib.gov.in/
-    source_type: gov_comms
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: hi
-    timezone: Asia/Kolkata
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://pib.gov.in/
-    compliance_status: allowed_internal
-    evidence_url: https://pib.gov.in/
-    classification_confidence: high
-    reviewed_by: balance_probe_20261124
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3"
-    config:
-      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    notes: >
-      Probe 2026-11-24: HTTP 200, 20 Hindi entries with browser UA + X-GNI-Client.
-      Not a login/paywall bypass. Local-language primary for IN.
+    '
+- source_id: de_dw_asia
+  name: Deutsche Welle (English Asia)
+  country_id: DE
+  organization_id: org_dw
+  canonical_url: https://www.dw.com/en/asia/s-1277
+  source_type: public_service
+  ownership_type: public_law
+  funding_type: public
+  government_control_level: medium
+  editorial_independence: medium
+  language: en
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.dw.com/en/terms-of-use/a-16529300
+  compliance_status: allowed_internal
+  evidence_url: https://www.dw.com/en/about-dw/s-30606
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://rss.dw.com/rdf/rss-en-asia
+  notes: 'Active panel 1/2 DE. Probe 2026-11-24: n≈11, china≈3–4, intl_or_china≈0.64–0.73. Prefer over
+    rss-de-all. German Asia RDF empty. editorial_focus=international_or_china.
 
-  - source_id: in_niti
-    name: NITI Aayog RSS
-    country_id: IN
-    organization_id: org_in_niti
-    canonical_url: https://www.niti.gov.in/
-    source_type: gov_comms
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: Asia/Kolkata
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.niti.gov.in/
-    compliance_status: allowed_internal
-    evidence_url: https://www.niti.gov.in/
-    classification_confidence: medium
-    reviewed_by: balance_probe_20261124
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://www.niti.gov.in/rss.xml
-    config:
-      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    notes: >
-      Probe 2026-11-24: HTTP 200 with browser UA, 10 entries. Panel slot 2/2 for IN.
-      Research UA alone may 403; X-GNI-Client still sent.
+    '
+- source_id: de_dw_english
+  name: Deutsche Welle (English all)
+  country_id: DE
+  organization_id: org_dw
+  canonical_url: https://www.dw.com/
+  source_type: public_service
+  ownership_type: public_law
+  funding_type: public
+  government_control_level: medium
+  editorial_independence: medium
+  language: en
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.dw.com/en/terms-of-use/a-16529300
+  compliance_status: allowed_internal
+  evidence_url: https://www.dw.com/en/about-dw/s-30606
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://rss.dw.com/rdf/rss-en-all
+  notes: 'Active panel 2/2 DE. Probe 2026-11-24: intl_or_china≈0.52. Companion to Asia desk. editorial_focus=international_or_china.
 
-  - source_id: in_president
-    name: President of India — RSS
-    country_id: IN
-    organization_id: org_in_president
-    canonical_url: https://www.presidentofindia.gov.in/
-    source_type: gov_comms
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: Asia/Kolkata
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.presidentofindia.gov.in/
-    compliance_status: allowed_internal
-    evidence_url: https://www.presidentofindia.gov.in/
-    classification_confidence: high
-    reviewed_by: phase1a_verifier
-    active_status: inactive
-    verification_status: verified
-    feed_or_api_url: https://www.presidentofindia.gov.in/rss.xml
-    config:
-      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    notes: "Demoted 2026-11-24 for balance; PIB Hindi + NITI preferred."
+    '
+- source_id: de_dw_german
+  name: Deutsche Welle (German all)
+  country_id: DE
+  organization_id: org_dw
+  canonical_url: https://www.dw.com/de/
+  source_type: public_service
+  ownership_type: public_law
+  funding_type: public
+  government_control_level: medium
+  editorial_independence: medium
+  language: de
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.dw.com/de/nutzungsbedingungen/a-15704087
+  compliance_status: allowed_internal
+  evidence_url: https://www.dw.com/de/über-uns/s-30604
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://rss.dw.com/rdf/rss-de-all
+  notes: 'Inactive. Probe 2026-11-24: intl_or_china≈0.36 (below 0.40 bar for non-Asia desk). Denylisted
+    for active; replaced by DW Asia.
 
-  # —— AU (2 active): PM + ABC ——
-  - source_id: au_pm_media
-    name: Prime Minister of Australia — media feed
-    country_id: AU
-    organization_id: org_au_pmc
-    canonical_url: https://www.pm.gov.au/
-    source_type: gov_comms
-    ownership_type: government
-    funding_type: public
-    government_control_level: high
-    editorial_independence: low
-    language: en
-    timezone: Australia/Sydney
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.pm.gov.au/copyright
-    compliance_status: allowed_internal
-    evidence_url: https://www.pm.gov.au/
-    classification_confidence: high
-    reviewed_by: phase1a_verifier
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://www.pm.gov.au/rss.xml
-    notes: "Active panel slot 1/2 for AU (English is the local official language)."
+    '
+- source_id: in_air_international
+  name: Akashvani News — International
+  country_id: IN
+  organization_id: org_in_air
+  canonical_url: https://newsonair.gov.in/
+  source_type: public_service
+  ownership_type: public
+  funding_type: public
+  government_control_level: medium
+  editorial_independence: medium
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://newsonair.gov.in/
+  compliance_status: allowed_internal
+  evidence_url: https://newsonair.gov.in/
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://newsonair.gov.in/category/international/feed/
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)
+      Chrome/120.0.0.0 Safari/537.36
+  notes: 'Active panel 1/2 IN. Probe 2026-11-24: HTTP 200, intl_or_china≈0.60–0.70 (UNSC/Asia/ West Asia).
+    Prasar Bharati public broadcaster — not equated to state_controlled. MEA historically 403. editorial_focus=international_or_china.
 
-  - source_id: au_abc_top
-    name: ABC News — Top Stories RSS
-    country_id: AU
-    organization_id: org_au_abc
-    canonical_url: https://www.abc.net.au/news/
-    source_type: public_service
-    ownership_type: public
-    funding_type: public
-    government_control_level: low
-    editorial_independence: medium
-    language: en
-    timezone: Australia/Sydney
-    access_method: rss
-    adapter_type: rss_adapter
-    terms_url: https://www.abc.net.au/conditions/
-    compliance_status: allowed_internal
-    evidence_url: https://www.abc.net.au/news/
-    classification_confidence: medium
-    reviewed_by: balance_probe_20261124
-    active_status: active
-    verification_status: verified
-    feed_or_api_url: https://www.abc.net.au/news/feed/45910/rss.xml
-    notes: >
-      Probe 2026-11-24: HTTP 200, 25 entries. Public broadcaster — not equated to
-      state_controlled. Panel slot 2/2 for AU.
+    '
+- source_id: in_pib_west_asia
+  name: Press Information Bureau — West Asia / MEA briefings
+  country_id: IN
+  organization_id: org_in_pib
+  canonical_url: https://pib.gov.in/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: hi
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://pib.gov.in/
+  compliance_status: allowed_internal
+  evidence_url: https://pib.gov.in/ViewRss.aspx
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=3
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)
+      Chrome/120.0.0.0 Safari/537.36
+  notes: 'Active panel 2/2 IN. Probe 2026-11-24: ModId=10 West Asia / MEA inter-ministerial pressers;
+    intl_or_china≈0.40 with Hindi विदेश/पश्चिम एशिया keywords. Thin/duplicate titles but foreign desk,
+    not domestic PIB Hindi (ModId=6). Browser UA required.
+
+    '
+- source_id: in_pib_hindi
+  name: Press Information Bureau (Hindi RSS)
+  country_id: IN
+  organization_id: org_in_pib
+  canonical_url: https://pib.gov.in/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: hi
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://pib.gov.in/
+  compliance_status: allowed_internal
+  evidence_url: https://pib.gov.in/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)
+      Chrome/120.0.0.0 Safari/537.36
+  notes: 'Inactive. Probe 2026-11-24: domestic Hindi releases (intl_or_china≈0.05). Denylisted.
+
+    '
+- source_id: in_niti
+  name: NITI Aayog RSS
+  country_id: IN
+  organization_id: org_in_niti
+  canonical_url: https://www.niti.gov.in/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.niti.gov.in/
+  compliance_status: allowed_internal
+  evidence_url: https://www.niti.gov.in/
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://www.niti.gov.in/rss.xml
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)
+      Chrome/120.0.0.0 Safari/537.36
+  notes: 'Inactive. Probe 2026-11-24: domestic economic-planning mix (intl_or_china≈0.10). Denylisted.
+
+    '
+- source_id: in_president
+  name: President of India — RSS
+  country_id: IN
+  organization_id: org_in_president
+  canonical_url: https://www.presidentofindia.gov.in/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.presidentofindia.gov.in/
+  compliance_status: allowed_internal
+  evidence_url: https://www.presidentofindia.gov.in/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://www.presidentofindia.gov.in/rss.xml
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)
+      Chrome/120.0.0.0 Safari/537.36
+  notes: Inactive domestic ceremonial speeches; not an international desk.
+- source_id: au_pm_media
+  name: Prime Minister of Australia — media feed
+  country_id: AU
+  organization_id: org_au_pmc
+  canonical_url: https://www.pm.gov.au/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.pm.gov.au/copyright
+  compliance_status: allowed_internal
+  evidence_url: https://www.pm.gov.au/
+  classification_confidence: high
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.pm.gov.au/rss.xml
+  notes: 'Active panel 1/2 AU. Probe 2026-11-24: intl_or_china≈0.76 (Australia-China joint statements,
+    Singapore/Solomon bilateral). Retained — not domestic-admin dominant. DFAT / foreignminister feeds
+    timeout or 404. editorial_focus=international_or_china.
+
+    '
+- source_id: au_sbs_world
+  name: SBS News — World
+  country_id: AU
+  organization_id: org_au_sbs
+  canonical_url: https://www.sbs.com.au/news/topic/world
+  source_type: public_service
+  ownership_type: public
+  funding_type: public
+  government_control_level: low
+  editorial_independence: medium
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.sbs.com.au/aboutus/copyright
+  compliance_status: allowed_internal
+  evidence_url: https://www.sbs.com.au/aboutus
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_or_api_url: https://www.sbs.com.au/news/topic/world/feed
+  notes: 'Active panel 2/2 AU. Probe 2026-11-24: intl_or_china≈0.40, china≈3/25. Replaces ABC Top Stories
+    (domestic). ABC World feed IDs return HTTP 500. Public broadcaster. editorial_focus=international_or_china.
+
+    '
+- source_id: au_abc_top
+  name: ABC News — Top Stories RSS
+  country_id: AU
+  organization_id: org_au_abc
+  canonical_url: https://www.abc.net.au/news/
+  source_type: public_service
+  ownership_type: public
+  funding_type: public
+  government_control_level: low
+  editorial_independence: medium
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.abc.net.au/conditions/
+  compliance_status: allowed_internal
+  evidence_url: https://www.abc.net.au/news/
+  classification_confidence: medium
+  reviewed_by: editorial_probe_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://www.abc.net.au/news/feed/45910/rss.xml
+  notes: 'Inactive. Probe 2026-11-24: intl_or_china≈0.28–0.36 domestic Top Stories. World feed 5115588
+    HTTP 500. Denylisted for active; replaced by SBS World.
+
+    '
+- source_id: ru_sputnik_en
+  name: Sputnik (English World RSS) — duplicate alias
+  country_id: RU
+  organization_id: org_ru_sputnik
+  canonical_url: https://sputnikglobe.com/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://sputnikglobe.com/
+  compliance_status: allowed_internal
+  evidence_url: https://sputnikglobe.com/
+  classification_confidence: high
+  reviewed_by: race_cleanup_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://sputnikglobe.com/export/rss2/index.xml
+  notes: Duplicate of ru_sputnik_world from seed race; kept inactive.
+- source_id: de_dw_world
+  name: Deutsche Welle (English World)
+  country_id: DE
+  organization_id: org_dw
+  canonical_url: https://www.dw.com/en/world/
+  source_type: public_service
+  ownership_type: public_law
+  funding_type: public
+  government_control_level: medium
+  editorial_independence: medium
+  language: en
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.dw.com/en/terms-of-use/a-16529300
+  compliance_status: allowed_internal
+  evidence_url: https://www.dw.com/en/about-dw/s-30606
+  classification_confidence: high
+  reviewed_by: race_cleanup_20261124
+  active_status: inactive
+  verification_status: verified
+  feed_or_api_url: https://rss.dw.com/rdf/rss-en-world
+  notes: Verified World desk; panel uses de_dw_english as 2nd DE slot; kept as backup.
