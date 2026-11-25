@@ -286,42 +286,54 @@ def _select_articles_for_analysis(
         q = q.where(Article.analysis_status.in_(["pending", "failed"]))
     q = q.order_by(Article.first_seen_at.asc())
 
-    # Fetch a wide pool when capping per country; otherwise apply limit in SQL.
+    # Per-country: query each country separately so one backlog (e.g. RU) cannot starve others.
     if per_country is not None and per_country > 0:
-        pool_cap = max(per_country * 40, (limit or 0), 200)
-        pool_cap = min(pool_cap, max(articles_remaining, 0) or pool_cap)
-        candidates = list(session.scalars(q.limit(pool_cap)).all())
-        sources = {
-            s.id: s
-            for s in session.scalars(
-                select(Source).where(Source.id.in_({a.source_id for a in candidates}))
+        country_ids = list(
+            session.scalars(
+                select(Source.country_id).where(Source.country_id.is_not(None)).distinct()
             ).all()
-        } if candidates else {}
-        by_country: dict[str, list[Article]] = defaultdict(list)
-        for a in candidates:
-            src = sources.get(a.source_id)
-            cid = (src.country_id if src else None) or "UNK"
-            if len(by_country[cid]) < per_country:
-                by_country[cid].append(a)
+        )
         picked: list[Article] = []
         counts: dict[str, int] = {}
-        for cid in sorted(by_country.keys()):
-            rows = by_country[cid]
+        remaining = articles_remaining if articles_remaining >= 0 else 10**9
+        for cid in sorted(str(c) for c in country_ids if c):
+            if remaining <= 0:
+                break
+            take = min(per_country, remaining)
+            cq = (
+                select(Article)
+                .join(Source, Source.id == Article.source_id)
+                .where(
+                    Article.processing_status == "done",
+                    Article.exclude_from_metrics.is_(False),
+                    Source.country_id == cid,
+                )
+            )
+            if source_id:
+                cq = cq.where(Article.source_id == source_id)
+            if not reanalyze:
+                cq = cq.where(Article.analysis_status.in_(["pending", "failed"]))
+            cq = cq.order_by(Article.first_seen_at.asc()).limit(take)
+            rows = list(session.scalars(cq).all())
+            if not rows:
+                continue
             counts[cid] = len(rows)
             picked.extend(rows)
-        # Stable-ish: already first_seen order within country; keep country groups
+            remaining -= len(rows)
         if limit is not None:
-            picked = picked[: min(limit, articles_remaining)]
-        else:
-            picked = picked[:articles_remaining] if articles_remaining >= 0 else picked
-        # Recount after total trim
-        trimmed: dict[str, int] = defaultdict(int)
-        sources2 = sources
-        for a in picked:
-            src = sources2.get(a.source_id)
-            cid = (src.country_id if src else None) or "UNK"
-            trimmed[cid] += 1
-        return picked, dict(trimmed)
+            picked = picked[:limit]
+            trimmed: dict[str, int] = defaultdict(int)
+            src_map = {
+                s.id: s
+                for s in session.scalars(
+                    select(Source).where(Source.id.in_({a.source_id for a in picked}))
+                ).all()
+            } if picked else {}
+            for a in picked:
+                src = src_map.get(a.source_id)
+                trimmed[(src.country_id if src else None) or "UNK"] += 1
+            return picked, dict(trimmed)
+        return picked, counts
 
     cap = limit if limit is not None else 20
     cap = min(cap, articles_remaining) if articles_remaining >= 0 else cap
