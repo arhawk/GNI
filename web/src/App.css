@@ -555,8 +555,143 @@ h4 {
   margin: 0.5rem 0 0;
 }
 
+.report-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.report-tabs button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.report-tabs button.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.brief-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.brief-lede {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  max-width: 52rem;
+}
+
+.brief-kpis {
+  margin: 0.85rem 0 1rem;
+}
+
+.brief-kpi {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-elev);
+}
+
+.brief-kpi-value {
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.brief-kpi-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.brief-changes {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.brief-section {
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.event-card {
+  margin: 0.85rem 0 1.1rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-elev));
+}
+
+.event-card-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.event-idx {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.event-core {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem 0.75rem;
+  margin: 0.65rem 0;
+}
+
+.event-core dt {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.event-core dd {
+  margin: 0.1rem 0 0;
+}
+
+.tone-summaries {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.tone-summaries li {
+  margin-bottom: 0.45rem;
+  line-height: 1.45;
+}
+
+.report-page .linkish {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  margin: 0.35rem 0 0.65rem;
+}
+
+.report-placeholder {
+  padding: 0.5rem 0 1rem;
+}
+
 .report-page h2 {
   margin-top: 1.25rem;
+}
+
+.daily-brief .brief-section h2 {
+  margin-top: 0;
 }
 
 .report-page table {

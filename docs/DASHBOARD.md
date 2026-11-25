@@ -122,9 +122,19 @@
 ```text
 Overview → Event pin / 异常列表 → Event 三视图（多源文章 + 上卷情感）→ Articles / Evidence → Report
 Overview → 对华态度地图 → Country 下钻（正/中/负/未知篇数 + 文章抽样）
-
-日报数据口径：**事件主线 + 文章证据**（见 [EVENT_FINGERPRINT.md](EVENT_FINGERPRINT.md)）；生成器可后置。
 ```
+
+### 报告中心
+
+三入口（产品见 [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)）：
+
+| 入口 | 状态 | 说明 |
+|------|------|------|
+| Daily Brief | **实现** | `daily_report_schema_v2`：事件主线 + 可读摘要；见 [DAILY_REPORT_SPEC.md](DAILY_REPORT_SPEC.md) |
+| Weekly | 规划中 | 变化分析；见 [WEEKLY_REPORT_SPEC.md](WEEKLY_REPORT_SPEC.md) |
+| Monthly | 规划中 | 长期格局；见 [MONTHLY_REPORT_SPEC.md](MONTHLY_REPORT_SPEC.md) |
+
+报告结论应可点击下钻至事件 / 国家 / 趋势 / 预警页。
 
 ---
 

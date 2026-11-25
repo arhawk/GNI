@@ -137,58 +137,73 @@ export type DailyReport = {
   report_type: string
   schema_version?: string
   period: string
+  period_start?: string
+  period_end?: string
+  timezone?: string
   generated_at: string
   country_scope: string[]
   target_scope: string
   disclaimer: string
   generator?: string
+  article_count?: number
+  event_count?: number
+  validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
   narratives?: {
-    attention?: string
+    executive?: string
+    coverage?: string
     tone?: string
-    agenda?: string
-    events?: string
+    signals?: string
     quality?: string
   }
   sections: {
-    attention: {
-      china_article_count: number
-      attention_share: number | null
-      day_article_count: number
-      missing_analysis: number
-      coverage_by_country: Array<{
-        country_id: string
-        article_count: number
-        analyzed_count: number
-        china_article_count?: number
-        source_count?: number
+    summary: {
+      kpis: {
+        china_articles: number
+        reporting_countries: number
+        reporting_sources: number
+        new_events: number
+        major_events: number
+        day_articles: number
+      }
+      comparisons?: {
+        vs_yesterday?: { china_articles: number; delta: number }
+        vs_7d_avg?: { china_articles: number; delta: number }
+      }
+      top_changes: Array<{
+        title: string
+        summary: string
+        kind: string
+        href?: string
+        evidence?: Record<string, unknown>
       }>
+      overview_text: string
     }
-    tone: {
-      note?: string
-      overall_sentiment_counts: Record<string, number>
-      overall_stance_counts: Record<string, number>
-      by_country: Record<
-        string,
-        {
-          analyzed_china: number
-          sentiment_counts: Record<string, number>
-          stance_counts: Record<string, number>
-        }
-      >
-    }
-    agenda: {
-      topics_top: Array<{ label: string; count: number; share: number }>
-      frames_top: Array<{ label: string; count: number; share: number }>
-      by_country?: Record<string, unknown>
-    }
-    events: Array<{
+    major_events: Array<{
       event_id: string
       title: string
-      event_time: string | null
-      article_count: number
-      multi_source?: boolean
-      reporting_countries?: string[]
+      importance_score?: number | null
+      event_type?: string | null
+      event_time?: string | null
       first_seen_at?: string | null
+      status?: string | null
+      overview_text?: string
+      href?: string
+      core?: Record<string, string | null | undefined>
+      coverage?: {
+        article_count: number
+        country_count: number
+        source_count: number
+        countries?: string[]
+      }
+      by_country_views?: Array<{
+        country_id: string
+        article_count: number
+        dominant_sentiment?: string | null
+        dominant_stance?: string | null
+        frame?: string | null
+        href?: string
+      }>
+      follow_ups?: string[]
       evidence: Array<{
         article_id: string
         title: string | null
@@ -196,24 +211,55 @@ export type DailyReport = {
         url?: string | null
         sentiment?: string | null
         stance?: string | null
+        published_at?: string | null
       }>
     }>
-    evidence: Record<
-      string,
-      Array<{
-        article_id: string
-        title: string | null
-        url: string | null
-        sentiment: string | null
-        stance: string | null
-        topic?: string | null
-        frame?: string | null
+    coverage: {
+      by_country: Array<{
+        country_id: string
+        article_count: number
+        weighted_volume?: number
+        source_count?: number
+        href?: string
       }>
-    >
+      by_source?: Array<{
+        source_id: string
+        name: string
+        country_id: string | null
+        article_count: number
+      }>
+      topics_top: Array<{ label: string; count: number; share: number }>
+      frames_top: Array<{ label: string; count: number; share: number }>
+      note?: string
+    }
+    tone: {
+      note?: string
+      overall_sentiment_counts: Record<string, number>
+      overall_stance_counts: Record<string, number>
+      by_country: Array<{
+        country_id: string
+        n: number
+        sentiment_counts: Record<string, number>
+        stance_counts: Record<string, number>
+        summary_text: string
+        href?: string
+      }>
+    }
+    signals: Array<{
+      id?: string
+      subcategory?: string
+      severity?: string
+      title: string
+      summary?: string
+      status?: string
+      href?: string
+      evidence?: Record<string, unknown>
+    }>
     quality: {
       missing_analysis: number
       countries_without_sample: string[]
       notes: string[]
+      source_health_summary?: Record<string, unknown>
       source_health?: Array<Record<string, unknown>>
     }
   }
