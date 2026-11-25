@@ -107,3 +107,33 @@ def test_daily_sentiment_bar_skips_government():
     assert out["sentiment_skipped_government"] == 1
     assert out["sentiment_counts"]["positive"] == 1
     assert out["sentiment_counts"]["negative"] == 1
+
+
+def test_risk_tagging_and_validate_v4_shape():
+    from gni.reports.risk_tagging import tag_text
+    from gni.reports.validate import validate_daily_report
+
+    tags = tag_text("Congress hearing on export controls and optical modules")
+    assert tags["risk_level"] in {"high", "medium"}
+    assert "optical_modules" in tags["sector_ids"]
+
+    payload = {
+        "schema_version": "daily_report_schema_v4",
+        "report_type": "daily",
+        "period": "2026-11-25",
+        "disclaimer": "test",
+        "sections": {
+            "summary": {"kpis": {"china_articles": 0}, "overview_text": "x"},
+            "overview_stats": {},
+            "major_events": [],
+            "coverage": {},
+            "tone": {},
+            "anomalies": [],
+            "signals": [],
+            "ops": {},
+            "quality": {},
+        },
+        "narratives": {},
+    }
+    v = validate_daily_report(payload)
+    assert v["ok"], v["errors"]

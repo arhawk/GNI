@@ -1,151 +1,73 @@
 # 每日情报规格（DAILY_REPORT_SPEC）
 
-**版本：** daily_report_schema_v2  
+**版本：** daily_report_schema_v4（Ops/Risk；预警优先）  
 **产品名：** Daily Intelligence Brief（每日情报）  
-**核心问题：** 今天发生了什么？哪些事情值得关注？  
+**核心问题：** 今天有没有高风险？异动在哪？明日跟什么？采集是否异常？  
 **阅读时长：** 3–5 分钟  
-**对齐：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、[REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)、[EVENT_FINGERPRINT.md](EVENT_FINGERPRINT.md)  
-**原则：** **规则算数 → 结构化 JSON →（可选）LLM 只写叙述**；读报正文在前，计数表为明细。
+**对齐：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、[REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)、固定八维中的**日报必出子集**  
+**原则：** **规则算数 → 结构化 JSON →（可选）LLM 只写叙述**；预警段在前。
 
-旧版 `daily_report_schema_v1`（七段表格式）废止为默认；API 可保留兼容，默认输出 v2。
-
----
-
-## 1. 固定目录
-
-| # | 章节 | 重要性 | 必须回答 |
-|---|------|--------|----------|
-| 1 | Executive Summary | 必须 | 今日总体情况、KPI、今日值得关注的最多 3 个变化 |
-| 2 | Major Events | 必须 | 按**重要性**排序的事件卡（非按篇数） |
-| 3 | Global Coverage | 必须 | 哪些国家/媒体最关注中国；Article Count 与 Weighted Volume **并列** |
-| 4 | Sentiment & Stance | 必须 | 当日情感/立场分布与分国差异（分列） |
-| 5 | Emerging Signals & Alerts | 必须 | 值得注意但未成大事的信号；可标 UNCONFIRMED / NEEDS_REVIEW |
-| 6 | Source & Data Coverage Notes | 建议 | 缺口、积压、无样本国、口径 |
-
-**禁止：** 合成对华舆情总分；把媒体样本写成国家立场/民意；无 `article_id`/`event_id` 的事实句；用加权量替代实际篇数。
+旧版 `daily_report_schema_v2` 读报布局仍可解析字段；默认输出 **v4**。
 
 ---
 
-## 2. JSON 形状（`daily_report_schema_v2`）
+## 1. 日报五段（产品结构）
+
+| # | 章节 | 必须回答 |
+|---|------|----------|
+| 1 | 当日摘要 | 一句话基调 + **有无突发高风险**（`risk_banner`） |
+| 2 | 数据统计 | 有效报道量、采集/排除、各国情感简表、媒体类型桶、情感分技术均值 |
+| 3 | 重点事件 | 国｜媒体类型｜叙事｜情感｜**风险**｜**赛道**；异动标红 |
+| 4 | 舆情异动 | 事件异动 + 情报信号（基线/量/叙事规则） |
+| 5 | 次日跟踪 + 采集 | follow_ups + crawl_status（429/失败/失联） |
+
+固定八维中：关注度无社媒热度；风险/赛道为关键词 taxonomy MVP（[`configs/risk_sectors.yaml`](../configs/risk_sectors.yaml)）。
+
+**禁止：** 合成对华舆情总分当国家态度；把媒体样本写成民意；无 id 的事实句；虚构全球源数；社媒公众兴趣曲线。
+
+---
+
+## 2. JSON 形状（v4 增量）
+
+在 v2 字段之上增加：
 
 ```text
-schema_version          # daily_report_schema_v2
-report_type             # daily
-period / period_start / period_end / timezone
-generated_at
-disclaimer
-country_scope
-generator               # rule | rule+llm
-validation              # { ok, checks[], errors[] }
-
-sections.summary
-  kpis                  # china_articles, reporting_countries, reporting_sources,
-                        # new_events, major_events, day_articles
-  comparisons           # vs_yesterday, vs_7d_avg (china_articles / new_events …)
-  top_changes[]         # { title, summary, kind, href?, evidence{} } 最多 3
-  overview_text         # 规则或 LLM 润色后的今日概述（叙述）
-
-sections.major_events[]
-  event_id, title, importance_score, event_type?, event_time, first_seen_at
-  status?, overview_text
-  core                  # actor, action, object, target, status（可得则填）
-  coverage              # article_count, country_count, source_count, countries[]
-  by_country_views[]    # { country_id, article_count, dominant_sentiment?, dominant_stance?, frame? }
-  follow_ups[]          # 后续关注问题（规则模板或 LLM）
-  evidence[]            # article_id, title, url, country_id, source_id, sentiment, stance, published_at
-
-sections.coverage
-  by_country[]          # country_id, article_count, weighted_volume?, source_count
-  by_source[]           # source_id, name, country_id, article_count
-  topics_top[] / frames_top[]
-  note
-
-sections.tone
-  overall_sentiment_counts / overall_stance_counts
-  by_country[]          # country_id, n, sentiment_counts, stance_counts, summary_text
-  note                  # 情感≠立场；引述≠媒体自身
-
-sections.signals[]
-  id, subcategory, severity, title, summary, status  # confirmed|needs_review|unconfirmed
-  href, evidence{}
-
-sections.quality
-  missing_analysis, countries_without_sample, source_health_summary, notes[]
-
-narratives              # 可选 LLM：executive, coverage, tone, signals, quality
+schema_version          # daily_report_schema_v4
+sections.summary.risk_banner   # { has_high_risk, high_risk_event_count, text }
+sections.overview_stats
+  connected_countries, media_type_counts(_zh)
+  ingest{ day_total, china_effective, excluded..., duplicates, thin_or_stub }
+  crawl_summary, sentiment_tech{ score_mean, vs_yesterday_delta, note }
+  narrative_split{ official_topics_top, media_topics_top }
+  sentiment_by_media_type
+sections.major_events[]  += primary_country, source_bucket(_zh), narrative_labels,
+  sentiment_label, risk_level, sectors[], anomaly{flagged,reasons}, timeline[]
+sections.anomalies[]
+sections.ops{ follow_ups[], crawl_status[], note }
 ```
 
----
-
-## 3. 各节规则与 LLM 边界
-
-### 3.1 Executive Summary
-
-- **Facts：** KPI + vs 昨日 / vs 近 7 日日均；`top_changes` 来自量异常、跨国议题、A 类预警。  
-- **规则叙述：** 固定模板拼「涉华 N 篇、M 国、K 源、新增事件…」。  
-- **LLM：** 可写 `overview_text` / `narratives.executive`（≤120 字），不得发明数字。
-
-### 3.2 Major Events
-
-- 排序：`importance_score` 降序，其次多源/跨国。  
-- 每卡必须含：发生了什么、覆盖量、分国视角摘要、证据链接。  
-- 区分 `event_time` 与 `first_seen_at`。  
-- **LLM：** 可写 `overview_text`、`follow_ups`；不得改 coverage 数字。
-
-### 3.3 Global Coverage
-
-- 国家排行、媒体排行；Topic/Frame Top。  
-- Article Count 与 Weighted Article Volume 分开展示。  
-- UI：白话一句 + 可展开明细表。
-
-### 3.4 Sentiment & Stance
-
-- 总体 + 分国；每国一条 `summary_text`（规则：主导情感/立场标签 + n）。  
-- 情感描述语气；立场绑定 Target；引述观点不得当成媒体立场。
-
-### 3.5 Signals
-
-- 复用警报引擎 A 类（情报）当日相关；系统 B 类进 quality，不混进舆情信号主栏。  
-- 允许 `needs_review` / `unconfirmed`。
-
-### 3.6 Quality
-
-- 积压、源健康、无样本国；与舆情结论分区。
+`sentiment_tech.score_mean` = 文章情感分均值（技术指标），**≠ 舆情总分**。
 
 ---
 
-## 4. UI（报告中心 · 日报）
+## 3. 可视化
 
-1. 顶栏：DAILY BRIEF · 日期 · 口径 callout  
-2. KPI 四格 +「今日三变化」列表（可点跳转）  
-3. 重大事件卡（主阅读区）  
-4. 全球覆盖（总结 + 明细）  
-5. 情感与立场（分国白话 + 可展开表）  
-6. 新兴信号  
-7. 数据说明  
-
-周报 / 月报 Tab：占位，链到规格文档摘要。
-
-点击约定见 [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md) §3。
-
-可视化风格参考：[assets/report-ui/daily-visual-ref.jpg](assets/report-ui/daily-visual-ref.jpg)。  
-**视觉 v3：** KPI（要闻/涉华篇/引用来源）+ 事件列表旁 **正面/中立/负面** 情感比例条 + 主题横条 + 当前接入国覆盖；仅媒体量对比 sparkline。**不做**社媒「公众兴趣」/ X 信息流；不写 Left–Center–Right 政治偏见。
+- 风险条、异动标红表、情感三色条、主题横条、媒体量 sparkline  
+- **不做**社媒栏 / Left–Right 政治偏见条  
 
 ---
 
-## 5. 生成流水线
+## 4. 生成流水线
 
-1. Rule assemble — `build_daily_report()` 填满 v2 facts。  
-2. Rule narratives — 分国/事件短段。  
-3. Validator — 窗口、事件去重、Fact 绑定、禁总分措辞抽检。  
-4. Optional polish — LLM 只改 narratives / overview 字符串。  
-5. Render — 报告中心按读报布局渲染。
+1. Rule assemble — `build_daily_report()` → v4 facts + risk/sector tag  
+2. Validator — 窗口、事件去重、Fact 绑定、禁总分措辞  
+3. Optional polish — 仅 narratives  
+4. Render — 报告中心五段布局  
 
 ---
 
-## 6. 验收
+## 5. 验收
 
-- 几分钟内能读懂今日最重要的事（事件卡为主）。  
-- 情感与立场有中文总结，不只是 JSON 表。  
-- 证据可点；无 API key 仍可完整出报。  
-- JSON 含齐 v2 六节键；`validation.ok` 为 true 或显式 errors。
+- 1 分钟内能答：有无高风险、各国情感简表、哪几条标红、明日跟什么、爬虫是否异常  
+- 事件行可见 risk_level 与 sectors（无则 `unmapped`）  
+- 无 API key 仍可完整出报  

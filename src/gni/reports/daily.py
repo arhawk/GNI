@@ -20,10 +20,17 @@ from gni.metrics.definitions import (
     RELEVANCE_WEIGHT_VERSION,
 )
 from gni.metrics.service import _latest_analyses
+from gni.reports.risk_tagging import (
+    MEDIA_TYPE_ZH,
+    elevate_risk,
+    media_type_bucket,
+    risk_from_alert_severity,
+    tag_text,
+)
 from gni.reports.validate import validate_daily_report
 
 MONITOR_DEFAULT = ["US", "RU", "DE", "IN", "AU"]
-SCHEMA_VERSION = "daily_report_schema_v2"
+SCHEMA_VERSION = "daily_report_schema_v4"
 DISCLAIMER = (
     "全球对华监测产品；当前按接入国/源覆盖统计。"
     "情感条为正面/中立/负面语气分布（≠立场、≠国家态度）；"
@@ -207,9 +214,8 @@ def build_daily_report(
 ) -> dict[str, Any]:
     countries = country_scope or list(MONITOR_DEFAULT)
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
-    articles = list(
-        session.scalars(select(Article).where(Article.exclude_from_metrics.is_(False))).all()
-    )
+    all_articles = list(session.scalars(select(Article)).all())
+    articles = [a for a in all_articles if not a.exclude_from_metrics]
 
     report_day = resolve_report_day(day)
     # When caller asks for "today" and the calendar day is empty, fall back to
@@ -288,11 +294,15 @@ def build_daily_report(
             }
         )
 
-    # Tone aggregates
+    # Tone aggregates + media-type / official-vs-media narrative split
     sent_overall: Counter[str] = Counter()
     stance_overall: Counter[str] = Counter()
     topic_overall: Counter[str] = Counter()
     frame_overall: Counter[str] = Counter()
+    sent_by_media_type: dict[str, Counter[str]] = {}
+    topic_official: Counter[str] = Counter()
+    topic_media: Counter[str] = Counter()
+    sentiment_scores: list[float] = []
     by_country_tone: dict[str, dict[str, Any]] = {
         c: {"sentiment_counts": Counter(), "stance_counts": Counter(), "n": 0}
         for c in countries
@@ -304,16 +314,28 @@ def build_daily_report(
         structured = analyses[a.id].structured_result or {}
         src = sources.get(a.source_id)
         cid = (src.country_id if src else None) or "UNK"
+        bucket = media_type_bucket(src)
         sl = _norm_sentiment((structured.get("sentiment") or {}).get("label"))
         st = _stance_label(structured)
         tp = _topic_primary(structured)
         fr = _frame_primary(structured)
-        is_gov = bool(src and (src.feed_scope or "").upper() == "GOVERNMENT_RELEASES")
+        is_gov = bucket == "government_agency" or (
+            src and (src.feed_scope or "").upper() == "GOVERNMENT_RELEASES"
+        )
+        sent_obj = structured.get("sentiment") or {}
+        if isinstance(sent_obj, dict) and isinstance(sent_obj.get("score"), (int, float)):
+            if not is_gov:
+                sentiment_scores.append(float(sent_obj["score"]))
         if not is_gov:
             sent_overall[sl] += 1
+            sent_by_media_type.setdefault(bucket, Counter())[sl] += 1
         stance_overall[st] += 1
         if tp:
             topic_overall[str(tp)] += 1
+            if is_gov:
+                topic_official[str(tp)] += 1
+            else:
+                topic_media[str(tp)] += 1
         if fr:
             frame_overall[str(fr)] += 1
         if cid in by_country_tone and not is_gov:
@@ -467,6 +489,63 @@ def build_daily_report(
             "报道框架是否从政策本身转向产业/安全影响？",
         ]
         sent_bar = _sentiment_bar_from_evidence(evidence, sources)
+        bucket_counts: Counter[str] = Counter()
+        for ev in evidence:
+            src = sources.get(ev.get("source_id") or "")
+            bucket_counts[media_type_bucket(src)] += 1
+        primary_bucket = bucket_counts.most_common(1)[0][0] if bucket_counts else "other"
+        primary_country = (
+            country_art_n.most_common(1)[0][0] if country_art_n else (sorted(countries_reporting)[0] if countries_reporting else None)
+        )
+        tags = tag_text(
+            e.get("title"),
+            e.get("summary"),
+            e.get("event_type"),
+            " ".join(ev.get("title") or "" for ev in evidence[:6]),
+        )
+        shares = sent_bar["sentiment_shares"]
+        neg_share = float(shares.get("negative") or 0)
+        dom_sent = "negative" if neg_share >= max(shares.get("positive", 0), shares.get("neutral", 0)) else (
+            "positive" if shares.get("positive", 0) >= shares.get("neutral", 0) else "neutral"
+        )
+        if sent_bar["sentiment_n"] == 0:
+            dom_sent = "unknown"
+        anomaly_reasons: list[str] = []
+        if tags["risk_level"] == "high":
+            anomaly_reasons.append("政策/制裁类高风险关键词")
+        if sent_bar["sentiment_n"] >= 2 and neg_share >= 0.5:
+            anomaly_reasons.append(f"媒体情感负面占比 {neg_share:.0%}")
+        if (imp or 0) >= 0.7 and neg_share >= 0.4 and sent_bar["sentiment_n"] >= 1:
+            anomaly_reasons.append("高重要性事件伴随偏负面语气")
+        if len(countries_reporting) >= 3 and (imp or 0) >= 0.55:
+            anomaly_reasons.append("三国及以上同步报道")
+        anomaly = {
+            "flagged": bool(anomaly_reasons),
+            "reasons": anomaly_reasons,
+        }
+        timeline = []
+        if first_seen:
+            timeline.append({"at": first_seen.isoformat(), "label": "first_seen"})
+        if event_time:
+            timeline.append({"at": event_time.isoformat(), "label": "event_time"})
+        for ev in sorted(
+            [x for x in evidence if x.get("published_at")],
+            key=lambda x: str(x.get("published_at")),
+        )[:5]:
+            timeline.append(
+                {
+                    "at": ev.get("published_at"),
+                    "label": "article",
+                    "article_id": ev.get("article_id"),
+                    "country_id": ev.get("country_id"),
+                }
+            )
+        narrative_labels = []
+        if e.get("event_type"):
+            narrative_labels.append(str(e["event_type"]))
+        for t in tags["sectors"]:
+            if t["id"] != "unmapped":
+                narrative_labels.append(t["label"])
         major_events.append(
             {
                 "event_id": eid,
@@ -489,6 +568,17 @@ def build_daily_report(
                 "sentiment_shares": sent_bar["sentiment_shares"],
                 "sentiment_n": sent_bar["sentiment_n"],
                 "sentiment_skipped_government": sent_bar["sentiment_skipped_government"],
+                "sentiment_label": dom_sent,
+                "primary_country": primary_country,
+                "source_bucket": primary_bucket,
+                "source_bucket_zh": MEDIA_TYPE_ZH.get(primary_bucket, primary_bucket),
+                "narrative_labels": narrative_labels[:6],
+                "risk_level": tags["risk_level"],
+                "sectors": tags["sectors"],
+                "sector_ids": tags["sector_ids"],
+                "matched_triggers": tags["matched_triggers"],
+                "anomaly": anomaly,
+                "timeline": timeline,
                 "by_country_views": by_country_views,
                 "follow_ups": follow_ups,
                 "evidence": evidence[:12],
@@ -550,6 +640,183 @@ def build_daily_report(
             }
         )
 
+    # Elevate event risk from overlapping alert titles; build anomalies list
+    for m in major_events:
+        title_l = (m.get("title") or "").lower()
+        for sig in signals:
+            if (sig.get("severity") or "") != "high":
+                continue
+            st = (sig.get("title") or "").lower()
+            if st and (st[:24] in title_l or title_l[:24] in st):
+                m["risk_level"] = elevate_risk(m.get("risk_level") or "unmapped", risk_from_alert_severity("high"))
+                anom = m.setdefault("anomaly", {"flagged": False, "reasons": []})
+                anom["flagged"] = True
+                anom.setdefault("reasons", []).append(f"关联高严重度信号：{sig.get('title')}")
+
+    anomalies: list[dict[str, Any]] = []
+    for m in major_events:
+        if (m.get("anomaly") or {}).get("flagged"):
+            anomalies.append(
+                {
+                    "kind": "event_anomaly",
+                    "event_id": m.get("event_id"),
+                    "title": m.get("title"),
+                    "risk_level": m.get("risk_level"),
+                    "reasons": (m.get("anomaly") or {}).get("reasons") or [],
+                    "href": m.get("href"),
+                }
+            )
+    for sig in signals:
+        anomalies.append(
+            {
+                "kind": "signal",
+                "id": sig.get("id"),
+                "subcategory": sig.get("subcategory"),
+                "severity": sig.get("severity"),
+                "title": sig.get("title"),
+                "summary": sig.get("summary"),
+                "href": sig.get("href") or "/alerts",
+            }
+        )
+    anomalies = anomalies[:12]
+
+    # Overview stats: ingest vs effective vs filtered; media types; crawl
+    day_all = [a for a in all_articles if _in_range(a, win_start, win_end)]
+    excluded_day = [a for a in day_all if a.exclude_from_metrics]
+    dup_day = [a for a in day_all if a.duplicate_of_article_id]
+    brief_day = [
+        a
+        for a in day_all
+        if (a.quality_status or "") in {"insufficient_text", "too_short", "rss_stub"}
+        or (a.content_clean is None and (a.quality_status or "") == "rss_stub")
+    ]
+    media_type_counts: Counter[str] = Counter()
+    for a in china_day:
+        media_type_counts[media_type_bucket(sources.get(a.source_id))] += 1
+
+    health_map = {h.source_id: h for h in session.scalars(select(SourceHealth)).all()}
+    crawl_status: list[dict[str, Any]] = []
+    for sid, src in sources.items():
+        if (src.active_status or "") != "active" or src.country_id not in countries:
+            continue
+        h = health_map.get(sid)
+        fail = int(h.failure_count) if h else 0
+        ok_n = int(h.success_count) if h else 0
+        err = (h.error_message or "") if h else ""
+        status = "ok"
+        if fail > ok_n and fail > 0:
+            status = "failing"
+        elif "429" in err:
+            status = "rate_limited"
+        elif fail > 0 and ok_n == 0:
+            status = "unreachable"
+        crawl_status.append(
+            {
+                "source_id": sid,
+                "name": src.name,
+                "country_id": src.country_id,
+                "status": status,
+                "success_count": ok_n,
+                "failure_count": fail,
+                "last_error": err[:200] if err else None,
+            }
+        )
+    crawl_status.sort(key=lambda r: (0 if r["status"] != "ok" else 1, r["source_id"]))
+
+    sent_mean = round(sum(sentiment_scores) / len(sentiment_scores), 4) if sentiment_scores else None
+    # Yesterday score mean (technical baseline)
+    y_articles = [
+        a
+        for a in articles
+        if _in_range(a, y_start, y_end) and (a.china_relevance_level or "") in CHINA_INCLUDE_LEVELS
+    ]
+    y_analyses = _latest_analyses(session, [a.id for a in y_articles if a.analysis_status == "completed"])
+    y_scores: list[float] = []
+    for a in y_articles:
+        if a.id not in y_analyses:
+            continue
+        src = sources.get(a.source_id)
+        if media_type_bucket(src) == "government_agency":
+            continue
+        structured = y_analyses[a.id].structured_result or {}
+        sent_obj = structured.get("sentiment") or {}
+        if isinstance(sent_obj, dict) and isinstance(sent_obj.get("score"), (int, float)):
+            y_scores.append(float(sent_obj["score"]))
+    y_mean = round(sum(y_scores) / len(y_scores), 4) if y_scores else None
+    sent_delta = round(sent_mean - y_mean, 4) if sent_mean is not None and y_mean is not None else None
+
+    overview_stats = {
+        "connected_countries": countries,
+        "media_type_counts": dict(media_type_counts),
+        "media_type_counts_zh": {
+            MEDIA_TYPE_ZH.get(k, k): v for k, v in media_type_counts.items()
+        },
+        "ingest": {
+            "day_total": len(day_all),
+            "day_included": len(day_articles),
+            "china_effective": len(china_day),
+            "excluded_from_metrics": len(excluded_day),
+            "duplicates": len(dup_day),
+            "thin_or_stub": len(brief_day),
+        },
+        "crawl_summary": {
+            "active_sources": sum(1 for r in crawl_status if True),
+            "failing": sum(1 for r in crawl_status if r["status"] != "ok"),
+            "rate_limited": sum(1 for r in crawl_status if r["status"] == "rate_limited"),
+        },
+        "sentiment_tech": {
+            "score_mean": sent_mean,
+            "score_mean_yesterday": y_mean,
+            "vs_yesterday_delta": sent_delta,
+            "n_scored": len(sentiment_scores),
+            "note": "文章情感分均值（技术指标），≠ 舆情总分 / 国家态度。",
+        },
+        "narrative_split": {
+            "official_topics_top": _top_n(topic_official, 5),
+            "media_topics_top": _top_n(topic_media, 5),
+            "note": "官方口径≈政府传播源；媒体评论≈其余媒体源主题。",
+        },
+        "sentiment_by_media_type": {
+            k: dict(v) for k, v in sent_by_media_type.items()
+        },
+    }
+
+    high_risk_events = [m for m in major_events if m.get("risk_level") == "high"]
+    has_high_risk = bool(high_risk_events) or any(
+        (s.get("severity") == "high") for s in signals
+    )
+    risk_banner = {
+        "has_high_risk": has_high_risk,
+        "high_risk_event_count": len(high_risk_events),
+        "text": (
+            f"突发高风险：有（{len(high_risk_events)} 件事件 / "
+            f"{sum(1 for s in signals if s.get('severity') == 'high')} 条高严重度信号）。"
+            if has_high_risk
+            else "突发高风险：未见（规则关键词 + 告警严重度初判）。"
+        ),
+    }
+
+    ops_follow_ups = []
+    for m in major_events[:5]:
+        if m.get("risk_level") in {"high", "medium"} or (m.get("anomaly") or {}).get("flagged"):
+            ops_follow_ups.append(
+                {
+                    "event_id": m.get("event_id"),
+                    "title": m.get("title"),
+                    "action": "追踪官方细则与他国跟进报道",
+                    "href": m.get("href"),
+                }
+            )
+    if not ops_follow_ups and major_events:
+        ops_follow_ups.append(
+            {
+                "event_id": major_events[0].get("event_id"),
+                "title": major_events[0].get("title"),
+                "action": "维持常规监测，关注是否跨国扩散",
+                "href": major_events[0].get("href"),
+            }
+        )
+
     # Top changes (max 3)
     top_changes: list[dict[str, Any]] = []
     if week_avg > 0 and len(china_day) >= max(3, week_avg * 1.8):
@@ -589,13 +856,13 @@ def build_daily_report(
     china_n = len(china_day)
     delta_y = china_n - yesterday_china
     overview_text = (
-        f"监测范围内今日涉华报道 {china_n} 篇（昨日 {yesterday_china}，"
+        f"{risk_banner['text']} "
+        f"今日涉华有效报道 {china_n} 篇（昨日 {yesterday_china}，"
         f"{'↑' if delta_y > 0 else '↓' if delta_y < 0 else '→'}{abs(delta_y)}；"
-        f"近 7 日日均 {week_avg}），覆盖约 {len(reporting_countries)} 个国家、"
-        f"{len(reporting_sources)} 家媒体；"
-        f"列表内重大/相关事件 {len(major_events)} 个（高重要 {high_major}，"
-        f"当日新发现约 {new_events_n}）。"
-        f"情感与立场见分国摘要；结论仅基于被监测官媒样本。"
+        f"近 7 日日均 {week_avg}），覆盖约 {len(reporting_countries)} 国、"
+        f"{len(reporting_sources)} 源；重大/相关事件 {len(major_events)} 个"
+        f"（高重要 {high_major}，新发现约 {new_events_n}）。"
+        f"采集异常源 {overview_stats['crawl_summary']['failing']}。"
     )
 
     health_rows = [
@@ -632,7 +899,7 @@ def build_daily_report(
         "disclaimer": disclaimer,
         "metric_definition_version": METRIC_DEFINITION_VERSION,
         "relevance_weight_version": RELEVANCE_WEIGHT_VERSION,
-        "generator": "rule_brief_v2",
+        "generator": "rule_brief_v4",
         "article_count": china_n,
         "event_count": len(major_events),
         "connected": {
@@ -649,7 +916,6 @@ def build_daily_report(
                     "new_events": new_events_n,
                     "major_events": high_major,
                     "day_articles": len(day_articles),
-                    # Display aliases aligned to reference "Stories / Articles / Sources"
                     "stories": len(major_events),
                     "articles_analyzed": china_n,
                     "sources_cited": len(reporting_sources),
@@ -666,7 +932,9 @@ def build_daily_report(
                 },
                 "top_changes": top_changes,
                 "overview_text": overview_text,
+                "risk_banner": risk_banner,
             },
+            "overview_stats": overview_stats,
             "major_events": major_events,
             "coverage": {
                 "by_country": coverage_by_country,
@@ -682,12 +950,20 @@ def build_daily_report(
                 "overall_sentiment_counts": dict(sent_overall),
                 "overall_stance_counts": dict(stance_overall),
                 "by_country": tone_by_country,
+                "by_media_type": overview_stats["sentiment_by_media_type"],
                 "note": (
                     "情感条：正面 / 中立 / 负面（语气）；"
-                    "立场绑定对华 Target，分列展示；引述≠媒体自身立场；无综合总分。"
+                    "立场绑定对华 Target，分列展示；引述≠媒体自身立场；"
+                    "score_mean 为技术均值非舆情总分。"
                 ),
             },
+            "anomalies": anomalies,
             "signals": signals,
+            "ops": {
+                "follow_ups": ops_follow_ups,
+                "crawl_status": crawl_status[:30],
+                "note": "次日跟踪建议 + 采集状态（失败/429/失联）。",
+            },
             "quality": {
                 "missing_analysis": missing,
                 "countries_without_sample": countries_without_sample,
@@ -704,12 +980,14 @@ def build_daily_report(
                     "规则组装 facts；LLM 仅可润色叙述。",
                     "RSS latest-N ≠ 完整自然日语料。",
                     f"分析积压 pending/failed ≈ {missing}。",
-                    "系统运行告警见异常与预警页 B 栏，不混入舆情信号主栏。",
+                    "只抓官媒/公服/政府传播，不代表民间民意；模型打分有误差。",
+                    "系统运行告警见异常与预警页 B 栏。",
                 ],
             },
         },
         "narratives": {
             "executive": overview_text,
+            "risk": risk_banner["text"],
             "coverage": (
                 f"涉华报道量居前："
                 + "、".join(
@@ -721,8 +999,10 @@ def build_daily_report(
             )
             + "。",
             "tone": "见分国情感/立场摘要；勿外推为国家立场。",
-            "signals": f"情报信号 {len(signals)} 条，默认 needs_review。",
-            "quality": f"分析积压 {missing}；无样本国家 {countries_without_sample or '无'}。",
+            "signals": f"情报信号 {len(signals)} 条；异动 {len(anomalies)} 条。",
+            "quality": f"分析积压 {missing}；采集异常源 "
+            f"{overview_stats['crawl_summary']['failing']}；"
+            f"无样本国家 {countries_without_sample or '无'}。",
         },
     }
 

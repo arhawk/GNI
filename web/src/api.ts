@@ -197,6 +197,31 @@ export type DailyReport = {
         evidence?: Record<string, unknown>
       }>
       overview_text: string
+      risk_banner?: {
+        has_high_risk: boolean
+        high_risk_event_count: number
+        text: string
+      }
+    }
+    overview_stats?: {
+      connected_countries?: string[]
+      media_type_counts?: Record<string, number>
+      media_type_counts_zh?: Record<string, number>
+      ingest?: Record<string, number>
+      crawl_summary?: Record<string, number>
+      sentiment_tech?: {
+        score_mean?: number | null
+        score_mean_yesterday?: number | null
+        vs_yesterday_delta?: number | null
+        n_scored?: number
+        note?: string
+      }
+      narrative_split?: {
+        official_topics_top?: Array<{ label: string; count: number; share: number }>
+        media_topics_top?: Array<{ label: string; count: number; share: number }>
+        note?: string
+      }
+      sentiment_by_media_type?: Record<string, Record<string, number>>
     }
     major_events: Array<{
       event_id: string
@@ -227,6 +252,16 @@ export type DailyReport = {
       }
       sentiment_n?: number
       sentiment_skipped_government?: number
+      sentiment_label?: string
+      primary_country?: string | null
+      source_bucket?: string
+      source_bucket_zh?: string
+      narrative_labels?: string[]
+      risk_level?: string
+      sectors?: Array<{ id: string; label: string }>
+      sector_ids?: string[]
+      anomaly?: { flagged: boolean; reasons: string[] }
+      timeline?: Array<Record<string, unknown>>
       by_country_views?: Array<{
         country_id: string
         article_count: number
@@ -247,6 +282,25 @@ export type DailyReport = {
         published_at?: string | null
       }>
     }>
+    anomalies?: Array<Record<string, unknown>>
+    ops?: {
+      follow_ups?: Array<{
+        event_id?: string
+        title?: string
+        action?: string
+        href?: string
+      }>
+      crawl_status?: Array<{
+        source_id: string
+        name?: string
+        country_id?: string | null
+        status: string
+        success_count?: number
+        failure_count?: number
+        last_error?: string | null
+      }>
+      note?: string
+    }
     coverage: {
       by_country: Array<{
         country_id: string

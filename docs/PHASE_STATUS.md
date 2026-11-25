@@ -11,7 +11,7 @@
 |------|------|------|
 | P1-A～P1-E | 采集、处理、分析、指标、Dashboard | **已完成** |
 | P1-F1 | Proto Event / Event Fingerprint | **原型已实现**；三时间、稳定 ID、增量 rebuild、无词典不造假 Actor |
-| P1-F2 | Daily Report v2（Daily Brief） | **已实现** |
+| P1-F2 | Daily Report（Daily Brief） | **v4 Ops/Risk 已实现**（预警五段 + 风险/赛道标签） |
 | P1-F3 | 持久化 Alerts 生命周期 | **已实现**（dedupe upsert + ack/resolve/close + 日报窗口） |
 | P1-F4 | Weekly / Monthly Reports | **schema v1 规则组装已实现**（报告中心真页） |
 | Search | Meilisearch → PG hydrate | **已实现**；宕机回退 `ilike` |

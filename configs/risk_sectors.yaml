@@ -1,0 +1,93 @@
+# Keyword → sector / risk tagging for Daily Ops/Risk v4 (rule MVP).
+# Matches against title + summary + topic/frame labels (case-insensitive).
+
+sectors:
+  semiconductors:
+    label: 半导体
+    keywords:
+      - semiconductor
+      - chip
+      - chips
+      - wafer
+      - foundry
+      - asml
+      - tsmc
+      - nvidia
+      - huawei
+      - 芯片
+      - 半导体
+      - 光刻
+  optical_modules:
+    label: 光模块
+    keywords:
+      - optical module
+      - transceiver
+      - cpoe
+      - 光模块
+      - 光通信
+  ai_compute:
+    label: AI算力
+    keywords:
+      - ai chip
+      - gpu
+      - data center
+      - 算力
+      - 人工智能
+  trade:
+    label: 贸易
+    keywords:
+      - tariff
+      - trade war
+      - export
+      - import
+      - 关税
+      - 贸易
+  geopolitics:
+    label: 地缘
+    keywords:
+      - south china sea
+      - taiwan
+      - border
+      - military
+      - 南海
+      - 台海
+      - 边境
+      - 军演
+
+risk_triggers:
+  high:
+    - sanction
+    - sanctions
+    - embargo
+    - entity list
+    - export control
+    - export controls
+    - blockade
+    - 制裁
+    - 出口管制
+    - 实体清单
+    - 禁运
+  medium:
+    - bill
+    - hearing
+    - legislation
+    - investigation
+    - tariff
+    - 法案
+    - 听证
+    - 调查
+    - 关税
+  watch:
+    - concern
+    - warning
+    - review
+    - probe
+    - 关切
+    - 警告
+    - 审查
+
+# Map alert severity → display risk_level
+alert_severity_to_risk:
+  high: high
+  medium: medium
+  low: watch

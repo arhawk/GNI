@@ -28,7 +28,7 @@ export function ReportsPage() {
         .then((payload) => {
           if (!payload?.sections?.summary?.kpis) {
             setError(
-              `日报 schema 不匹配（收到 ${payload?.schema_version || 'unknown'}）。请重启 :8000 API。`,
+              `日报 schema 不匹配（收到 ${payload?.schema_version || 'unknown'}）。请重启 API 加载 daily_report_schema_v4。`,
             )
             return
           }
@@ -314,11 +314,16 @@ function DailyBrief({
   const articles = kpis.articles_analyzed ?? kpis.china_articles
   const sourcesCited = kpis.sources_cited ?? kpis.reporting_sources
 
+  const stats = s.overview_stats
+  const ingest = stats?.ingest || {}
+  const risk = summary.risk_banner
+  const tech = stats?.sentiment_tech
+
   return (
-    <div className="daily-brief daily-brief-v3">
+    <div className="daily-brief daily-brief-v4">
       <header className="brief-header">
-        <div className="brief-eyebrow">DAILY BRIEF · 每日情报</div>
-        <h1>全球对华监测</h1>
+        <div className="brief-eyebrow">DAILY BRIEF · 预警优先</div>
+        <h1>全球对华监测 · 日报</h1>
         <p className="muted small">
           当前接入 {connectedN} 国
           {data.connected?.active_sources != null ? ` · 活跃源 ${data.connected.active_sources}` : ''} ·{' '}
@@ -327,24 +332,12 @@ function DailyBrief({
         <p className="callout">{data.disclaimer}</p>
       </header>
 
-      <section className="brief-section brief-discover">
-        <h2>1 · 快速发现</h2>
-        <p className="brief-lede">{summary.overview_text || nar.executive}</p>
-        <div className="kpi-grid brief-kpis brief-kpis-hero">
-          <Kpi label="今日要闻" value={stories} hint="重大/相关事件卡" />
-          <Kpi
-            label="涉华文章"
-            value={articles}
-            hint={deltaHint(cmp?.vs_yesterday?.delta, '较昨日')}
-          />
-          <Kpi label="引用来源" value={sourcesCited} hint={`本日报道国 ${kpis.reporting_countries}`} />
+      <section className="brief-section">
+        <h2>1 · 当日摘要</h2>
+        <div className={`risk-banner ${risk?.has_high_risk ? 'hot' : 'calm'}`}>
+          {risk?.text || nar.risk || '风险条生成中…'}
         </div>
-        <MediaVolumeSpark
-          today={kpis.china_articles}
-          yesterday={cmp?.vs_yesterday?.china_articles}
-          weekAvg={cmp?.vs_7d_avg?.china_articles}
-        />
-        <h3>今日值得关注</h3>
+        <p className="brief-lede">{summary.overview_text || nar.executive}</p>
         <ol className="brief-changes">
           {(summary.top_changes || []).map((c) => (
             <li key={c.title}>
@@ -352,236 +345,220 @@ function DailyBrief({
               <span className="muted"> — {c.summary}</span>
             </li>
           ))}
-          {(summary.top_changes || []).length === 0 && <li className="muted">暂无突出变化信号</li>}
         </ol>
       </section>
 
       <section className="brief-section">
-        <div className="brief-section-head">
-          <h2>2 · 今日重大事件</h2>
-          <p className="muted small sentiment-legend-inline">
-            情感条：<span className="leg pos">正面</span> / <span className="leg neu">中立</span> /{' '}
-            <span className="leg neg">负面</span>（≠立场、≠国家态度）
+        <h2>2 · 数据统计</h2>
+        <div className="kpi-grid brief-kpis brief-kpis-hero">
+          <Kpi label="今日要闻" value={stories} />
+          <Kpi label="涉华有效" value={articles} hint={deltaHint(cmp?.vs_yesterday?.delta, '较昨日')} />
+          <Kpi label="引用来源" value={sourcesCited} />
+        </div>
+        <div className="kpi-grid compact">
+          <Kpi label="当日采集" value={Number(ingest.day_total ?? kpis.day_articles ?? 0)} />
+          <Kpi label="排除/重复" value={Number((ingest.excluded_from_metrics ?? 0) + (ingest.duplicates ?? 0))} />
+          <Kpi label="采集异常源" value={Number(stats?.crawl_summary?.failing ?? 0)} />
+        </div>
+        <MediaVolumeSpark
+          today={kpis.china_articles}
+          yesterday={cmp?.vs_yesterday?.china_articles}
+          weekAvg={cmp?.vs_7d_avg?.china_articles}
+        />
+        {tech && (
+          <p className="muted small">
+            情感分均值（技术）{tech.score_mean ?? '—'}
+            {tech.vs_yesterday_delta != null ? ` · 较昨 Δ ${tech.vs_yesterday_delta}` : ''} · {tech.note}
           </p>
-        </div>
-        <ul className="story-list">
-          {(s.major_events || []).map((ev, i) => (
-            <li key={ev.event_id} className="story-row">
-              <span className="story-idx">{String(i + 1).padStart(2, '0')}</span>
-              <div className="story-main">
-                <Link className="story-title" to={ev.href || `/events/${ev.event_id}`}>
-                  {ev.title}
-                </Link>
-                <div className="muted small">
-                  {ev.coverage?.article_count ?? 0} 篇 · {ev.coverage?.country_count ?? 0} 国
-                  {(ev.importance_score ?? 0) >= 0.7 ? ' · 高重要性' : ''}
-                </div>
-              </div>
-              <div className="story-sentiment">
-                <SentimentBar shares={ev.sentiment_shares} n={ev.sentiment_n} compact />
-                <span className="muted small tabular">{ev.coverage?.article_count ?? 0}</span>
-              </div>
-            </li>
-          ))}
-          {(s.major_events || []).length === 0 && (
-            <li className="muted">当日无重大/相关事件 — 可先运行 events rebuild。</li>
-          )}
-        </ul>
-
-        {(s.major_events || []).map((ev, i) => (
-          <article key={`detail-${ev.event_id}`} className="event-card">
-            <div className="event-card-head">
-              <span className="event-idx">事件 {String(i + 1).padStart(2, '0')}</span>
-              {(ev.importance_score ?? 0) >= 0.7 && <span className="sev sev-high">高重要性</span>}
-              {ev.event_type && <span className="meta">{ev.event_type}</span>}
-            </div>
-            <h3>
-              <Link to={ev.href || `/events/${ev.event_id}`}>{ev.title}</Link>
-            </h3>
-            <SentimentBar shares={ev.sentiment_shares} n={ev.sentiment_n} />
-            <p>{ev.overview_text}</p>
-            <div className="muted small">
-              event_time: {(ev.event_time || '—').toString().slice(0, 16).replace('T', ' ')} · first_seen:{' '}
-              {(ev.first_seen_at || '—').toString().slice(0, 16).replace('T', ' ')}
-            </div>
-            <dl className="event-core">
-              <div>
-                <dt>主体</dt>
-                <dd>{ev.core?.actor || '—'}</dd>
-              </div>
-              <div>
-                <dt>行动</dt>
-                <dd>{ev.core?.action || '—'}</dd>
-              </div>
-              <div>
-                <dt>对象</dt>
-                <dd>{ev.core?.object || '—'}</dd>
-              </div>
-              <div>
-                <dt>覆盖</dt>
-                <dd>
-                  {ev.coverage?.article_count ?? 0} 篇 · {ev.coverage?.country_count ?? 0} 国 ·{' '}
-                  {ev.coverage?.source_count ?? 0} 源
-                </dd>
-              </div>
-            </dl>
-            {(ev.by_country_views || []).length > 0 && (
-              <>
-                <h4>分国报道视角</h4>
-                <ul className="event-list">
-                  {ev.by_country_views!.map((v) => (
-                    <li key={v.country_id}>
-                      <Link to={v.href || `/countries?c=${v.country_id}`}>{v.country_id}</Link> · {v.article_count}{' '}
-                      篇 · 情感 {v.dominant_sentiment || '—'} / 立场 {v.dominant_stance || '—'}
-                      {v.frame ? ` · 框架 ${v.frame}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            <h4>证据</h4>
-            <ul className="event-list">
-              {(ev.evidence || []).slice(0, 6).map((evi) => (
-                <li key={evi.article_id} className="muted small">
-                  [{evi.country_id}]{' '}
-                  {evi.url ? (
-                    <a href={evi.url} target="_blank" rel="noreferrer">
-                      {evi.title}
-                    </a>
-                  ) : (
-                    evi.title
-                  )}{' '}
-                  · {evi.sentiment}/{evi.stance}
-                </li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </section>
-
-      <section className="brief-section brief-two-col">
-        <div>
-          <h2>3 · 主题分布</h2>
-          <TopicBars topics={s.coverage.topics_top || []} />
-        </div>
-        <div>
-          <h2>4 · 全球监测覆盖（当前接入）</h2>
-          <p className="muted small">{s.coverage.note}</p>
-          {nar.coverage && <p>{nar.coverage}</p>}
-          <ul className="coverage-chips">
-            {(data.connected?.country_ids || data.country_scope || []).map((cid) => {
-              const row = s.coverage.by_country.find((r) => r.country_id === cid)
+        )}
+        <h3>各国情感简表</h3>
+        <table className="tone-mini">
+          <thead>
+            <tr>
+              <th>国家</th>
+              <th>n</th>
+              <th>正/中/负</th>
+              <th>摘要</th>
+            </tr>
+          </thead>
+          <tbody>
+            {s.tone.by_country.map((row) => {
+              const sc = row.sentiment_counts || {}
               return (
-                <li key={cid}>
-                  <Link to={`/countries?c=${cid}`}>{cid}</Link>
-                  <span className="muted small"> · {row?.article_count ?? 0} 篇</span>
-                </li>
+                <tr key={row.country_id}>
+                  <td>
+                    <Link to={row.href || `/countries?c=${row.country_id}`}>{row.country_id}</Link>
+                  </td>
+                  <td>{row.n}</td>
+                  <td className="muted small">
+                    {sc.positive ?? 0}/{sc.neutral ?? 0}/{sc.negative ?? 0}
+                  </td>
+                  <td className="small">{row.summary_text}</td>
+                </tr>
               )
             })}
-          </ul>
-          <button type="button" className="linkish" onClick={() => setShowCoverageDetail(!showCoverageDetail)}>
-            {showCoverageDetail ? '收起国家/媒体明细' : '展开国家/媒体明细'}
-          </button>
-          {showCoverageDetail && (
-            <table>
-              <thead>
-                <tr>
-                  <th>国家</th>
-                  <th>涉华篇数</th>
-                  <th>加权量</th>
-                  <th>源数</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.coverage.by_country.map((r) => (
-                  <tr key={r.country_id}>
-                    <td>
-                      <Link to={r.href || `/countries?c=${r.country_id}`}>{r.country_id}</Link>
-                    </td>
-                    <td>{r.article_count}</td>
-                    <td>{r.weighted_volume ?? '—'}</td>
-                    <td>{r.source_count ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </section>
-
-      <section className="brief-section">
-        <h2>5 · 情感与立场</h2>
-        <p className="muted small">{s.tone.note}</p>
-        {nar.tone && <p className="muted small">{nar.tone}</p>}
-        <ul className="tone-summaries">
-          {s.tone.by_country.map((row) => (
-            <li key={row.country_id}>
-              <Link to={row.href || `/countries?c=${row.country_id}`}>{row.country_id}</Link> — {row.summary_text}
-            </li>
-          ))}
-        </ul>
+          </tbody>
+        </table>
+        {stats?.media_type_counts_zh && (
+          <p className="muted small">
+            媒体类型：
+            {Object.entries(stats.media_type_counts_zh)
+              .map(([k, v]) => `${k} ${v}`)
+              .join(' · ') || '—'}
+          </p>
+        )}
         <button type="button" className="linkish" onClick={() => setShowToneDetail(!showToneDetail)}>
-          {showToneDetail ? '收起计数表' : '展开情感/立场计数表'}
+          {showToneDetail ? '收起立场计数' : '展开立场计数 / 官方vs媒体主题'}
         </button>
         {showToneDetail && (
-          <table>
-            <thead>
-              <tr>
-                <th>国家</th>
-                <th>n</th>
-                <th>情感</th>
-                <th>立场</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.tone.by_country.map((row) => (
-                <tr key={row.country_id}>
-                  <td>{row.country_id}</td>
-                  <td>{row.n}</td>
-                  <td>
-                    <code>{JSON.stringify(row.sentiment_counts)}</code>
-                  </td>
-                  <td>
-                    <code>{JSON.stringify(row.stance_counts)}</code>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <pre className="muted small" style={{ whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(
+                {
+                  stance: s.tone.overall_stance_counts,
+                  by_media_type: stats?.sentiment_by_media_type,
+                  narrative_split: stats?.narrative_split,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          </>
         )}
       </section>
 
       <section className="brief-section">
-        <h2>6 · 新兴信号与预警</h2>
-        {nar.signals && <p className="muted small">{nar.signals}</p>}
+        <div className="brief-section-head">
+          <h2>3 · 当日重点事件</h2>
+          <p className="muted small">国｜媒体类型｜叙事｜情感｜风险｜赛道；异动标红</p>
+        </div>
+        <div className="event-table-wrap">
+          <table className="event-risk-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>国家</th>
+                <th>媒体</th>
+                <th>标题 / 叙事</th>
+                <th>情感</th>
+                <th>风险</th>
+                <th>赛道</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(s.major_events || []).map((ev, i) => {
+                const flagged = Boolean(ev.anomaly?.flagged)
+                const sectors = (ev.sectors || [])
+                  .filter((x) => x.id !== 'unmapped')
+                  .map((x) => x.label)
+                  .join('、')
+                return (
+                  <tr key={ev.event_id} className={flagged ? 'row-anomaly' : undefined}>
+                    <td>{String(i + 1).padStart(2, '0')}</td>
+                    <td>{ev.primary_country || '—'}</td>
+                    <td className="small">{ev.source_bucket_zh || ev.source_bucket || '—'}</td>
+                    <td>
+                      <Link to={ev.href || `/events/${ev.event_id}`}>{ev.title}</Link>
+                      <div className="muted small">{(ev.narrative_labels || []).join(' · ') || ev.event_type || '—'}</div>
+                      {flagged && (
+                        <div className="anomaly-reasons small">{(ev.anomaly?.reasons || []).join('；')}</div>
+                      )}
+                    </td>
+                    <td>
+                      <SentimentBar shares={ev.sentiment_shares} n={ev.sentiment_n} compact />
+                      <span className="muted small">{ev.sentiment_label || '—'}</span>
+                    </td>
+                    <td>
+                      <span className={`risk-pill risk-${ev.risk_level || 'unmapped'}`}>{ev.risk_level || 'unmapped'}</span>
+                    </td>
+                    <td className="small">{sectors || 'unmapped'}</td>
+                  </tr>
+                )
+              })}
+              {(s.major_events || []).length === 0 && (
+                <tr>
+                  <td colSpan={7} className="muted">
+                    当日无事件 — 可先 events rebuild
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <TopicBars topics={s.coverage.topics_top || []} />
+        <button type="button" className="linkish" onClick={() => setShowCoverageDetail(!showCoverageDetail)}>
+          {showCoverageDetail ? '收起事件证据明细' : '展开事件证据 / 覆盖明细'}
+        </button>
+        {showCoverageDetail &&
+          (s.major_events || []).slice(0, 5).map((ev) => (
+            <article key={`d-${ev.event_id}`} className="event-card">
+              <h3>
+                <Link to={ev.href || `/events/${ev.event_id}`}>{ev.title}</Link>
+              </h3>
+              <p className="muted small">{ev.overview_text}</p>
+              <ul className="event-list">
+                {(ev.evidence || []).slice(0, 4).map((evi) => (
+                  <li key={evi.article_id} className="muted small">
+                    [{evi.country_id}] {evi.title} · {evi.sentiment}/{evi.stance}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+      </section>
+
+      <section className="brief-section">
+        <h2>4 · 舆情异动提示</h2>
         <ul className="event-list">
-          {(s.signals || []).map((sig) => (
-            <li key={sig.id || sig.title}>
-              <span className={`sev sev-${sig.severity === 'high' ? 'high' : sig.severity === 'medium' ? 'medium' : 'low'}`}>
-                {sig.status || 'needs_review'}
+          {(s.anomalies || []).map((a, idx) => (
+            <li key={String(a.id || a.event_id || a.title || idx)} className={a.kind === 'event_anomaly' ? 'row-anomaly-item' : undefined}>
+              <span className={`sev sev-${a.severity === 'high' || a.risk_level === 'high' ? 'high' : 'medium'}`}>
+                {String(a.kind || 'signal')}
               </span>{' '}
-              <Link to={sig.href || '/alerts'}>{sig.title}</Link>
-              <div className="muted small">{sig.summary}</div>
+              {a.href ? <Link to={String(a.href)}>{String(a.title)}</Link> : <strong>{String(a.title)}</strong>}
+              <div className="muted small">
+                {String(a.summary || (Array.isArray(a.reasons) ? a.reasons.join('；') : '') || '')}
+              </div>
             </li>
           ))}
-          {(s.signals || []).length === 0 && <li className="muted">当日无情报信号</li>}
+          {(s.anomalies || []).length === 0 && <li className="muted">当日无显著异动</li>}
         </ul>
       </section>
 
       <section className="brief-section">
-        <h2>7 · 数据覆盖说明</h2>
-        {nar.quality && <p>{nar.quality}</p>}
-        <ul>
-          <li>
-            分析积压: <strong>{s.quality.missing_analysis}</strong>
-          </li>
-          <li>当前无报道国家: {(s.quality.countries_without_sample || []).join(', ') || '—'}</li>
-          {(s.quality.notes || []).map((n) => (
-            <li key={n} className="muted small">
-              {n}
+        <h2>5 · 次日跟踪 + 采集状态</h2>
+        <p className="muted small">{s.ops?.note}</p>
+        <h3>跟踪建议</h3>
+        <ul className="event-list">
+          {(s.ops?.follow_ups || []).map((f) => (
+            <li key={String(f.event_id || f.title)}>
+              {f.href ? <Link to={f.href}>{f.title}</Link> : f.title}
+              <div className="muted small">{f.action}</div>
             </li>
           ))}
+          {(s.ops?.follow_ups || []).length === 0 && <li className="muted">无专项跟踪项</li>}
         </ul>
+        <h3>采集状态</h3>
+        <ul className="event-list crawl-list">
+          {(s.ops?.crawl_status || [])
+            .filter((c) => c.status !== 'ok')
+            .slice(0, 12)
+            .map((c) => (
+              <li key={c.source_id}>
+                <span className={`sev sev-${c.status === 'rate_limited' ? 'medium' : 'high'}`}>{c.status}</span>{' '}
+                {c.name || c.source_id} ({c.country_id}) · fail {c.failure_count}/{c.success_count}
+                {c.last_error && <div className="muted small">{c.last_error}</div>}
+              </li>
+            ))}
+          {(s.ops?.crawl_status || []).every((c) => c.status === 'ok') && (
+            <li className="muted">活跃源未见失败主导 / 429</li>
+          )}
+        </ul>
+        <p className="muted small">
+          局限：分析积压 {s.quality.missing_analysis}；无样本国{' '}
+          {(s.quality.countries_without_sample || []).join(', ') || '—'}。
+          {(s.quality.notes || []).slice(0, 2).join(' ')}
+        </p>
       </section>
     </div>
   )

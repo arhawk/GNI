@@ -22,13 +22,21 @@ def validate_daily_report(payload: dict[str, Any]) -> dict[str, Any]:
         if not passed:
             errors.append(f"{name}: {detail or 'failed'}")
 
-    ok("schema_version", payload.get("schema_version") == "daily_report_schema_v2")
+    schema = payload.get("schema_version")
+    ok(
+        "schema_version",
+        schema in {"daily_report_schema_v2", "daily_report_schema_v4"},
+        str(schema),
+    )
     ok("report_type", payload.get("report_type") == "daily")
     ok("has_disclaimer", bool(payload.get("disclaimer")))
     ok("has_period", bool(payload.get("period")))
 
     sections = payload.get("sections") or {}
-    for key in ("summary", "major_events", "coverage", "tone", "signals", "quality"):
+    required = ["summary", "major_events", "coverage", "tone", "signals", "quality"]
+    if schema == "daily_report_schema_v4":
+        required.extend(["overview_stats", "anomalies", "ops"])
+    for key in required:
         present = key in sections
         ok(f"section_{key}", present, "" if present else "missing section")
 
