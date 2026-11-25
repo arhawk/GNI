@@ -122,7 +122,7 @@ function PeriodBrief({
         <p className="muted small">
           {kind} · {data.schema_version} · {data.period}
         </p>
-        <h1>{kind} · MVP 五国监测样本</h1>
+        <h1>{kind} · 全球对华监测（当前接入）</h1>
         <p className="callout">{data.disclaimer}</p>
         <p>{s.summary?.overview_text || nar.executive}</p>
         <div className="kpi-grid compact">
@@ -204,6 +204,93 @@ function PeriodBrief({
   )
 }
 
+function SentimentBar({
+  shares,
+  n,
+  compact,
+}: {
+  shares?: { positive: number; neutral: number; negative: number }
+  n?: number
+  compact?: boolean
+}) {
+  const pos = Math.max(0, shares?.positive ?? 0)
+  const neu = Math.max(0, shares?.neutral ?? 0)
+  const neg = Math.max(0, shares?.negative ?? 0)
+  const sum = pos + neu + neg
+  if (!sum || !(n && n > 0)) {
+    return <span className="muted small">{compact ? '无情感样本' : '暂无媒体情感样本'}</span>
+  }
+  return (
+    <div className={`sentiment-bar-wrap${compact ? ' compact' : ''}`} title="正面 / 中立 / 负面 · 情感语气 ≠ 立场">
+      <div className="sentiment-bar" role="img" aria-label={`正面 ${Math.round(pos * 100)}% 中立 ${Math.round(neu * 100)}% 负面 ${Math.round(neg * 100)}%`}>
+        <span className="seg pos" style={{ flex: pos }} />
+        <span className="seg neu" style={{ flex: neu }} />
+        <span className="seg neg" style={{ flex: neg }} />
+      </div>
+      {!compact && (
+        <div className="sentiment-legend muted small">
+          <span className="leg pos">正面 {Math.round(pos * 100)}%</span>
+          <span className="leg neu">中立 {Math.round(neu * 100)}%</span>
+          <span className="leg neg">负面 {Math.round(neg * 100)}%</span>
+          <span>· n={n}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TopicBars({
+  topics,
+}: {
+  topics: Array<{ label: string; count: number; share: number }>
+}) {
+  const max = Math.max(1, ...topics.map((t) => t.count))
+  if (topics.length === 0) return <p className="muted">无主题样本</p>
+  return (
+    <div className="bars topic-bars">
+      {topics.map((t) => (
+        <div className="bar-row" key={t.label}>
+          <div className="bar-label">
+            <Link to="/trends">{t.label}</Link>
+          </div>
+          <div className="bar-track">
+            <div className="bar-fill" style={{ width: `${(t.count / max) * 100}%` }} />
+          </div>
+          <div className="bar-n">{t.count}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MediaVolumeSpark({
+  today,
+  yesterday,
+  weekAvg,
+}: {
+  today: number
+  yesterday?: number
+  weekAvg?: number
+}) {
+  const vals = [yesterday ?? 0, weekAvg ?? 0, today].map((v) => Math.max(0, Number(v) || 0))
+  const max = Math.max(1, ...vals)
+  const labels = ['昨日', '近7日均', '今日']
+  return (
+    <div className="media-spark" title="仅媒体报道量，无社媒公众兴趣">
+      <div className="media-spark-bars">
+        {vals.map((v, i) => (
+          <div key={labels[i]} className="media-spark-col">
+            <div className="media-spark-bar" style={{ height: `${(v / max) * 100}%` }} />
+            <span className="muted small">{labels[i]}</span>
+            <strong className="small">{v}</strong>
+          </div>
+        ))}
+      </div>
+      <p className="muted small">媒体报道量对比（无社媒栏）</p>
+    </div>
+  )
+}
+
 function DailyBrief({
   data,
   showToneDetail,
@@ -222,34 +309,41 @@ function DailyBrief({
   const kpis = summary.kpis
   const nar = data.narratives || {}
   const cmp = summary.comparisons
+  const connectedN = data.connected?.countries ?? data.country_scope?.length ?? 0
+  const stories = kpis.stories ?? data.event_count ?? (s.major_events || []).length
+  const articles = kpis.articles_analyzed ?? kpis.china_articles
+  const sourcesCited = kpis.sources_cited ?? kpis.reporting_sources
 
   return (
-    <div className="daily-brief">
+    <div className="daily-brief daily-brief-v3">
       <header className="brief-header">
         <div className="brief-eyebrow">DAILY BRIEF · 每日情报</div>
-        <h1>Global China Media Intelligence</h1>
+        <h1>全球对华监测</h1>
         <p className="muted small">
-          {data.period} · {data.schema_version} · {data.generator} ·{' '}
-          {data.generated_at?.slice(0, 19).replace('T', ' ')} UTC
-          {data.validation && (
-            <>
-              {' '}
-              · validation {data.validation.ok ? 'ok' : 'issues'}
-            </>
-          )}
+          当前接入 {connectedN} 国
+          {data.connected?.active_sources != null ? ` · 活跃源 ${data.connected.active_sources}` : ''} ·{' '}
+          {data.period} · {data.schema_version}
         </p>
         <p className="callout">{data.disclaimer}</p>
       </header>
 
-      <section className="brief-section">
-        <h2>1 · 今日摘要</h2>
+      <section className="brief-section brief-discover">
+        <h2>1 · 快速发现</h2>
         <p className="brief-lede">{summary.overview_text || nar.executive}</p>
-        <div className="kpi-grid brief-kpis">
-          <Kpi label="涉华文章" value={kpis.china_articles} hint={deltaHint(cmp?.vs_yesterday?.delta, '较昨日')} />
-          <Kpi label="报道国家" value={kpis.reporting_countries} />
-          <Kpi label="新增事件" value={kpis.new_events} />
-          <Kpi label="重大事件" value={kpis.major_events} hint={`近7日日均涉华 ${cmp?.vs_7d_avg?.china_articles ?? '—'}`} />
+        <div className="kpi-grid brief-kpis brief-kpis-hero">
+          <Kpi label="今日要闻" value={stories} hint="重大/相关事件卡" />
+          <Kpi
+            label="涉华文章"
+            value={articles}
+            hint={deltaHint(cmp?.vs_yesterday?.delta, '较昨日')}
+          />
+          <Kpi label="引用来源" value={sourcesCited} hint={`本日报道国 ${kpis.reporting_countries}`} />
         </div>
+        <MediaVolumeSpark
+          today={kpis.china_articles}
+          yesterday={cmp?.vs_yesterday?.china_articles}
+          weekAvg={cmp?.vs_7d_avg?.china_articles}
+        />
         <h3>今日值得关注</h3>
         <ol className="brief-changes">
           {(summary.top_changes || []).map((c) => (
@@ -263,10 +357,39 @@ function DailyBrief({
       </section>
 
       <section className="brief-section">
-        <h2>2 · 今日重大事件</h2>
-        <p className="muted small">按重要性排序；文章为证据。event_time ≠ first_seen_at。</p>
+        <div className="brief-section-head">
+          <h2>2 · 今日重大事件</h2>
+          <p className="muted small sentiment-legend-inline">
+            情感条：<span className="leg pos">正面</span> / <span className="leg neu">中立</span> /{' '}
+            <span className="leg neg">负面</span>（≠立场、≠国家态度）
+          </p>
+        </div>
+        <ul className="story-list">
+          {(s.major_events || []).map((ev, i) => (
+            <li key={ev.event_id} className="story-row">
+              <span className="story-idx">{String(i + 1).padStart(2, '0')}</span>
+              <div className="story-main">
+                <Link className="story-title" to={ev.href || `/events/${ev.event_id}`}>
+                  {ev.title}
+                </Link>
+                <div className="muted small">
+                  {ev.coverage?.article_count ?? 0} 篇 · {ev.coverage?.country_count ?? 0} 国
+                  {(ev.importance_score ?? 0) >= 0.7 ? ' · 高重要性' : ''}
+                </div>
+              </div>
+              <div className="story-sentiment">
+                <SentimentBar shares={ev.sentiment_shares} n={ev.sentiment_n} compact />
+                <span className="muted small tabular">{ev.coverage?.article_count ?? 0}</span>
+              </div>
+            </li>
+          ))}
+          {(s.major_events || []).length === 0 && (
+            <li className="muted">当日无重大/相关事件 — 可先运行 events rebuild。</li>
+          )}
+        </ul>
+
         {(s.major_events || []).map((ev, i) => (
-          <article key={ev.event_id} className="event-card">
+          <article key={`detail-${ev.event_id}`} className="event-card">
             <div className="event-card-head">
               <span className="event-idx">事件 {String(i + 1).padStart(2, '0')}</span>
               {(ev.importance_score ?? 0) >= 0.7 && <span className="sev sev-high">高重要性</span>}
@@ -275,6 +398,7 @@ function DailyBrief({
             <h3>
               <Link to={ev.href || `/events/${ev.event_id}`}>{ev.title}</Link>
             </h3>
+            <SentimentBar shares={ev.sentiment_shares} n={ev.sentiment_n} />
             <p>{ev.overview_text}</p>
             <div className="muted small">
               event_time: {(ev.event_time || '—').toString().slice(0, 16).replace('T', ' ')} · first_seen:{' '}
@@ -303,7 +427,7 @@ function DailyBrief({
             </dl>
             {(ev.by_country_views || []).length > 0 && (
               <>
-                <h4>分国报道视角（样本）</h4>
+                <h4>分国报道视角</h4>
                 <ul className="event-list">
                   {ev.by_country_views!.map((v) => (
                     <li key={v.country_id}>
@@ -311,16 +435,6 @@ function DailyBrief({
                       篇 · 情感 {v.dominant_sentiment || '—'} / 立场 {v.dominant_stance || '—'}
                       {v.frame ? ` · 框架 ${v.frame}` : ''}
                     </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {(ev.follow_ups || []).length > 0 && (
-              <>
-                <h4>后续关注</h4>
-                <ul className="event-list">
-                  {ev.follow_ups!.map((q) => (
-                    <li key={q}>{q}</li>
                   ))}
                 </ul>
               </>
@@ -343,70 +457,60 @@ function DailyBrief({
             </ul>
           </article>
         ))}
-        {(s.major_events || []).length === 0 && (
-          <p className="muted">当日无重大/相关事件 — 可先运行 events rebuild。</p>
-        )}
       </section>
 
-      <section className="brief-section">
-        <h2>3 · 监测样本报道概况</h2>
-        <p className="muted small">{s.coverage.note}</p>
-        {nar.coverage && <p>{nar.coverage}</p>}
-        <div className="kpi-grid compact">
-          <div>
-            <h3>主议题</h3>
-            <ul className="event-list">
-              {(s.coverage.topics_top || []).map((t) => (
-                <li key={t.label}>
-                  <Link to="/trends">{t.label}</Link> · {t.count}
-                </li>
-              ))}
-              {(s.coverage.topics_top || []).length === 0 && <li className="muted">无样本</li>}
-            </ul>
-          </div>
-          <div>
-            <h3>主框架</h3>
-            <ul className="event-list">
-              {(s.coverage.frames_top || []).map((t) => (
-                <li key={t.label}>
-                  {t.label} · {t.count}
-                </li>
-              ))}
-              {(s.coverage.frames_top || []).length === 0 && <li className="muted">无样本</li>}
-            </ul>
-          </div>
+      <section className="brief-section brief-two-col">
+        <div>
+          <h2>3 · 主题分布</h2>
+          <TopicBars topics={s.coverage.topics_top || []} />
         </div>
-        <button type="button" className="linkish" onClick={() => setShowCoverageDetail(!showCoverageDetail)}>
-          {showCoverageDetail ? '收起数据明细' : '展开国家/媒体明细'}
-        </button>
-        {showCoverageDetail && (
-          <table>
-            <thead>
-              <tr>
-                <th>国家</th>
-                <th>涉华篇数</th>
-                <th>加权量</th>
-                <th>源数</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.coverage.by_country.map((r) => (
-                <tr key={r.country_id}>
-                  <td>
-                    <Link to={r.href || `/countries?c=${r.country_id}`}>{r.country_id}</Link>
-                  </td>
-                  <td>{r.article_count}</td>
-                  <td>{r.weighted_volume ?? '—'}</td>
-                  <td>{r.source_count ?? '—'}</td>
+        <div>
+          <h2>4 · 全球监测覆盖（当前接入）</h2>
+          <p className="muted small">{s.coverage.note}</p>
+          {nar.coverage && <p>{nar.coverage}</p>}
+          <ul className="coverage-chips">
+            {(data.connected?.country_ids || data.country_scope || []).map((cid) => {
+              const row = s.coverage.by_country.find((r) => r.country_id === cid)
+              return (
+                <li key={cid}>
+                  <Link to={`/countries?c=${cid}`}>{cid}</Link>
+                  <span className="muted small"> · {row?.article_count ?? 0} 篇</span>
+                </li>
+              )
+            })}
+          </ul>
+          <button type="button" className="linkish" onClick={() => setShowCoverageDetail(!showCoverageDetail)}>
+            {showCoverageDetail ? '收起国家/媒体明细' : '展开国家/媒体明细'}
+          </button>
+          {showCoverageDetail && (
+            <table>
+              <thead>
+                <tr>
+                  <th>国家</th>
+                  <th>涉华篇数</th>
+                  <th>加权量</th>
+                  <th>源数</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {s.coverage.by_country.map((r) => (
+                  <tr key={r.country_id}>
+                    <td>
+                      <Link to={r.href || `/countries?c=${r.country_id}`}>{r.country_id}</Link>
+                    </td>
+                    <td>{r.article_count}</td>
+                    <td>{r.weighted_volume ?? '—'}</td>
+                    <td>{r.source_count ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </section>
 
       <section className="brief-section">
-        <h2>4 · 情感与立场</h2>
+        <h2>5 · 情感与立场</h2>
         <p className="muted small">{s.tone.note}</p>
         {nar.tone && <p className="muted small">{nar.tone}</p>}
         <ul className="tone-summaries">
@@ -448,7 +552,7 @@ function DailyBrief({
       </section>
 
       <section className="brief-section">
-        <h2>5 · 新兴信号与预警</h2>
+        <h2>6 · 新兴信号与预警</h2>
         {nar.signals && <p className="muted small">{nar.signals}</p>}
         <ul className="event-list">
           {(s.signals || []).map((sig) => (
@@ -465,13 +569,13 @@ function DailyBrief({
       </section>
 
       <section className="brief-section">
-        <h2>6 · 数据覆盖说明</h2>
+        <h2>7 · 数据覆盖说明</h2>
         {nar.quality && <p>{nar.quality}</p>}
         <ul>
           <li>
             分析积压: <strong>{s.quality.missing_analysis}</strong>
           </li>
-          <li>无样本国家: {(s.quality.countries_without_sample || []).join(', ') || '—'}</li>
+          <li>当前无报道国家: {(s.quality.countries_without_sample || []).join(', ') || '—'}</li>
           {(s.quality.notes || []).map((n) => (
             <li key={n} className="muted small">
               {n}

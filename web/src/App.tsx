@@ -24,7 +24,7 @@ export default function App() {
             <aside className="nav">
               <div className="brand">
                 <span className="brand-mark">GNI</span>
-                <span className="brand-sub">叙事智能 · MVP 五国样本</span>
+                <span className="brand-sub">全球对华监测 · 当前接入五国</span>
               </div>
 
               <NavGroup label="监测">
@@ -49,7 +49,7 @@ export default function App() {
 
             <div className="content">
               <header className="topbar">
-                <div className="topbar-brand-line">GNI · 对华舆情监测</div>
+                <div className="topbar-brand-line">GNI · 全球对华监测</div>
                 <TopSearch />
                 <div className="topbar-status" title="⌘K 打开命令面板">
                   监测中 · ⌘K

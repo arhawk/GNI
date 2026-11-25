@@ -84,3 +84,26 @@ def test_fingerprint_no_fake_and_imports():
     assert W.startswith("weekly")
     assert M.startswith("monthly")
     assert callable(build_weekly_report) and callable(build_monthly_report)
+
+
+def test_daily_sentiment_bar_skips_government():
+    from types import SimpleNamespace
+
+    from gni.reports.daily import _sentiment_bar_from_evidence
+
+    sources = {
+        "a": SimpleNamespace(feed_scope="INTERNATIONAL_NEWS"),
+        "g": SimpleNamespace(feed_scope="GOVERNMENT_RELEASES"),
+    }
+    out = _sentiment_bar_from_evidence(
+        [
+            {"source_id": "a", "sentiment": "positive"},
+            {"source_id": "a", "sentiment": "negative"},
+            {"source_id": "g", "sentiment": "negative"},
+        ],
+        sources,
+    )
+    assert out["sentiment_n"] == 2
+    assert out["sentiment_skipped_government"] == 1
+    assert out["sentiment_counts"]["positive"] == 1
+    assert out["sentiment_counts"]["negative"] == 1

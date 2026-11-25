@@ -40,7 +40,7 @@ export function CountriesPage() {
     <div className="countries-layout">
       <aside className="countries-list panel">
         <h2>国家</h2>
-        <p className="muted small">MVP 五国监测样本</p>
+        <p className="muted small">全球对华监测 · 当前接入国</p>
         <ul className="event-list">
           {list.map((c) => (
             <li key={c.country_id}>

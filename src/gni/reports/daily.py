@@ -25,8 +25,9 @@ from gni.reports.validate import validate_daily_report
 MONITOR_DEFAULT = ["US", "RU", "DE", "IN", "AU"]
 SCHEMA_VERSION = "daily_report_schema_v2"
 DISCLAIMER = (
-    "基于 MVP 五国监测样本（官媒/公服/政府传播）的对华报道表现；"
-    "不等于国家官方立场，也不等于全球舆论或该国社会民意。"
+    "全球对华监测产品；当前按接入国/源覆盖统计。"
+    "情感条为正面/中立/负面语气分布（≠立场、≠国家态度）；"
+    "不等于国家官方立场或社会民意。政府传播源不计入媒体情感主条。"
 )
 
 SENT_ZH = {
@@ -96,6 +97,40 @@ def _norm_sentiment(label: str | None) -> str:
     if s in {"mixed"}:
         return "mixed"
     return "unknown"
+
+
+def _sentiment_bar_from_evidence(
+    evidence: list[dict[str, Any]],
+    sources: dict[str, Source],
+) -> dict[str, Any]:
+    """Aggregate positive/neutral/negative for UI bars; skip GOVERNMENT_RELEASES."""
+    counts: Counter[str] = Counter()
+    skipped_gov = 0
+    for ev in evidence:
+        sid = ev.get("source_id")
+        src = sources.get(sid) if isinstance(sid, str) else None
+        if src and (src.feed_scope or "").upper() == "GOVERNMENT_RELEASES":
+            skipped_gov += 1
+            continue
+        sl = _norm_sentiment(ev.get("sentiment") if isinstance(ev.get("sentiment"), str) else None)
+        if sl in {"positive", "neutral", "negative"}:
+            counts[sl] += 1
+    total = sum(counts.values()) or 0
+    shares = {
+        "positive": round(counts["positive"] / total, 4) if total else 0.0,
+        "neutral": round(counts["neutral"] / total, 4) if total else 0.0,
+        "negative": round(counts["negative"] / total, 4) if total else 0.0,
+    }
+    return {
+        "sentiment_counts": {
+            "positive": counts["positive"],
+            "neutral": counts["neutral"],
+            "negative": counts["negative"],
+        },
+        "sentiment_shares": shares,
+        "sentiment_n": total,
+        "sentiment_skipped_government": skipped_gov,
+    }
 
 
 def _stance_label(structured: dict[str, Any]) -> str:
@@ -273,13 +308,15 @@ def build_daily_report(
         st = _stance_label(structured)
         tp = _topic_primary(structured)
         fr = _frame_primary(structured)
-        sent_overall[sl] += 1
+        is_gov = bool(src and (src.feed_scope or "").upper() == "GOVERNMENT_RELEASES")
+        if not is_gov:
+            sent_overall[sl] += 1
         stance_overall[st] += 1
         if tp:
             topic_overall[str(tp)] += 1
         if fr:
             frame_overall[str(fr)] += 1
-        if cid in by_country_tone:
+        if cid in by_country_tone and not is_gov:
             by_country_tone[cid]["sentiment_counts"][sl] += 1
             by_country_tone[cid]["stance_counts"][st] += 1
             by_country_tone[cid]["n"] += 1
@@ -429,6 +466,7 @@ def build_daily_report(
             "其他监测国媒体是否跟进？",
             "报道框架是否从政策本身转向产业/安全影响？",
         ]
+        sent_bar = _sentiment_bar_from_evidence(evidence, sources)
         major_events.append(
             {
                 "event_id": eid,
@@ -447,6 +485,10 @@ def build_daily_report(
                     "status": e.get("status"),
                 },
                 "coverage": cov,
+                "sentiment_counts": sent_bar["sentiment_counts"],
+                "sentiment_shares": sent_bar["sentiment_shares"],
+                "sentiment_n": sent_bar["sentiment_n"],
+                "sentiment_skipped_government": sent_bar["sentiment_skipped_government"],
                 "by_country_views": by_country_views,
                 "follow_ups": follow_ups,
                 "evidence": evidence[:12],
@@ -566,6 +608,17 @@ def build_daily_report(
         for h in session.scalars(select(SourceHealth).limit(40)).all()
     ]
 
+    connected_countries = len(countries)
+    active_sources_n = sum(
+        1 for s in sources.values() if (s.active_status or "") == "active" and s.country_id in countries
+    )
+    disclaimer = (
+        f"全球对华监测 · 当前接入 {connected_countries} 国"
+        f"（本日有报道 {len(reporting_countries)} 国）· "
+        f"活跃源约 {active_sources_n} · 本日引用源 {len(reporting_sources)}。"
+        + DISCLAIMER
+    )
+
     payload: dict[str, Any] = {
         "report_type": "daily",
         "schema_version": SCHEMA_VERSION,
@@ -576,12 +629,17 @@ def build_daily_report(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "country_scope": countries,
         "target_scope": "china",
-        "disclaimer": DISCLAIMER,
+        "disclaimer": disclaimer,
         "metric_definition_version": METRIC_DEFINITION_VERSION,
         "relevance_weight_version": RELEVANCE_WEIGHT_VERSION,
         "generator": "rule_brief_v2",
         "article_count": china_n,
         "event_count": len(major_events),
+        "connected": {
+            "countries": connected_countries,
+            "active_sources": active_sources_n,
+            "country_ids": list(countries),
+        },
         "sections": {
             "summary": {
                 "kpis": {
@@ -591,6 +649,10 @@ def build_daily_report(
                     "new_events": new_events_n,
                     "major_events": high_major,
                     "day_articles": len(day_articles),
+                    # Display aliases aligned to reference "Stories / Articles / Sources"
+                    "stories": len(major_events),
+                    "articles_analyzed": china_n,
+                    "sources_cited": len(reporting_sources),
                 },
                 "comparisons": {
                     "vs_yesterday": {
@@ -611,13 +673,19 @@ def build_daily_report(
                 "by_source": by_source,
                 "topics_top": _top_n(topic_overall, 8),
                 "frames_top": _top_n(frame_overall, 8),
-                "note": "Article Count 与 Weighted Volume 分列；加权不替代实际篇数。",
+                "note": (
+                    f"全球监测覆盖（当前接入 {connected_countries} 国）。"
+                    "Article Count 与 Weighted Volume 分列；加权不替代实际篇数。"
+                ),
             },
             "tone": {
                 "overall_sentiment_counts": dict(sent_overall),
                 "overall_stance_counts": dict(stance_overall),
                 "by_country": tone_by_country,
-                "note": "情感描述语气，立场绑定对华相关 Target；引述≠媒体自身立场；无综合总分。",
+                "note": (
+                    "情感条：正面 / 中立 / 负面（语气）；"
+                    "立场绑定对华 Target，分列展示；引述≠媒体自身立场；无综合总分。"
+                ),
             },
             "signals": signals,
             "quality": {

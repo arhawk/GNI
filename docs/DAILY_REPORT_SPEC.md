@@ -128,7 +128,8 @@ narratives              # 可选 LLM：executive, coverage, tone, signals, quali
 
 点击约定见 [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md) §3。
 
-可视化风格参考：[assets/report-ui/daily-visual-ref.jpg](assets/report-ui/daily-visual-ref.jpg)（不做无社媒「公众兴趣」曲线）。
+可视化风格参考：[assets/report-ui/daily-visual-ref.jpg](assets/report-ui/daily-visual-ref.jpg)。  
+**视觉 v3：** KPI（要闻/涉华篇/引用来源）+ 事件列表旁 **正面/中立/负面** 情感比例条 + 主题横条 + 当前接入国覆盖；仅媒体量对比 sparkline。**不做**社媒「公众兴趣」/ X 信息流；不写 Left–Center–Right 政治偏见。
 
 ---
 

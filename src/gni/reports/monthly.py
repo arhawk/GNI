@@ -22,8 +22,8 @@ from gni.reports.weekly import _in_window, _source_bucket, _upsert_snapshot
 
 SCHEMA_VERSION = "monthly_report_schema_v1"
 DISCLAIMER = (
-    "本月报基于 MVP 五国监测样本，反映被监测来源在窗口内的报道结构与变化，"
-    "禁止外推为全球对华舆论或国家立场。"
+    "全球对华监测月报 · 按当前接入国/源统计报道结构与变化；"
+    "禁止外推为国家立场或社会民意。"
 )
 
 
@@ -146,7 +146,7 @@ def build_monthly_report(
     overview = (
         f"{period} 监测月涉华报道 {len(this_m)} 篇（上月 {len(last_m)}，"
         f"Δ {len(this_m) - len(last_m)}）；来源分区见 summary.source_buckets。"
-        f"格局判断仅基于 MVP 五国样本。"
+        f"格局判断基于当前接入覆盖，随接入扩展而更新。"
     )
 
     payload: dict[str, Any] = {

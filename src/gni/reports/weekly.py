@@ -21,8 +21,8 @@ from gni.metrics.service import _latest_analyses
 
 SCHEMA_VERSION = "weekly_report_schema_v1"
 DISCLAIMER = (
-    "本周报基于 MVP 五国监测样本（官媒/公服/政府传播），"
-    "不等于全球舆论或国家立场。Unique Story Count 为 hash MVP。"
+    "全球对华监测周报 · 按当前接入国/源统计；"
+    "情感≠立场≠国家态度。Unique Story Count 为 hash MVP。"
 )
 
 

@@ -159,6 +159,11 @@ export type DailyReport = {
   generator?: string
   article_count?: number
   event_count?: number
+  connected?: {
+    countries: number
+    active_sources: number
+    country_ids: string[]
+  }
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
   narratives?: {
     executive?: string
@@ -176,6 +181,9 @@ export type DailyReport = {
         new_events: number
         major_events: number
         day_articles: number
+        stories?: number
+        articles_analyzed?: number
+        sources_cited?: number
       }
       comparisons?: {
         vs_yesterday?: { china_articles: number; delta: number }
@@ -207,6 +215,18 @@ export type DailyReport = {
         source_count: number
         countries?: string[]
       }
+      sentiment_counts?: {
+        positive: number
+        neutral: number
+        negative: number
+      }
+      sentiment_shares?: {
+        positive: number
+        neutral: number
+        negative: number
+      }
+      sentiment_n?: number
+      sentiment_skipped_government?: number
       by_country_views?: Array<{
         country_id: string
         article_count: number
@@ -220,6 +240,7 @@ export type DailyReport = {
         article_id: string
         title: string | null
         country_id: string | null
+        source_id?: string | null
         url?: string | null
         sentiment?: string | null
         stance?: string | null

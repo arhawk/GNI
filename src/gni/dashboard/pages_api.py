@@ -231,8 +231,8 @@ def country_detail_payload(session: Session, country_id: str) -> dict[str, Any] 
         "country_id": cid,
         "name": country.name if country else cid,
         "disclaimer": (
-            "MVP 五国监测样本中该国来源的对华报道表现；"
-            "不等于国家官方立场或全球舆论。来源分区：国家控制 / 公服 / 政府传播。"
+            "全球对华监测 · 该国为当前接入国之一；"
+            "媒体报道表现 ≠ 国家官方立场或社会民意。来源分区：国家控制 / 公服 / 政府传播。"
         ),
         "media": media,
         "china_article_count": len(china),
