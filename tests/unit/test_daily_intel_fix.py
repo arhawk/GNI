@@ -56,18 +56,26 @@ def test_tone_n1_unavailable():
     assert "负面为主" not in text
 
 
-def test_judgment_backlog_unavailable():
+def test_judgment_backlog_does_not_force_unavailable():
     text, conf = _build_judgment_text(
-        major_events=[],
+        major_events=[
+            {
+                "title": "Export controls hit chips",
+                "risk_level": "high",
+                "china_signal_score": 8.0,
+                "sector_ids": ["semiconductors"],
+            }
+        ],
         orphan_headlines=[],
         tone_by_country=[{"country_id": "US", "n": 1, "status": "unavailable"}],
-        topic_overall=Counter({"other_unknown": 1}),
+        topic_overall=Counter({"economy_trade": 3}),
         missing=80,
         day_total=100,
         china_n=10,
     )
-    assert conf == "unavailable"
-    assert "分析覆盖不足" in text
+    assert conf != "unavailable"
+    assert conf in {"high", "medium"}
+    assert "结论暂缓" not in text
 
 
 def test_heuristic_chess_not_technology():

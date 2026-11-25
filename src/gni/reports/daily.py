@@ -285,15 +285,20 @@ def _build_judgment_text(
         elif st == "unavailable" and int(row.get("n") or 0) > 0:
             parts.append(f"{row.get('country_id')} 样本不足不可外推")
 
-    backlog_ratio = missing / max(1, day_total)
-    if backlog_ratio > 0.5:
-        parts.append("分析覆盖不足，结论暂缓")
-        confidence = "unavailable"
-    elif high_n >= 1 and backlog_ratio < 0.3 and not taxonomy_low:
+    # Backlog gate disabled: global pending/failed was starving daily confidence.
+    # Keep ratio only as a soft note when same-day coverage looks thin.
+    day_backlog_note = False
+    if day_total > 0 and missing > 0 and (missing / max(1, day_total)) > 0.5:
+        # Soft note only — do not force confidence=unavailable.
+        parts.append("全库仍有分析积压（不影响当日研判出结论）")
+        day_backlog_note = True
+    if high_n >= 1 and not taxonomy_low:
         confidence = "high"
     elif china_n < 5 and high_n == 0 and not orphan_headlines:
         confidence = "low"
     else:
+        confidence = "medium"
+    if day_backlog_note and confidence == "high":
         confidence = "medium"
 
     if not parts:

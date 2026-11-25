@@ -66,7 +66,7 @@ sections.coverage.taxonomy_confidence  # normal | low（>60% 同桶）
 ### 2.2 情感门禁
 
 - `n < 3` → `status=unavailable`，摘要写「样本不足不可外推」，UI 显示「样本不足」  
-- 积压比 `missing_analysis / day_total > 50%` → `confidence=unavailable`，摘要强制「分析覆盖不足，结论暂缓」
+- 全库分析积压**不再**强制 `confidence=unavailable`（可附软提示）；当日研判以事件/孤儿/分国门禁为准
 
 `sentiment_tech.score_mean` = 文章情感分均值（技术指标），**≠ 舆情总分**。
 
