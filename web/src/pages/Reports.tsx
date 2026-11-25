@@ -16,7 +16,15 @@ export function ReportsPage() {
     setError(null)
     setData(null)
     fetchDailyReport()
-      .then(setData)
+      .then((payload) => {
+        if (!payload?.sections?.summary?.kpis) {
+          setError(
+            `日报 schema 不匹配（收到 ${payload?.schema_version || 'unknown'}）。请重启 :8000 API 加载 daily_report_schema_v2。`,
+          )
+          return
+        }
+        setData(payload)
+      })
       .catch((e: Error) => setError(e.message))
   }, [tab])
 
