@@ -24,7 +24,7 @@ export default function App() {
             <aside className="nav">
               <div className="brand">
                 <span className="brand-mark">GNI</span>
-                <span className="brand-sub">全球叙事智能</span>
+                <span className="brand-sub">叙事智能 · MVP 五国样本</span>
               </div>
 
               <NavGroup label="监测">

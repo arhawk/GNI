@@ -100,6 +100,8 @@ class Source(Base):
     active_status: Mapped[str] = mapped_column(String(32), default="candidate")
     verification_status: Mapped[str] = mapped_column(String(32), default="unverified")
     feed_or_api_url: Mapped[str | None] = mapped_column(Text)
+    # GENERAL_NEWS | INTERNATIONAL_NEWS | CHINA_FOCUSED | TOPIC_SPECIFIC | GOVERNMENT_RELEASES
+    feed_scope: Mapped[str | None] = mapped_column(String(64))
     notes: Mapped[str | None] = mapped_column(Text)
     config: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -544,6 +546,10 @@ class EventLocation(Base):
     country_id: Mapped[str | None] = mapped_column(String(8))
     lat: Mapped[float | None] = mapped_column(Float)
     lon: Mapped[float | None] = mapped_column(Float)
+    # city | region | country | maritime | unknown
+    geographic_precision: Mapped[str | None] = mapped_column(String(32))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -591,4 +597,87 @@ class EventNarrativeEvidence(Base):
     article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
     span_id: Mapped[str | None] = mapped_column(PortableUUID, nullable=True)
     quote: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EventRevision(Base):
+    """Audit log for event merge / split / correct / lock."""
+
+    __tablename__ = "event_revisions"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)  # merge|split|correct|lock
+    payload: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    actor: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # rule_id
+    version: Mapped[str] = mapped_column(String(64), nullable=False, default="v1")
+    thresholds: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    __table_args__ = (UniqueConstraint("deduplication_key", name="uq_alerts_dedupe_key"),)
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    category: Mapped[str] = mapped_column(String(32), nullable=False)  # intelligence | system
+    subcategory: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN")
+    deduplication_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    first_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trigger_count: Mapped[int] = mapped_column(Integer, default=1)
+    window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    evidence_snapshot: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AlertEvent(Base):
+    __tablename__ = "alert_events"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    alert_id: Mapped[str] = mapped_column(ForeignKey("alerts.id"), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)  # create|trigger|ack|resolve|close|reopen
+    actor: Mapped[str | None] = mapped_column(String(128))
+    payload: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AlertEvidence(Base):
+    __tablename__ = "alert_evidence"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    alert_id: Mapped[str] = mapped_column(ForeignKey("alerts.id"), nullable=False, index=True)
+    article_id: Mapped[str | None] = mapped_column(ForeignKey("articles.id"), nullable=True)
+    event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
+    snapshot: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReportSnapshot(Base):
+    __tablename__ = "report_snapshots"
+    __table_args__ = (
+        UniqueConstraint("report_type", "period", name="uq_report_snapshots_type_period"),
+    )
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    report_type: Mapped[str] = mapped_column(String(32), nullable=False)  # daily|weekly|monthly
+    period: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str | None] = mapped_column(String(64))
+    payload: Mapped[dict[str, Any]] = mapped_column(PortableJSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

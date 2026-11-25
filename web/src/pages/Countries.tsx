@@ -40,6 +40,7 @@ export function CountriesPage() {
     <div className="countries-layout">
       <aside className="countries-list panel">
         <h2>国家</h2>
+        <p className="muted small">MVP 五国监测样本</p>
         <ul className="event-list">
           {list.map((c) => (
             <li key={c.country_id}>
@@ -67,11 +68,12 @@ export function CountriesPage() {
             <p className="callout">{detail.disclaimer}</p>
             <p className="muted small">涉华纳入文章 {detail.china_article_count}</p>
 
-            <h3>媒体</h3>
+            <h3>媒体（按来源分区）</h3>
             <table>
               <thead>
                 <tr>
                   <th>来源</th>
+                  <th>分区</th>
                   <th>状态</th>
                   <th>涉华</th>
                 </tr>
@@ -83,6 +85,7 @@ export function CountriesPage() {
                       {m.name}
                       <div className="meta">{m.source_id}</div>
                     </td>
+                    <td>{m.source_bucket || '—'}</td>
                     <td>{m.active_status}</td>
                     <td>{m.china_article_count}</td>
                   </tr>

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     report_timezone: str = "Asia/Shanghai"
 
+    # Meilisearch (optional; search falls back to Postgres ilike when unset/down)
+    meili_url: str = "http://127.0.0.1:7700"
+    meili_key: str = "gni_dev_meili_key"
+
 
 @lru_cache
 def get_settings() -> Settings:

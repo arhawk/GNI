@@ -1,6 +1,6 @@
 # GNI 阶段状态（权威）
 
-**版本：** phase_status_v1（2026-11-25）  
+**版本：** phase_status_v1（2026-11-25 · Batch2/3）  
 **用途：** 消除 README / PHASE1_TASK_BRIEF / 报告文档之间对「P1-F」含义的冲突。Agent 与人工以本表为准。
 
 ---
@@ -10,18 +10,23 @@
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | P1-A～P1-E | 采集、处理、分析、指标、Dashboard | **已完成** |
-| P1-F1 | Proto Event / Event Fingerprint | **原型已实现**；持续修三时间、稳定 ID、增量 rebuild |
-| P1-F2 | Daily Report v2（Daily Brief） | **已实现**；持续验收 |
-| P1-F3 | 持久化 Alerts 生命周期 | **待完成**（见 BATCH2 接口说明） |
-| P1-F4 | Weekly / Monthly Reports | **规格完成**；编码待第三批 |
-| Phase 2 | 完整跨语言事件聚合、叙事演化 | **后续** |
+| P1-F1 | Proto Event / Event Fingerprint | **原型已实现**；三时间、稳定 ID、增量 rebuild、无词典不造假 Actor |
+| P1-F2 | Daily Report v2（Daily Brief） | **已实现** |
+| P1-F3 | 持久化 Alerts 生命周期 | **已实现**（dedupe upsert + ack/resolve/close + 日报窗口） |
+| P1-F4 | Weekly / Monthly Reports | **schema v1 规则组装已实现**（报告中心真页） |
+| Search | Meilisearch → PG hydrate | **已实现**；宕机回退 `ilike` |
+| Story | 概念层 | **文档已定**（无独立表）；Unique Story Count = hash MVP |
+| Phase 2 | 完整跨语言事件聚合、叙事演化、Story 表 | **后续** |
 | Phase 3 | 开放式研究 Agent | **后续** |
 
 互链：
 
-- 任务书总览：[PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md)（历史 A～F 叙述保留；细节以本表 F1–F4 为准）
+- 任务书总览：[PHASE1_TASK_BRIEF.md](PHASE1_TASK_BRIEF.md)
 - 报告产品：[REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)
-- 预警规范：[ALERTS.md](ALERTS.md)（生命周期持久化 = P1-F3）
+- 预警规范：[ALERTS.md](ALERTS.md)
+- Story 概念：[STORY_MODEL.md](STORY_MODEL.md)
+- 第二批接口：[BATCH2_INTERFACES.md](BATCH2_INTERFACES.md)
+- 第三批接口：[BATCH3_INTERFACES.md](BATCH3_INTERFACES.md)
 
 ---
 

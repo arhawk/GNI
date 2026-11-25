@@ -13,13 +13,8 @@ from sqlalchemy.orm import Session
 from gni.analysis.stance_util import primary_stance_label
 from gni.events.cluster import ArticleSeed, ProtoCluster, cluster_articles, dominant
 from gni.events.extract import extract_for_articles, load_latest_cards
-from gni.events.geo import centroid
+from gni.events.geo import centroid, location_pin_spec
 from gni.events.match import FingerprintCluster, cluster_fingerprints
-
-
-def _primary_stance(structured: dict[str, Any] | None) -> str | None:
-    label = primary_stance_label(structured or {})
-    return None if label == "unknown" else label
 from gni.events.rollup import (
     attitude_map_rows,
     country_china_attitude_detail,
@@ -35,11 +30,89 @@ from gni.infrastructure.models import (
     EventMetricSnapshot,
     EventNarrativeEvidence,
     EventParticipant,
+    EventRevision,
     NarrativeCluster,
     Source,
 )
 from gni.metrics.definitions import CHINA_INCLUDE_LEVELS
 from gni.metrics.service import _latest_analyses
+
+
+def _primary_stance(structured: dict[str, Any] | None) -> str | None:
+    label = primary_stance_label(structured or {})
+    return None if label == "unknown" else label
+
+
+def lock_event(session: Session, event_id: str, *, actor: str = "ui") -> dict[str, Any] | None:
+    event = session.get(Event, event_id)
+    if not event:
+        return None
+    event.status = "locked"
+    session.add(
+        EventRevision(
+            id=str(uuid4()),
+            event_id=event_id,
+            action="lock",
+            payload={"status": "locked"},
+            actor=actor,
+        )
+    )
+    session.flush()
+    return {"id": event.id, "status": event.status}
+
+
+def merge_events(
+    session: Session,
+    *,
+    keep_id: str,
+    merge_id: str,
+    actor: str = "ui",
+) -> dict[str, Any]:
+    keep = session.get(Event, keep_id)
+    merge = session.get(Event, merge_id)
+    if not keep or not merge:
+        raise ValueError("keep_id or merge_id not found")
+    if keep_id == merge_id:
+        raise ValueError("cannot merge event into itself")
+    linked = set(
+        session.scalars(select(EventArticle.article_id).where(EventArticle.event_id == keep_id)).all()
+    )
+    moved = 0
+    for link in list(
+        session.scalars(select(EventArticle).where(EventArticle.event_id == merge_id)).all()
+    ):
+        if link.article_id not in linked:
+            session.add(
+                EventArticle(
+                    id=str(uuid4()),
+                    event_id=keep_id,
+                    article_id=link.article_id,
+                    relation=link.relation or "covers",
+                )
+            )
+            moved += 1
+        session.delete(link)
+    merge.status = "closed"
+    session.add(
+        EventRevision(
+            id=str(uuid4()),
+            event_id=keep_id,
+            action="merge",
+            payload={"merged_from": merge_id, "articles_moved": moved},
+            actor=actor,
+        )
+    )
+    session.add(
+        EventRevision(
+            id=str(uuid4()),
+            event_id=merge_id,
+            action="merge",
+            payload={"merged_into": keep_id},
+            actor=actor,
+        )
+    )
+    session.flush()
+    return {"keep_id": keep_id, "merge_id": merge_id, "articles_moved": moved, "merge_status": "closed"}
 
 
 def _seeds_from_db(session: Session) -> list[ArticleSeed]:
@@ -198,9 +271,14 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tu
         eid = _stable_event_id(fp)
         existing = session.get(Event, eid)
 
-    loc_label = cl.location_label
-    loc_cid = cl.location_country_id
-    coords = centroid(loc_cid) if loc_cid else None
+    pin = location_pin_spec(
+        label=cl.location_label,
+        country_id=cl.location_country_id,
+        text=cl.location_label,
+    )
+    loc_label = pin["label"] or cl.location_label
+    loc_cid = pin["country_id"]
+    coords = (pin["lat"], pin["lon"]) if pin["lat"] is not None and pin["lon"] is not None else None
     has_phys = coords is not None
     # True event time only (may be None); never published_at.
     true_event_time = cl.event_time
@@ -208,7 +286,8 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tu
         f"Fingerprint event from {len(cl.article_ids)} article(s); "
         f"actor={cl.actor_key} action={cl.action_key}. "
         + (
-            f"Location hint: {loc_label} ({loc_cid})."
+            f"Location hint: {loc_label} ({loc_cid or 'n/a'}, "
+            f"precision={pin.get('geographic_precision')})."
             if loc_label
             else "No verified physical EVENT_LOCATION."
         )
@@ -290,7 +369,7 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tu
                 role="actor",
             )
         )
-    if has_phys and coords:
+    if loc_label or pin.get("geographic_precision") not in (None, "unknown"):
         session.add(
             EventLocation(
                 id=str(uuid4()),
@@ -298,9 +377,12 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tu
                 location_type="EVENT_LOCATION",
                 label=loc_label,
                 country_id=loc_cid,
-                lat=coords[0],
-                lon=coords[1],
-                notes="Heuristic place dictionary — not a geocoder.",
+                lat=coords[0] if coords else None,
+                lon=coords[1] if coords else None,
+                geographic_precision=pin.get("geographic_precision"),
+                confidence=pin.get("confidence"),
+                evidence=pin.get("evidence"),
+                notes="Heuristic place dictionary — not a geocoder; maritime has no fake coords.",
             )
         )
     for aid in cl.article_ids:
@@ -420,9 +502,14 @@ def list_events(session: Session, *, limit: int = 50) -> list[dict[str, Any]]:
                         "country_id": loc.country_id,
                         "lat": loc.lat,
                         "lon": loc.lon,
+                        "geographic_precision": getattr(loc, "geographic_precision", None),
+                        "confidence": getattr(loc, "confidence", None),
                     }
                     for loc in locs
                 ],
+                "actor_key": getattr(e, "actor_key", None),
+                "action_key": getattr(e, "action_key", None),
+                "first_seen_at": e.created_at.isoformat() if getattr(e, "created_at", None) else None,
             }
         )
     return out

@@ -147,6 +147,7 @@ sources:
   active_status: active
   verification_status: verified
   editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
   feed_or_api_url: https://www.voanews.com/api/zmjuqtl-vomx-tpey_jqq
   notes: >
     Active US panel. Full URL from https://www.voanews.com/rssfeeds (China News / z/6715).
@@ -174,6 +175,7 @@ sources:
   active_status: active
   verification_status: verified
   editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
   feed_or_api_url: https://www.rfa.org/english/rss
   notes: 'Active US panel. Asia/China-focused official media desk. Occasional HTTP 429; keep verified.
     editorial_focus=international_or_china.
@@ -201,6 +203,7 @@ sources:
   active_status: active
   verification_status: verified
   editorial_focus: international_or_china
+  feed_scope: GOVERNMENT_RELEASES
   feed_or_api_url: https://www.state.gov/rss-feed/press-releases/feed/
   config:
     user_agent: Mozilla/5.0 (compatible; GNI-ResearchBot/0.1; +internal-research)
@@ -221,6 +224,7 @@ sources:
   timezone: America/New_York
   access_method: rss
   adapter_type: rss_adapter
+  feed_scope: CHINA_FOCUSED
   terms_url: https://www.voanews.com/
   compliance_status: allowed_internal
   evidence_url: https://www.voanews.com/rssfeeds

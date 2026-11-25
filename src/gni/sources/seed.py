@@ -27,6 +27,51 @@ def _source_config(row: dict[str, Any]) -> dict[str, Any]:
     return cfg
 
 
+def infer_feed_scope(row: dict[str, Any]) -> str:
+    """GENERAL_NEWS | INTERNATIONAL_NEWS | CHINA_FOCUSED | TOPIC_SPECIFIC | GOVERNMENT_RELEASES."""
+    if row.get("feed_scope"):
+        return str(row["feed_scope"]).upper()
+    name = (row.get("name") or "").lower()
+    st = (row.get("source_type") or "").lower()
+    focus = (row.get("editorial_focus") or "").lower()
+    sid = (row.get("source_id") or "").lower()
+    # Explicit China / East Asia desks before ownership heuristics (USAGM is gov-owned media).
+    if any(
+        k in name
+        for k in (
+            "china news",
+            "east asia",
+            "asia news",
+            "mandarin",
+        )
+    ) or any(k in sid for k in ("_china", "east_asia", "rfa")):
+        return "CHINA_FOCUSED"
+    if focus in {"china", "china_desk", "china_focused"}:
+        return "CHINA_FOCUSED"
+    if (
+        st in {"gov_comms", "government", "government_release"}
+        or any(
+            k in name
+            for k in (
+                "state department",
+                "kremlin",
+                "press information",
+                "federal register",
+                "department of defense",
+                "prime minister",
+                "presidential",
+            )
+        )
+        or any(k in sid for k in ("_state_", "kremlin", "_pib", "_pmc", "federal_register"))
+    ):
+        return "GOVERNMENT_RELEASES"
+    if "topic" in focus or "specialist" in st:
+        return "TOPIC_SPECIFIC"
+    if focus == "international_or_china" or "international" in focus or "world" in name:
+        return "INTERNATIONAL_NEWS"
+    return "INTERNATIONAL_NEWS"
+
+
 def load_seed_file(path: Path | None = None) -> dict[str, Any]:
     seed_path = path or DEFAULT_SEED
     with seed_path.open(encoding="utf-8") as f:
@@ -99,6 +144,7 @@ def seed_sources(session: Session, path: Path | None = None) -> dict[str, int]:
             active_status=row.get("active_status", "candidate"),
             verification_status=row.get("verification_status", "unverified"),
             feed_or_api_url=row.get("feed_or_api_url"),
+            feed_scope=infer_feed_scope(row),
             notes=row.get("notes"),
             config=_source_config(row),
         )

@@ -1,4 +1,4 @@
-# Local PostgreSQL for GNI. Phase 0 does not require the app to connect at install time.
+# Local PostgreSQL + Meilisearch for GNI.
 services:
   db:
     image: postgres:16
@@ -17,5 +17,22 @@ services:
       timeout: 5s
       retries: 10
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: gni-meilisearch
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: gni_dev_meili_key
+    ports:
+      - "7700:7700"
+    volumes:
+      - gni_meili:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   gni_pgdata:
+  gni_meili:

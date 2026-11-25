@@ -1,8 +1,8 @@
 # 每月研判规格（MONTHLY_REPORT_SPEC）
 
-**版本：** monthly_report_schema_v0（**冻结目录；实现后置**）  
-**产品名：** Global China Media Monthly Strategic Review  
-**核心问题：** 一个月以来，全球对华舆论格局发生了什么变化？  
+**版本：** monthly_report_schema_v1（**规则组装已实现**；高级可视化后置）  
+**产品名：** China Media Monthly Strategic Review（MVP 五国监测样本）  
+**核心问题：** 一个月以来，被监测样本中对华报道格局发生了什么变化？  
 **依赖：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、日报/周报 facts、稳定长窗数据。  
 **阅读时长：** 15–30 分钟。
 
@@ -35,6 +35,7 @@ UI 参考：[assets/report-ui/monthly-visual-ref.png](assets/report-ui/monthly-v
 
 ## 3. 实现状态
 
-**尚未编码。** 依赖日报与周报质量稳定后再开。报告中心 Monthly Tab 先占位。
+**schema v1 已实现**（`src/gni/reports/monthly.py` + `/api/reports/monthly` + 报告中心 Tab）。  
+未做：参考图级战略可视化。文案限定 **MVP 五国监测样本**，禁止「全球舆论」夸大。
 
 禁止：仅凭报道变化推断政府意图、政策结果或真实社会风险。

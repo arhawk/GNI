@@ -62,6 +62,18 @@ def _article_time(a: Article) -> datetime | None:
     return _aware(a.published_at or a.first_seen_at)
 
 
+def _dedupe_key(category: str, subcategory: str, evidence: dict[str, Any] | None) -> str:
+    ev = evidence or {}
+    scope = (
+        ev.get("country_id")
+        or ev.get("source_id")
+        or ev.get("event_id")
+        or ev.get("topic")
+        or "global"
+    )
+    return f"{category}:{subcategory}:{scope}"
+
+
 def _alert(
     *,
     category: str,
@@ -71,15 +83,17 @@ def _alert(
     summary: str,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    ev = evidence or {}
     return {
-        "id": str(uuid4()),
+        "id": str(uuid4()),  # ephemeral until persist upsert replaces with stable DB id
         "category": category,  # intelligence | system
         "subcategory": subcategory,
         "severity": severity,  # high | medium | low
         "title": title,
         "summary": summary,
         "detected_at": _now().isoformat(),
-        "evidence": evidence or {},
+        "evidence": ev,
+        "deduplication_key": _dedupe_key(category, subcategory, ev),
     }
 
 

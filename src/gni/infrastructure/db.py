@@ -154,4 +154,23 @@ def ensure_schema() -> list[str]:
                     conn.execute(text(f"ALTER TABLE events ADD COLUMN {name} {ddl}"))
                     applied.append(f"events.{name}")
 
+        if "sources" in tables:
+            existing_src = {c["name"] for c in insp.get_columns("sources")}
+            if "feed_scope" not in existing_src:
+                col = "VARCHAR(64)" if dialect_key == "sqlite" else "VARCHAR(64)"
+                conn.execute(text(f"ALTER TABLE sources ADD COLUMN feed_scope {col}"))
+                applied.append("sources.feed_scope")
+
+        if "event_locations" in tables:
+            existing_loc = {c["name"] for c in insp.get_columns("event_locations")}
+            loc_cols = {
+                "geographic_precision": "VARCHAR(32)",
+                "confidence": "FLOAT" if dialect_key == "sqlite" else "DOUBLE PRECISION",
+                "evidence": "JSON" if dialect_key == "sqlite" else "JSONB",
+            }
+            for name, ddl in loc_cols.items():
+                if name not in existing_loc:
+                    conn.execute(text(f"ALTER TABLE event_locations ADD COLUMN {name} {ddl}"))
+                    applied.append(f"event_locations.{name}")
+
     return applied

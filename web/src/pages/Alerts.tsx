@@ -1,6 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchAlerts, type AlertItem } from '../api'
+import {
+  acknowledgeAlert,
+  closeAlert,
+  fetchAlerts,
+  resolveAlert,
+  runAlerts,
+  type AlertItem,
+} from '../api'
 
 const SUB_LABEL: Record<string, string> = {
   volume_spike: '报道量异常',
@@ -23,9 +30,10 @@ export function AlertsPage() {
   const [disclaimer, setDisclaimer] = useState('')
   const [counts, setCounts] = useState({ intelligence: 0, system: 0, high: 0 })
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    fetchAlerts()
+  const reload = useCallback(() => {
+    return fetchAlerts()
       .then((r) => {
         setIntel(r.intelligence)
         setSystem(r.system)
@@ -34,6 +42,38 @@ export function AlertsPage() {
       })
       .catch((e: Error) => setError(e.message))
   }, [])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  async function onRun() {
+    setBusy(true)
+    setError(null)
+    try {
+      await runAlerts()
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onAction(id: string, action: 'ack' | 'resolve' | 'close') {
+    setBusy(true)
+    setError(null)
+    try {
+      if (action === 'ack') await acknowledgeAlert(id)
+      else if (action === 'resolve') await resolveAlert(id)
+      else await closeAlert(id)
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (error) return <div className="panel error">{error}</div>
 
@@ -45,24 +85,35 @@ export function AlertsPage() {
         <p className="muted small">
           情报 {counts.intelligence} · 系统 {counts.system} · 高严重度 {counts.high}
         </p>
+        <button type="button" disabled={busy} onClick={onRun}>
+          运行规则引擎
+        </button>
       </div>
       <div className="alerts-grid">
         <section className="panel">
           <h3>A · 舆情情报预警</h3>
           <p className="muted small">面向研究：报道/态度/叙事/重大事件/跨国扩散</p>
-          <AlertList items={intel} />
+          <AlertList items={intel} busy={busy} onAction={onAction} />
         </section>
         <section className="panel">
           <h3>B · 系统运行告警</h3>
           <p className="muted small">面向运维：源故障、采集、积压、模型、质量</p>
-          <AlertList items={system} />
+          <AlertList items={system} busy={busy} onAction={onAction} />
         </section>
       </div>
     </div>
   )
 }
 
-function AlertList({ items }: { items: AlertItem[] }) {
+function AlertList({
+  items,
+  busy,
+  onAction,
+}: {
+  items: AlertItem[]
+  busy: boolean
+  onAction: (id: string, action: 'ack' | 'resolve' | 'close') => void
+}) {
   if (items.length === 0) return <p className="muted">当前窗口无触发信号。</p>
   return (
     <ul className="event-list">
@@ -73,13 +124,35 @@ function AlertList({ items }: { items: AlertItem[] }) {
             <div>
               <span className={`sev sev-${a.severity}`}>{a.severity}</span>{' '}
               <strong>{SUB_LABEL[a.subcategory] || a.subcategory}</strong> · {a.title}
+              {a.status && <span className="muted small"> · {a.status}</span>}
             </div>
             <div className="muted small">{a.summary}</div>
-            {evId && (
-              <Link className="small" to={`/events/${evId}`}>
-                查看事件
-              </Link>
-            )}
+            <div className="alert-actions">
+              {evId && (
+                <Link className="small" to={`/events/${evId}`}>
+                  查看事件
+                </Link>
+              )}
+              <button type="button" className="small" disabled={busy} onClick={() => onAction(a.id, 'ack')}>
+                确认
+              </button>
+              <button
+                type="button"
+                className="small"
+                disabled={busy}
+                onClick={() => onAction(a.id, 'resolve')}
+              >
+                解决
+              </button>
+              <button
+                type="button"
+                className="small"
+                disabled={busy}
+                onClick={() => onAction(a.id, 'close')}
+              >
+                关闭
+              </button>
+            </div>
           </li>
         )
       })}

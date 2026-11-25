@@ -8,6 +8,18 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function post<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<T>
+}
+
 export type Overview = {
   meta: {
     days: number
@@ -390,6 +402,29 @@ export function fetchDailyReport(date?: string) {
   return get<DailyReport>(`/api/reports/daily${q ? `?${q}` : ''}`)
 }
 
+export type PeriodReport = {
+  report_type: string
+  schema_version?: string
+  period: string
+  period_start?: string
+  period_end?: string
+  generated_at: string
+  disclaimer: string
+  article_count?: number
+  sections: Record<string, unknown>
+  narratives?: Record<string, string>
+}
+
+export function fetchWeeklyReport(end?: string) {
+  const q = end ? `end=${encodeURIComponent(end)}` : ''
+  return get<PeriodReport>(`/api/reports/weekly${q ? `?${q}` : ''}`)
+}
+
+export function fetchMonthlyReport(month?: string) {
+  const q = month ? `month=${encodeURIComponent(month)}` : ''
+  return get<PeriodReport>(`/api/reports/monthly${q ? `?${q}` : ''}`)
+}
+
 export type SearchHit = {
   kind: 'event' | 'article' | 'country' | 'source'
   id: string
@@ -449,9 +484,12 @@ export type CountryDetail = {
     active_status: string
     china_article_count: number
     language: string | null
+    source_bucket?: string
+    feed_scope?: string | null
   }>
   china_article_count: number
   sentiment_counts: Record<string, number>
+  government_sentiment_counts?: Record<string, number>
   stance_counts: Record<string, number>
   topics_top: Array<{ label: string; count: number }>
   frames_top: Array<{ label: string; count: number }>
@@ -474,19 +512,40 @@ export type AlertItem = {
   category: 'intelligence' | 'system'
   subcategory: string
   severity: string
+  status?: string
   title: string
   summary: string
   detected_at: string
   evidence: Record<string, unknown>
 }
 
-export function fetchAlerts() {
+export function fetchAlerts(params?: { window_start?: string; window_end?: string }) {
+  const q = new URLSearchParams()
+  if (params?.window_start) q.set('window_start', params.window_start)
+  if (params?.window_end) q.set('window_end', params.window_end)
+  const qs = q.toString()
   return get<{
     disclaimer: string
     intelligence: AlertItem[]
     system: AlertItem[]
     counts: { intelligence: number; system: number; high: number }
-  }>('/api/alerts')
+  }>(`/api/alerts${qs ? `?${qs}` : ''}`)
+}
+
+export function runAlerts() {
+  return post<{ ok: boolean; created?: number; updated?: number }>('/api/alerts/run')
+}
+
+export function acknowledgeAlert(id: string) {
+  return post<{ id: string; status: string }>(`/api/alerts/${id}/acknowledge`)
+}
+
+export function resolveAlert(id: string) {
+  return post<{ id: string; status: string }>(`/api/alerts/${id}/resolve`)
+}
+
+export function closeAlert(id: string) {
+  return post<{ id: string; status: string }>(`/api/alerts/${id}/close`)
 }
 
 export function fetchSystemStatus() {

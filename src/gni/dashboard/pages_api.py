@@ -154,14 +154,21 @@ def country_detail_payload(session: Session, country_id: str) -> dict[str, Any] 
             ).all()
         )
     china = [a for a in articles if (a.china_relevance_level or "") in CHINA_INCLUDE_LEVELS]
+    src_by_id = {s.id: s for s in sources}
     analyses = _latest_analyses(session, [a.id for a in china])
     sent: Counter[str] = Counter()
+    gov_sent: Counter[str] = Counter()
     stance: Counter[str] = Counter()
     topics: Counter[str] = Counter()
     frames: Counter[str] = Counter()
     for a in china:
         structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
-        sent[((structured.get("sentiment") or {}).get("label") or "unknown").lower()] += 1
+        src = src_by_id.get(a.source_id)
+        lab = ((structured.get("sentiment") or {}).get("label") or "unknown").lower()
+        if src and (src.feed_scope or "").upper() == "GOVERNMENT_RELEASES":
+            gov_sent[lab] += 1
+        else:
+            sent[lab] += 1
         from gni.analysis.stance_util import all_stance_labels
 
         labs = all_stance_labels(structured, media_only=True)
@@ -176,6 +183,18 @@ def country_detail_payload(session: Session, country_id: str) -> dict[str, Any] 
         if isinstance(fr, dict) and fr.get("primary"):
             frames[str(fr["primary"])] += 1
 
+    def _bucket(s: Source) -> str:
+        scope = (s.feed_scope or "").upper()
+        if scope == "GOVERNMENT_RELEASES":
+            return "government_comms"
+        ownership = (s.ownership_type or "").lower()
+        ctrl = (s.government_control_level or "").lower()
+        if ownership in {"public", "public_law"} or ctrl == "low":
+            return "public_service"
+        if ctrl in {"high", "medium"} or ownership in {"government", "state"}:
+            return "state_controlled"
+        return "other"
+
     media = []
     for s in sources:
         n = sum(1 for a in china if a.source_id == s.id)
@@ -186,6 +205,10 @@ def country_detail_payload(session: Session, country_id: str) -> dict[str, Any] 
                 "active_status": s.active_status,
                 "china_article_count": n,
                 "language": s.language,
+                "feed_scope": s.feed_scope,
+                "ownership_type": s.ownership_type,
+                "government_control_level": s.government_control_level,
+                "source_bucket": _bucket(s),
             }
         )
     media.sort(key=lambda x: -x["china_article_count"])
@@ -207,10 +230,14 @@ def country_detail_payload(session: Session, country_id: str) -> dict[str, Any] 
     return {
         "country_id": cid,
         "name": country.name if country else cid,
-        "disclaimer": "被监测媒体样本表现，不等于国家官方立场。",
+        "disclaimer": (
+            "MVP 五国监测样本中该国来源的对华报道表现；"
+            "不等于国家官方立场或全球舆论。来源分区：国家控制 / 公服 / 政府传播。"
+        ),
         "media": media,
         "china_article_count": len(china),
         "sentiment_counts": dict(sent),
+        "government_sentiment_counts": dict(gov_sent),
         "stance_counts": dict(stance),
         "topics_top": [{"label": k, "count": v} for k, v in topics.most_common(8)],
         "frames_top": [{"label": k, "count": v} for k, v in frames.most_common(8)],

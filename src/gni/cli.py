@@ -203,6 +203,26 @@ def cmd_events_extract(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_alerts_run(_: argparse.Namespace) -> int:
+    from gni.alerts.service import run_alert_engine
+    from gni.infrastructure.db import session_scope
+
+    with session_scope() as session:
+        out = run_alert_engine(session)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_search_reindex(_: argparse.Namespace) -> int:
+    from gni.infrastructure.db import session_scope
+    from gni.search.sync import reindex_all
+
+    with session_scope() as session:
+        out = reindex_all(session)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0 if out.get("ok") else 1
+
+
 def cmd_reports_daily(args: argparse.Namespace) -> int:
     from gni.infrastructure.db import ensure_schema, session_scope
     from gni.reports.daily import build_daily_report, write_daily_files
@@ -500,6 +520,16 @@ def main(argv: list[str] | None = None) -> None:
         help="Optional LLM polish for narrative one-liners only (never changes numbers)",
     )
     p_rdaily.set_defaults(func=cmd_reports_daily)
+
+    p_alerts = sub.add_parser("alerts", help="Persisted A/B alert center")
+    alerts_sub = p_alerts.add_subparsers(dest="alerts_command", required=True)
+    p_arun_alerts = alerts_sub.add_parser("run", help="Run rule engine upsert by dedupe_key")
+    p_arun_alerts.set_defaults(func=cmd_alerts_run)
+
+    p_search = sub.add_parser("search", help="Search index (Meilisearch)")
+    search_sub = p_search.add_subparsers(dest="search_command", required=True)
+    p_sre = search_sub.add_parser("reindex", help="Full rebuild of Meili article/event indexes")
+    p_sre.set_defaults(func=cmd_search_reindex)
 
     p_api = sub.add_parser("api", help="HTTP API for React UI")
     api_sub = p_api.add_subparsers(dest="api_command", required=True)

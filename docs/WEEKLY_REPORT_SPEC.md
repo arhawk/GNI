@@ -1,6 +1,6 @@
 # 每周分析规格（WEEKLY_REPORT_SPEC）
 
-**版本：** weekly_report_schema_v0（**冻结目录；实现后置**）  
+**版本：** weekly_report_schema_v1（**规则组装已实现**；高级可视化后置）  
 **产品名：** Weekly Intelligence Report  
 **核心问题：** 这一周发生了什么变化？这些变化意味着什么？  
 **依赖：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、日报 facts 管线、更长窗口指标与事件演化。  
@@ -37,11 +37,12 @@ UI 参考：[assets/report-ui/weekly-visual-ref.png](assets/report-ui/weekly-vis
 
 ## 3. 实现状态
 
-**尚未编码。** 待日报 `daily_report_schema_v2` 验收后再开：
+**schema v1 已实现**（`src/gni/reports/weekly.py` + `/api/reports/weekly` + 报告中心 Tab）：
 
 - 周环比 facts（vs 上周）  
-- 事件演化时间线（证据挂 `article_id` / `event_time`）  
-- 国家 × 主题 / 框架矩阵  
-- 报告中心 Weekly Tab 真实生成  
+- 事件演化占位（规则 v1 列表；完整时间线后置）  
+- 国家 × 主题 / 框架摘要  
+- 报告中心 Weekly 真页（明细可折叠）  
 
+未做：参考图 Sankey / 社媒兴趣曲线。  
 禁止项同 [REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)：LLM 不点数；不把样本写成国家立场。

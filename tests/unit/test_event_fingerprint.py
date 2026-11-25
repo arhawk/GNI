@@ -34,6 +34,21 @@ def test_normalize_actor_aliases():
     assert normalize_actor("Washington") == "us"
 
 
+def test_normalize_unknown_actor_action_no_fake_keys():
+    assert normalize_actor("SomeRandomOrgXYZ") is None
+    assert normalize_action("flibbertigibbet") is None
+    card = FingerprintCard(
+        article_id="x",
+        actor="SomeRandomOrgXYZ",
+        action="flibbertigibbet",
+        object="widgets",
+    )
+    assert card.is_insufficient
+    assert card.to_fingerprint_dict()["status"] == "INSUFFICIENT_INFORMATION"
+    assert card.to_fingerprint_dict()["actor_key"] is None
+    assert card.to_fingerprint_dict()["fingerprint_hash"] is None
+
+
 def test_object_overlap_and_different_actor_not_same():
     assert object_overlap("trade talks tariffs", "trade talks amid tariffs") > 0.4
     now = datetime.now(timezone.utc)

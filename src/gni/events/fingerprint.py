@@ -60,31 +60,49 @@ ACTOR_ALIASES: dict[str, str] = {
     "chinese": "china",
     "beijing": "china",
     "prc": "china",
+    "中国": "china",
+    "中方": "china",
+    "北京": "china",
     "united states": "us",
     "u.s.": "us",
     "u.s": "us",
     "usa": "us",
+    "us": "us",
     "washington": "us",
     "white house": "us",
+    "美国": "us",
+    "美方": "us",
+    "华盛顿": "us",
     "russia": "russia",
     "moscow": "russia",
     "kremlin": "russia",
+    "俄国": "russia",
+    "俄罗斯": "russia",
+    "莫斯科": "russia",
     "eu": "eu",
     "european union": "eu",
     "brussels": "eu",
+    "欧盟": "eu",
     "germany": "germany",
     "berlin": "germany",
+    "德国": "germany",
+    "deutschland": "germany",
     "india": "india",
     "new delhi": "india",
+    "印度": "india",
     "australia": "australia",
     "canberra": "australia",
+    "澳大利亚": "australia",
     "japan": "japan",
     "tokyo": "japan",
+    "日本": "japan",
     "uk": "uk",
     "britain": "uk",
     "london": "uk",
+    "英国": "uk",
     "france": "france",
     "paris": "france",
+    "法国": "france",
 }
 
 TIME_WINDOW = timedelta(hours=72)
@@ -116,36 +134,33 @@ def tokenize(text: str | None) -> set[str]:
 
 
 def normalize_actor(raw: str | None) -> str | None:
+    """Map surface form → canonical actor key. Unknown → None (no fake token-sort keys)."""
     if not raw:
         return None
     s = raw.strip().lower()
     if s in ACTOR_ALIASES:
         return ACTOR_ALIASES[s]
-    for alias, key in ACTOR_ALIASES.items():
+    for alias, key in sorted(ACTOR_ALIASES.items(), key=lambda kv: -len(kv[0])):
         if alias in s:
             return key
-    # keep first significant token
-    toks = tokenize(s)
-    return sorted(toks)[0] if toks else s.replace(" ", "_")[:64]
+    return None
 
 
 def normalize_action(raw: str | None) -> str | None:
+    """Map surface form → canonical ACTION_KEY. Unknown → None (no fake UNKNOWN/token keys)."""
     if not raw:
         return None
     amap = _action_map()
     s = raw.strip().lower()
     if s in amap:
         return amap[s]
-    for form, canon in amap.items():
-        if form in s.split() or form == s:
+    for form, canon in sorted(amap.items(), key=lambda kv: -len(kv[0])):
+        if form == s or form in s.split() or form in s:
             return canon
-    # scan tokens
     for tok in tokenize(s):
         if tok in amap:
             return amap[tok]
-    # fallback: upper snake of first verb-ish token
-    toks = list(tokenize(s))
-    return toks[0].upper() if toks else "UNKNOWN"
+    return None
 
 
 def normalize_object(raw: str | None) -> str | None:
@@ -215,6 +230,11 @@ class FingerprintCard:
         return normalize_object(self.object)
 
     @property
+    def is_insufficient(self) -> bool:
+        """True when actor/action cannot be grounded in alias/synonym dictionaries."""
+        return self.actor_key is None or self.action_key is None
+
+    @property
     def match_time(self) -> tuple[datetime | None, str | None]:
         """Time used only for SAME_EVENT matching tolerance — never as Event.event_time.
 
@@ -233,6 +253,7 @@ class FingerprintCard:
 
     def to_fingerprint_dict(self) -> dict[str, Any]:
         # Hash day bucket uses true event_time only (empty day if unknown).
+        insufficient = self.is_insufficient
         return {
             "actor": self.actor,
             "action": self.action,
@@ -250,7 +271,10 @@ class FingerprintCard:
             "actor_key": self.actor_key,
             "action_key": self.action_key,
             "object_key": self.object_key,
-            "fingerprint_hash": fingerprint_hash(
+            "status": "INSUFFICIENT_INFORMATION" if insufficient else "ok",
+            "fingerprint_hash": None
+            if insufficient
+            else fingerprint_hash(
                 self.actor_key, self.action_key, self.object_key, self.event_time
             ),
         }
@@ -261,9 +285,11 @@ Relation = str  # SAME_EVENT | RELATED_SUB_EVENT | SAME_TOPIC_DIFFERENT_EVENT | 
 
 def rule_relation(a: FingerprintCard, b: FingerprintCard) -> tuple[Relation, float]:
     """Score two fingerprint cards. Different actors → not SAME."""
+    if a.is_insufficient or b.is_insufficient:
+        return "INSUFFICIENT", 0.1
     ak_a, ak_b = a.actor_key, b.actor_key
     act_a, act_b = a.action_key, b.action_key
-    if not act_a or not act_b:
+    if not act_a or not act_b or not ak_a or not ak_b:
         return "INSUFFICIENT", 0.2
     if act_a != act_b:
         return "UNRELATED", 0.1

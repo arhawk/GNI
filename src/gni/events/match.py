@@ -101,9 +101,11 @@ def cluster_fingerprints(
     *,
     use_llm: bool = True,
 ) -> list[FingerprintCluster]:
-    """Greedy SAME_EVENT clustering. One article may contribute multiple cards → multiple events."""
+    """Greedy SAME_EVENT clustering. Skip INSUFFICIENT cards (no dictionary actor/action)."""
     clusters: list[FingerprintCluster] = []
     for card in cards:
+        if card.is_insufficient:
+            continue
         placed = False
         for cl in clusters:
             # compare against cluster representative

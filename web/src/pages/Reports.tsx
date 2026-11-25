@@ -1,30 +1,45 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchDailyReport, type DailyReport } from '../api'
+import {
+  fetchDailyReport,
+  fetchMonthlyReport,
+  fetchWeeklyReport,
+  type DailyReport,
+  type PeriodReport,
+} from '../api'
 
 type Tab = 'daily' | 'weekly' | 'monthly'
 
 export function ReportsPage() {
   const [tab, setTab] = useState<Tab>('daily')
   const [data, setData] = useState<DailyReport | null>(null)
+  const [period, setPeriod] = useState<PeriodReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showToneDetail, setShowToneDetail] = useState(false)
   const [showCoverageDetail, setShowCoverageDetail] = useState(false)
+  const [showDetail, setShowDetail] = useState(false)
 
   useEffect(() => {
-    if (tab !== 'daily') return
     setError(null)
     setData(null)
-    fetchDailyReport()
-      .then((payload) => {
-        if (!payload?.sections?.summary?.kpis) {
-          setError(
-            `日报 schema 不匹配（收到 ${payload?.schema_version || 'unknown'}）。请重启 :8000 API 加载 daily_report_schema_v2。`,
-          )
-          return
-        }
-        setData(payload)
-      })
+    setPeriod(null)
+    if (tab === 'daily') {
+      fetchDailyReport()
+        .then((payload) => {
+          if (!payload?.sections?.summary?.kpis) {
+            setError(
+              `日报 schema 不匹配（收到 ${payload?.schema_version || 'unknown'}）。请重启 :8000 API。`,
+            )
+            return
+          }
+          setData(payload)
+        })
+        .catch((e: Error) => setError(e.message))
+      return
+    }
+    const loader = tab === 'weekly' ? fetchWeeklyReport() : fetchMonthlyReport()
+    loader
+      .then((payload) => setPeriod(payload))
       .catch((e: Error) => setError(e.message))
   }, [tab])
 
@@ -46,11 +61,7 @@ export function ReportsPage() {
         </button>
       </div>
 
-      {tab === 'weekly' && <PlaceholderKind kind="周报" focus="变化、演化、跨国叙事" />}
-      {tab === 'monthly' && <PlaceholderKind kind="月报" focus="长期趋势、格局、展望" />}
-      {tab === 'daily' && error && (
-        <p className="error">加载日报失败: {error}</p>
-      )}
+      {error && <p className="error">加载失败: {error}</p>}
       {tab === 'daily' && !error && !data && <p className="muted">加载 Daily Brief…</p>}
       {tab === 'daily' && data && (
         <DailyBrief
@@ -61,20 +72,135 @@ export function ReportsPage() {
           setShowCoverageDetail={setShowCoverageDetail}
         />
       )}
+      {(tab === 'weekly' || tab === 'monthly') && !error && !period && (
+        <p className="muted">加载{tab === 'weekly' ? '周报' : '月报'}…</p>
+      )}
+      {(tab === 'weekly' || tab === 'monthly') && period && (
+        <PeriodBrief
+          data={period}
+          kind={tab === 'weekly' ? '周报' : '月报'}
+          showDetail={showDetail}
+          setShowDetail={setShowDetail}
+        />
+      )}
     </div>
   )
 }
 
-function PlaceholderKind({ kind, focus }: { kind: string; focus: string }) {
+function PeriodBrief({
+  data,
+  kind,
+  showDetail,
+  setShowDetail,
+}: {
+  data: PeriodReport
+  kind: string
+  showDetail: boolean
+  setShowDetail: (v: boolean) => void
+}) {
+  const s = data.sections as {
+    summary?: {
+      overview_text?: string
+      kpis?: Record<string, number>
+      source_buckets?: Record<string, number>
+      outlook?: string
+    }
+    major_events?: Array<Record<string, unknown>>
+    topic_trends?: Array<Record<string, unknown>>
+    event_evolution?: Array<Record<string, unknown>>
+    cross_country_narrative?: unknown
+    sentiment_stance?: { note?: string; by_country_sentiment?: Record<string, Record<string, number>> }
+    signals?: Array<Record<string, unknown>>
+    quality?: { notes?: string[] }
+  }
+  const nar = data.narratives || {}
+  const kpis = s.summary?.kpis || {}
+
   return (
-    <div className="report-placeholder">
-      <h1>{kind} · 规划中</h1>
-      <p className="muted">
-        定位：{focus}。规格已冻结，实现后置于日报链路验收之后。见仓库{' '}
-        <code>docs/{kind === '周报' ? 'WEEKLY' : 'MONTHLY'}_REPORT_SPEC.md</code>。
-      </p>
-      <p className="callout">三层产品共享底层数据，但不是「更长的新闻摘要」。</p>
-    </div>
+    <article className="daily-brief">
+      <header className="brief-hero">
+        <p className="muted small">
+          {kind} · {data.schema_version} · {data.period}
+        </p>
+        <h1>{kind} · MVP 五国监测样本</h1>
+        <p className="callout">{data.disclaimer}</p>
+        <p>{s.summary?.overview_text || nar.executive}</p>
+        <div className="kpi-grid compact">
+          {Object.entries(kpis).map(([k, v]) => (
+            <div key={k}>
+              <div className="muted small">{k}</div>
+              <strong>{v}</strong>
+            </div>
+          ))}
+        </div>
+      </header>
+
+      <section className="brief-section">
+        <h2>大事与主题</h2>
+        <ul className="event-list">
+          {(s.major_events || []).slice(0, 8).map((ev) => (
+            <li key={String(ev.id)}>
+              {ev.href ? (
+                <Link to={String(ev.href)}>{String(ev.title)}</Link>
+              ) : (
+                String(ev.title)
+              )}{' '}
+              <span className="muted small">· 重要度 {String(ev.importance_score ?? '—')}</span>
+            </li>
+          ))}
+          {(s.major_events || []).length === 0 && <li className="muted">窗口内无事件卡</li>}
+        </ul>
+        {(s.topic_trends || []).length > 0 && (
+          <>
+            <h3>主题环比</h3>
+            <ul className="event-list">
+              {(s.topic_trends || []).slice(0, 8).map((t) => (
+                <li key={String(t.topic)}>
+                  {String(t.topic)} · Δ {String(t.delta ?? 0)}
+                  {t.status ? ` (${String(t.status)})` : ''}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <section className="brief-section">
+        <h2>情感 / 立场 / 信号</h2>
+        <p className="muted small">{s.sentiment_stance?.note}</p>
+        <p>{nar.signals}</p>
+        <ul className="event-list">
+          {(s.signals || []).slice(0, 6).map((sig) => (
+            <li key={String(sig.id)}>
+              <strong>{String(sig.title)}</strong>
+              <div className="muted small">{String(sig.summary || '')}</div>
+            </li>
+          ))}
+        </ul>
+        {s.summary?.outlook && <p className="callout">{s.summary.outlook}</p>}
+      </section>
+
+      <section className="brief-section">
+        <button type="button" onClick={() => setShowDetail(!showDetail)}>
+          {showDetail ? '收起明细' : '展开数据明细'}
+        </button>
+        {showDetail && (
+          <pre className="muted small" style={{ whiteSpace: 'pre-wrap' }}>
+            {JSON.stringify(
+              {
+                source_buckets: s.summary?.source_buckets,
+                event_evolution: s.event_evolution,
+                cross_country_narrative: s.cross_country_narrative,
+                sentiment: s.sentiment_stance?.by_country_sentiment,
+                quality: s.quality,
+              },
+              null,
+              2,
+            )}
+          </pre>
+        )}
+      </section>
+    </article>
   )
 }
 
@@ -223,7 +349,7 @@ function DailyBrief({
       </section>
 
       <section className="brief-section">
-        <h2>3 · 全球报道概况</h2>
+        <h2>3 · 监测样本报道概况</h2>
         <p className="muted small">{s.coverage.note}</p>
         {nar.coverage && <p>{nar.coverage}</p>}
         <div className="kpi-grid compact">

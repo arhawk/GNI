@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from gni import __version__
-from gni.alerts.service import build_alerts_payload
+from gni.alerts.service import build_alerts_payload, run_alert_engine, transition_alert
 from gni.dashboard.data import MAX_WINDOW_DAYS
 from gni.dashboard.pages_api import (
     countries_list_payload,
@@ -20,11 +20,15 @@ from gni.events.service import (
     get_country_china_attitude,
     get_event_detail,
     list_events,
+    lock_event,
+    merge_events,
     overview_payload,
     rebuild_proto_events,
 )
 from gni.infrastructure.db import ensure_schema, session_scope
 from gni.reports.daily import build_daily_report
+from gni.reports.monthly import build_monthly_report
+from gni.reports.weekly import build_weekly_report
 from gni.search.service import search_all
 
 app = FastAPI(title="GNI API", version=__version__)
@@ -123,6 +127,28 @@ def api_daily_report(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/api/reports/weekly")
+def api_weekly_report(
+    end: str | None = Query(None, description="Week end YYYY-MM-DD (report TZ)"),
+) -> dict:
+    try:
+        with session_scope() as session:
+            return build_weekly_report(session, end_day=end)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/api/reports/monthly")
+def api_monthly_report(
+    month: str | None = Query(None, description="YYYY-MM"),
+) -> dict:
+    try:
+        with session_scope() as session:
+            return build_monthly_report(session, month=month)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/api/search")
 def api_search(
     q: str = Query(..., min_length=1, description="Search query"),
@@ -157,9 +183,72 @@ def api_country_detail(country_id: str) -> dict:
 
 
 @app.get("/api/alerts")
-def api_alerts() -> dict:
+def api_alerts(
+    window_start: str | None = Query(None),
+    window_end: str | None = Query(None),
+    run: bool = Query(False, description="Run rule engine before read"),
+) -> dict:
     with session_scope() as session:
-        return build_alerts_payload(session)
+        return build_alerts_payload(
+            session,
+            window_start=_parse_iso(window_start),
+            window_end=_parse_iso(window_end),
+            run_engine=run,
+        )
+
+
+@app.post("/api/alerts/run")
+def api_alerts_run() -> dict:
+    with session_scope() as session:
+        return run_alert_engine(session)
+
+
+@app.post("/api/alerts/{alert_id}/acknowledge")
+def api_alert_ack(alert_id: str) -> dict:
+    with session_scope() as session:
+        a = transition_alert(session, alert_id, action="acknowledge")
+        if not a:
+            raise HTTPException(status_code=404, detail="alert not found")
+        return {"id": a.id, "status": a.status}
+
+
+@app.post("/api/alerts/{alert_id}/resolve")
+def api_alert_resolve(alert_id: str) -> dict:
+    with session_scope() as session:
+        a = transition_alert(session, alert_id, action="resolve")
+        if not a:
+            raise HTTPException(status_code=404, detail="alert not found")
+        return {"id": a.id, "status": a.status}
+
+
+@app.post("/api/alerts/{alert_id}/close")
+def api_alert_close(alert_id: str) -> dict:
+    with session_scope() as session:
+        a = transition_alert(session, alert_id, action="close")
+        if not a:
+            raise HTTPException(status_code=404, detail="alert not found")
+        return {"id": a.id, "status": a.status}
+
+
+@app.post("/api/events/{event_id}/lock")
+def api_event_lock(event_id: str) -> dict:
+    with session_scope() as session:
+        out = lock_event(session, event_id)
+        if not out:
+            raise HTTPException(status_code=404, detail="event not found")
+        return out
+
+
+@app.post("/api/events/merge")
+def api_events_merge(
+    keep_id: str = Query(..., description="Survivor event id"),
+    merge_id: str = Query(..., description="Event to close and attach"),
+) -> dict:
+    with session_scope() as session:
+        try:
+            return merge_events(session, keep_id=keep_id, merge_id=merge_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/system/status")

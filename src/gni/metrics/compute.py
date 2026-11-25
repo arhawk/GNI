@@ -49,6 +49,9 @@ class ArticleMetricRow:
     quality_status: str | None = None
     processing_status: str | None = None
     analysis_status: str | None = None
+    feed_scope: str | None = None
+    ownership_type: str | None = None
+    government_control_level: str | None = None
     # From latest structured_result
     sentiment_label: str | None = None
     sentiment_score: float | None = None
@@ -194,16 +197,19 @@ def compute_metrics(
         value=len(keys),
         numerator=len(keys),
         denominator=len(china) if china else 0,
-        notes=f"dedup={DEDUPLICATION_METHOD}; MVP single-language hash clusters.",
+        notes=(
+            f"dedup={DEDUPLICATION_METHOD}; hash MVP (see docs/STORY_MODEL.md); "
+            "not cross-language Story clustering."
+        ),
     )
 
     # --- Attention Share ---
     denom = len(universe)
     numer = len(china)
-    # Gate: unreliable if empty universe, or if every article already filtered to china-only
-    # ingest with zero non-china ever observed AND all have china labels missing → still available
-    # when denom>0. Unavailable when denom==0.
-    # Extra gate: if source_scope is empty after filters → unavailable.
+    narrow_scopes = frozenset({"CHINA_FOCUSED", "TOPIC_SPECIFIC"})
+    universe_scopes = [a.feed_scope for a in universe if a.feed_scope]
+    narrow_n = sum(1 for s in universe_scopes if s in narrow_scopes)
+    scope_dominant_narrow = bool(universe_scopes) and (narrow_n / len(universe_scopes)) >= 0.5
     if denom <= 0:
         attention = _metric(
             metric_id="attention_share",
@@ -213,6 +219,24 @@ def compute_metrics(
             denominator=denom,
             status="unavailable",
             notes="Denominator empty; formal Attention Share forbidden.",
+            extra={"coverage_note": "empty_universe"},
+        )
+    elif scope_dominant_narrow:
+        attention = _metric(
+            metric_id="attention_share",
+            version=ATTENTION_SHARE_V,
+            value=None,
+            numerator=numer,
+            denominator=denom,
+            status="unavailable",
+            notes=(
+                "Attention Share unavailable: denominator dominated by "
+                "CHINA_FOCUSED/TOPIC_SPECIFIC feeds (not a general-news base)."
+            ),
+            extra={
+                "coverage_note": "china_focused_or_topic_specific_denominator",
+                "narrow_scope_share": round(narrow_n / len(universe_scopes), 3),
+            },
         )
     else:
         attention = _metric(
@@ -227,15 +251,19 @@ def compute_metrics(
         )
 
     # --- Sentiment / Stance / Frame / Topic (raw) ---
+    # GOVERNMENT_RELEASES stay out of media sentiment main stats (separate column).
+    media_china = [a for a in china if a.feed_scope != "GOVERNMENT_RELEASES"]
+    gov_china = [a for a in china if a.feed_scope == "GOVERNMENT_RELEASES"]
     sent_counts: Counter[str] = Counter()
     sent_unknown = 0
+    gov_sent_counts: Counter[str] = Counter()
     stance_counts: Counter[str] = Counter()
     stance_missing = 0
     frame_counts: Counter[str] = Counter()
     topic_counts: Counter[str] = Counter()
     topic_missing = 0
 
-    for a in china:
+    for a in media_china:
         label = a.sentiment_label
         status = a.sentiment_status or ""
         if label in {"positive", "negative", "neutral", "mixed"}:
@@ -269,19 +297,32 @@ def compute_metrics(
         else:
             topic_missing += 1
 
-    n_china = len(china) or 1
+    for a in gov_china:
+        label = a.sentiment_label
+        if label in {"positive", "negative", "neutral", "mixed"}:
+            gov_sent_counts[label] += 1
+
+    n_media = len(media_china) or 1
     sentiment_dist = _metric(
         metric_id="sentiment_distribution",
         version=SENTIMENT_DIST_V,
         value={
             "counts": dict(sent_counts),
-            "shares": {k: round(v / n_china, 6) for k, v in sent_counts.items()},
+            "shares": {k: round(v / n_media, 6) for k, v in sent_counts.items()},
             "unknown_or_missing": sent_unknown,
+            "government_releases": {
+                "counts": dict(gov_sent_counts),
+                "article_count": len(gov_china),
+                "note": "Government feeds excluded from media sentiment main column.",
+            },
         },
         numerator=sum(sent_counts.values()),
-        denominator=len(china),
+        denominator=len(media_china),
         unknown_count=sent_unknown,
-        notes="Raw counts; unknown/mixed not merged into neutral.",
+        notes=(
+            "Media sentiment only; GOVERNMENT_RELEASES in government_releases sub-bucket. "
+            "Unknown/mixed not merged into neutral. Unique Story Count = hash MVP (see STORY_MODEL)."
+        ),
     )
 
     stance_value = {

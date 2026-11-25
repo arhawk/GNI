@@ -25,8 +25,8 @@ from gni.reports.validate import validate_daily_report
 MONITOR_DEFAULT = ["US", "RU", "DE", "IN", "AU"]
 SCHEMA_VERSION = "daily_report_schema_v2"
 DISCLAIMER = (
-    "被监测官媒/公共传播样本的对华报道表现；"
-    "不等于国家官方立场，也不等于该国社会民意或全民舆论。"
+    "基于 MVP 五国监测样本（官媒/公服/政府传播）的对华报道表现；"
+    "不等于国家官方立场，也不等于全球舆论或该国社会民意。"
 )
 
 SENT_ZH = {
@@ -477,10 +477,10 @@ def build_daily_report(
         except ValueError:
             pass
 
-    # Signals from alert engine (intelligence only)
+    # Signals from alert engine (intelligence only) — scoped to report-day window
     signals: list[dict[str, Any]] = []
     try:
-        alerts = build_alerts_payload(session)
+        alerts = build_alerts_payload(session, window_start=win_start, window_end=win_end)
         for a in (alerts.get("intelligence") or [])[:8]:
             signals.append(
                 {

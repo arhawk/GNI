@@ -40,6 +40,10 @@ def _row_from_article(
     article: Article,
     country_id: str | None,
     analysis: ArticleAnalysis | None,
+    *,
+    feed_scope: str | None = None,
+    ownership_type: str | None = None,
+    government_control_level: str | None = None,
 ) -> ArticleMetricRow:
     structured = (analysis.structured_result if analysis else None) or {}
     sentiment = _as_mapping(structured.get("sentiment"))
@@ -60,6 +64,9 @@ def _row_from_article(
         quality_status=article.quality_status,
         processing_status=article.processing_status,
         analysis_status=article.analysis_status,
+        feed_scope=feed_scope,
+        ownership_type=ownership_type,
+        government_control_level=government_control_level,
         sentiment_label=sentiment.get("label") if isinstance(sentiment.get("label"), str) else None,
         sentiment_score=sentiment.get("score") if isinstance(sentiment.get("score"), (int, float)) else None,
         sentiment_status=sentiment.get("status") if isinstance(sentiment.get("status"), str) else None,
@@ -118,7 +125,18 @@ def run_metrics(
     for article in articles:
         src = sources.get(article.source_id)
         country_id = src.country_id if src else None
-        rows.append(_row_from_article(article, country_id, analyses.get(article.id)))
+        rows.append(
+            _row_from_article(
+                article,
+                country_id,
+                analyses.get(article.id),
+                feed_scope=getattr(src, "feed_scope", None) if src else None,
+                ownership_type=getattr(src, "ownership_type", None) if src else None,
+                government_control_level=getattr(src, "government_control_level", None)
+                if src
+                else None,
+            )
+        )
 
     health_rows: list[SourceHealthRow] = []
     health_map = {
