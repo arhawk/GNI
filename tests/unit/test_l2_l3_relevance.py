@@ -84,7 +84,7 @@ def test_relevance_core_mapping():
     rel = assess_relevance(l2, title=title, span_count=len(spans), valid_span_count=valid_n)
     assert rel.relevance_level in {"core", "substantial", "secondary"}
     assert rel.relevance_weight == LEVEL_WEIGHT_MIDPOINT[rel.relevance_level]
-    assert rel.assessment_version == "provisional_v0.2"
+    assert rel.assessment_version == "provisional_v0.3"
 
 
 def test_relevance_none():

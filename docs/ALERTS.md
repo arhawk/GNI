@@ -11,9 +11,10 @@
 | 规则 ID | 含义 | 备注 |
 |---------|------|------|
 | VOLUME_SPIKE | 国家/来源/Topic 涉华量相对基线突增 | 冷启动禁用正式异常断言 |
-| NEGATIVE_SHARE_RISE | 负面占比或加权负面量明显上升 | |
-| POSITIVE_SHARE_RISE | 正面占比或加权正面量明显上升 | |
-| SENTIMENT_SHIFT | 加权情感分数相对自身基线显著变化 | |
+| NEGATIVE_SHARE_RISE | （历史名）勿与立场混算；见 SENTIMENT_SHIFT | |
+| POSITIVE_SHARE_RISE | 正面情感占比上升 | |
+| SENTIMENT_SHIFT | **仅**情感分布/负面情感占比相对基线变化 | |
+| STANCE_SHIFT | **仅**媒体自身对 Target 的批判/反对立场占比变化（不含引述） | |
 | MULTI_COUNTRY_COVERAGE | 同一候选事件多国集中报道 | 依赖重大新闻候选 |
 | SOURCE_BURST | 单一来源短期集中发布 | |
 | TOPIC_EMERGENCE | 某涉华议题快速上升 | |

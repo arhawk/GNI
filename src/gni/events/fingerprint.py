@@ -215,10 +215,24 @@ class FingerprintCard:
         return normalize_object(self.object)
 
     @property
+    def match_time(self) -> tuple[datetime | None, str | None]:
+        """Time used only for SAME_EVENT matching tolerance — never as Event.event_time.
+
+        Returns (datetime, time_basis) where basis is event_time | published_at_fallback | None.
+        """
+        if self.event_time is not None:
+            return self.event_time, "event_time"
+        if self.published_at is not None:
+            return self.published_at, "published_at_fallback"
+        return None, None
+
+    @property
     def effective_time(self) -> datetime | None:
-        return self.event_time or self.published_at
+        """Deprecated alias for match_time[0]. Do not persist as Event.event_time."""
+        return self.match_time[0]
 
     def to_fingerprint_dict(self) -> dict[str, Any]:
+        # Hash day bucket uses true event_time only (empty day if unknown).
         return {
             "actor": self.actor,
             "action": self.action,
@@ -232,11 +246,12 @@ class FingerprintCard:
             "qualifiers": self.qualifiers,
             "summary": self.summary,
             "event_time": self.event_time.isoformat() if self.event_time else None,
+            "published_at": self.published_at.isoformat() if self.published_at else None,
             "actor_key": self.actor_key,
             "action_key": self.action_key,
             "object_key": self.object_key,
             "fingerprint_hash": fingerprint_hash(
-                self.actor_key, self.action_key, self.object_key, self.effective_time
+                self.actor_key, self.action_key, self.object_key, self.event_time
             ),
         }
 
@@ -253,12 +268,17 @@ def rule_relation(a: FingerprintCard, b: FingerprintCard) -> tuple[Relation, flo
     if act_a != act_b:
         return "UNRELATED", 0.1
 
-    ta, tb = a.effective_time, b.effective_time
+    ta, basis_a = a.match_time
+    tb, basis_b = b.match_time
     if ta and tb:
         t1 = ta if ta.tzinfo else ta.replace(tzinfo=timezone.utc)
         t2 = tb if tb.tzinfo else tb.replace(tzinfo=timezone.utc)
         if abs(t1 - t2) > TIME_WINDOW:
             return "SAME_TOPIC_DIFFERENT_EVENT", 0.25
+        # record fallback basis on cards for downstream evidence (non-mutating soft note)
+        if basis_a == "published_at_fallback" or basis_b == "published_at_fallback":
+            a.evidence.setdefault("time_basis", basis_a or "unknown")
+            b.evidence.setdefault("time_basis", basis_b or "unknown")
 
     ov = object_overlap(a.object_key, b.object_key)
     if ak_a and ak_b and ak_a != ak_b:

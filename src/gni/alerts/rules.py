@@ -142,7 +142,9 @@ def generate_intelligence_alerts(session: Session) -> list[dict[str, Any]]:
                 )
             )
 
-    # 2. Attitude shift
+    # 2. Sentiment shift + Stance shift (separate; never mix into one "negative" rate)
+    from gni.analysis.stance_util import all_stance_labels, sentiment_label
+
     att = th.get("attitude_shift") or {}
     rh = int(att.get("recent_hours", 48))
     bd = int(att.get("baseline_days", 7))
@@ -152,22 +154,33 @@ def generate_intelligence_alerts(session: Session) -> list[dict[str, Any]]:
     b0 = now - timedelta(days=bd) - timedelta(hours=rh)
     analyses = _latest_analyses(session, [a.id for a in articles])
 
-    def neg_share(rows: list[Article]) -> tuple[float, int]:
+    def sentiment_neg_share(rows: list[Article]) -> tuple[float, int]:
         neg = 0
         n = 0
         for a in rows:
             if a.id not in analyses:
                 continue
             structured = analyses[a.id].structured_result or {}
-            label = ((structured.get("sentiment") or {}).get("label") or "").lower()
-            stances = structured.get("stances") or []
-            stance = ""
-            if stances and isinstance(stances[0], dict):
-                stance = (stances[0].get("stance") or "").lower()
             n += 1
-            if label in {"negative", "critical"} or stance in {"critical", "opposing", "negative"}:
+            if sentiment_label(structured) == "negative":
                 neg += 1
         return (neg / n if n else 0.0), n
+
+    def critical_stance_share(rows: list[Article]) -> tuple[float, int]:
+        """Media stance only; opposing/critical/oppose toward any target."""
+        hit = 0
+        n = 0
+        for a in rows:
+            if a.id not in analyses:
+                continue
+            structured = analyses[a.id].structured_result or {}
+            labels = all_stance_labels(structured, media_only=True)
+            if not labels:
+                continue
+            n += 1
+            if any(k in {"critical", "opposing", "oppose", "negative"} for k in labels):
+                hit += 1
+        return (hit / n if n else 0.0), n
 
     by_c_recent: dict[str, list[Article]] = defaultdict(list)
     by_c_base: dict[str, list[Article]] = defaultdict(list)
@@ -182,19 +195,44 @@ def generate_intelligence_alerts(session: Session) -> list[dict[str, Any]]:
             by_c_base[cid].append(a)
 
     for cid, rows in by_c_recent.items():
-        share_r, n_r = neg_share(rows)
-        share_b, n_b = neg_share(by_c_base.get(cid, []))
-        if n_r < min_s:
-            continue
-        if share_r - share_b >= rise and share_r >= 0.35:
+        share_r, n_r = sentiment_neg_share(rows)
+        share_b, n_b = sentiment_neg_share(by_c_base.get(cid, []))
+        if n_r >= min_s and share_r - share_b >= rise and share_r >= 0.35:
             out.append(
                 _alert(
                     category="intelligence",
-                    subcategory="attitude_shift",
+                    subcategory="sentiment_shift",
                     severity="high" if share_r >= 0.6 else "medium",
-                    title=f"{cid} 对华负面/批判占比上升",
-                    summary=f"近窗负面相关占比 {share_r:.0%}（n={n_r}），基线 {share_b:.0%}（n={n_b}）。情感与立场分列监测。",
-                    evidence={"country_id": cid, "recent_neg_share": round(share_r, 3), "baseline_neg_share": round(share_b, 3)},
+                    title=f"{cid} 对华报道情感负面占比上升",
+                    summary=(
+                        f"近窗情感 negative 占比 {share_r:.0%}（n={n_r}），"
+                        f"基线 {share_b:.0%}（n={n_b}）。未混入立场标签。"
+                    ),
+                    evidence={
+                        "country_id": cid,
+                        "recent_neg_sentiment_share": round(share_r, 3),
+                        "baseline_neg_sentiment_share": round(share_b, 3),
+                    },
+                )
+            )
+        st_r, sn_r = critical_stance_share(rows)
+        st_b, sn_b = critical_stance_share(by_c_base.get(cid, []))
+        if sn_r >= min_s and st_r - st_b >= rise and st_r >= 0.35:
+            out.append(
+                _alert(
+                    category="intelligence",
+                    subcategory="stance_shift",
+                    severity="high" if st_r >= 0.6 else "medium",
+                    title=f"{cid} 对华相关立场批判/反对占比上升",
+                    summary=(
+                        f"近窗媒体自身批判/反对立场占比 {st_r:.0%}（n={sn_r}），"
+                        f"基线 {st_b:.0%}（n={sn_b}）。按 Target 聚合，不含引述观点。"
+                    ),
+                    evidence={
+                        "country_id": cid,
+                        "recent_critical_stance_share": round(st_r, 3),
+                        "baseline_critical_stance_share": round(st_b, 3),
+                    },
                 )
             )
 

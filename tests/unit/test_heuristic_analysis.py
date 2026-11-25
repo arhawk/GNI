@@ -36,7 +36,7 @@ def test_structured_result_required_keys_and_stance_target():
     )
     assert result["schema_version"] == SCHEMA_VERSION
     assert result["taxonomy_version"] == "taxonomy_v0.4"
-    assert result["relevance_weight_version"] == "provisional_v0.2"
+    assert result["relevance_weight_version"] == "provisional_v0.3"
     for key in (
         "china_relevance",
         "topics",

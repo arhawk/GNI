@@ -110,24 +110,18 @@ A 采集 → B 处理 → C 涉华理解+Weight → D 原始/加权指标 → E 
 
 ---
 
-## P1-F：报告、规则预警与重大新闻候选
+## P1-F：拆分为 F1～F4（权威状态见 [PHASE_STATUS.md](PHASE_STATUS.md)）
 
-### 目标
+原「单一 P1-F」已拆分，避免与 Event Fingerprint / 日报 / 告警持久化混称：
 
-- 日报 / 周报 / 月报模板 + report_claims 证据校验  
-- 规则型 Alerts（[ALERTS.md](ALERTS.md)）：量激增、负面占比升、多国覆盖、来源故障等；去重与状态  
-- **规则型重大新闻候选**（时间窗 + 标题/实体/关键词相似度 + 简单打分）；**非**完整事件聚类  
+| 子段 | 内容 | 状态 |
+|------|------|------|
+| P1-F1 | Proto Event / Fingerprint + 事件 UI | 原型完成 |
+| P1-F2 | Daily Report v2 | 已实现 |
+| P1-F3 | 持久化 Alerts 生命周期 | 待办（[BATCH2_INTERFACES.md](BATCH2_INTERFACES.md)） |
+| P1-F4 | Weekly / Monthly | 规格完成、编码待办 |
 
-### 验收
-
-- 事实结论有证据；无证据拒绝发布  
-- 样本不足 / 冷启动有提示  
-- 预警含触发规则、基线、样本与代表文章  
-- 对照 [PRD.md](PRD.md) MVP 清单收口  
-
-### 退出标准
-
-P1-F 通过即 **Phase 1 / 监测型 MVP** 完成；Phase 2 另授权。
+历史目标（报告模板、规则预警、重大新闻候选）仍有效；完成标准以 PHASE_STATUS 为准。
 
 ---
 
@@ -145,7 +139,8 @@ P1-F 通过即 **Phase 1 / 监测型 MVP** 完成；Phase 2 另授权。
 | P1-B | 已完成 |
 | P1-C | 完成（启发式默认；DeepSeek 可选） |
 | P1-D | 完成（指标 JSON/`metric_runs`；无看板） |
-| P1-E | 完成（Streamlit 八页；News/Reports/Alerts 占位至 P1-F） |
-| P1-F | 待授权 |
+| P1-E | 完成（Streamlit 八页） |
+| P1-F1 / F2 | 已落地（持续加固） |
+| P1-F3 / F4 | 待办 |
 
 验收文档：`PHASE1{A,B,C,D,E,F}_ACCEPTANCE.md`。

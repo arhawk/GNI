@@ -1,6 +1,6 @@
 # Provisional 标定默认值与公开评测代理
 
-**状态：** `provisional_v0.2`（2026-11-24；对齐 Addendum A1 等级词表）  
+**状态：** `provisional_v0.3`（2026-11-25；对齐 Addendum A1 等级词表 + share/level/weight 三分）  
 **权威：** [BLUEPRINT_V4_ADDENDUM_A1.md](BLUEPRINT_V4_ADDENDUM_A1.md) §6；[BLUEPRINT_V4.md](BLUEPRINT_V4.md)  
 **原则：** 临时默认可运行、可版本化；**不能**冒充已校准金标。
 
@@ -15,12 +15,21 @@
 | secondary | 有实质意义的次要对象/背景 | 0.35 | 0.20–0.49 | 是（可配置） |
 | incidental | 简短提及，研究意义有限 | 0.10 | 0.01–0.19 | **默认否** |
 | none | 无实质涉华 | 0.00 | 0.00 | 否 |
-| uncertain | 证据不足 | null | — | 否；不计加权分母 |
+| uncertain | 证据不足 / possible_china | null | — | 否；不计加权分母 |
 
-**旧名映射（v0.1 → v0.2）：** major→substantial；moderate→secondary；minor→incidental（或 secondary，按语境）；not_relevant→none；unknown→uncertain。
+**三个概念必须分列（v0.3）：**
 
-- `estimated_share` ≠ `weight`；版本：`relevance_weight_version=provisional_v0.2`  
+| 字段 | 含义 | 用途 |
+|------|------|------|
+| `paragraph_hit_share` | 命中**整段**长度 / 全文（粗糙，非涉华字数） | 召回/调试参考 |
+| `estimated_china_span_share` | L3 有效 span 字符 / 全文（有 span 时优先） | 内容占比估算 |
+| `relevance_level` | 研究重要性等级 | 分类与纳入口径 |
+| `relevance_weight` | 由 **level 中点**映射，不以单一 share 充当权重 | 加权指标 |
+
+- `content_share_estimate` 展示值 = span_share（若有）否则 paragraph_hit_share；**≠ weight**  
+- 版本：`relevance_weight_version=provisional_v0.3`  
 - Article Count **永不**被 weight 改写  
+- **旧名映射（v0.1 → v0.2）：** major→substantial；moderate→secondary；minor→incidental；not_relevant→none；unknown→uncertain。
 
 ---
 

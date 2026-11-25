@@ -42,17 +42,27 @@ class FingerprintCluster:
 
     @property
     def event_time(self) -> datetime | None:
-        times = [c.effective_time for c in self.cards if c.effective_time]
+        """True event/announce time only — never fill from published_at."""
+        times = [c.event_time for c in self.cards if c.event_time]
         return min(times) if times else None
 
     @property
     def window_start(self) -> datetime | None:
-        times = [c.effective_time for c in self.cards if c.effective_time]
+        """Article coverage window; may use published_at for span only."""
+        times: list[datetime] = []
+        for c in self.cards:
+            t, _ = c.match_time
+            if t:
+                times.append(t)
         return min(times) if times else None
 
     @property
     def window_end(self) -> datetime | None:
-        times = [c.effective_time for c in self.cards if c.effective_time]
+        times: list[datetime] = []
+        for c in self.cards:
+            t, _ = c.match_time
+            if t:
+                times.append(t)
         return max(times) if times else None
 
     @property

@@ -162,9 +162,13 @@ def country_detail_payload(session: Session, country_id: str) -> dict[str, Any] 
     for a in china:
         structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
         sent[((structured.get("sentiment") or {}).get("label") or "unknown").lower()] += 1
-        stances = structured.get("stances") or []
-        if stances and isinstance(stances[0], dict):
-            stance[(stances[0].get("stance") or "unknown").lower()] += 1
+        from gni.analysis.stance_util import all_stance_labels
+
+        labs = all_stance_labels(structured, media_only=True)
+        if labs:
+            stance.update(labs)
+        else:
+            stance["unknown"] += 1
         tp = structured.get("topics") or {}
         fr = structured.get("framing") or {}
         if isinstance(tp, dict) and tp.get("primary"):

@@ -5,15 +5,21 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from gni.analysis.stance_util import primary_stance_label
 from gni.events.cluster import ArticleSeed, ProtoCluster, cluster_articles, dominant
 from gni.events.extract import extract_for_articles, load_latest_cards
 from gni.events.geo import centroid
 from gni.events.match import FingerprintCluster, cluster_fingerprints
+
+
+def _primary_stance(structured: dict[str, Any] | None) -> str | None:
+    label = primary_stance_label(structured or {})
+    return None if label == "unknown" else label
 from gni.events.rollup import (
     attitude_map_rows,
     country_china_attitude_detail,
@@ -70,12 +76,20 @@ def _seeds_from_db(session: Session) -> list[ArticleSeed]:
     return seeds
 
 
+# Never auto-delete these during rebuild (manual / terminal states).
+_PRESERVE_EVENT_STATUSES = frozenset({"confirmed", "closed", "locked"})
+
+
 def _clear_proto_graph(session: Session) -> list[str]:
-    """Remove proto (+ fingerprint-active rebuilt) events and dependent rows. Returns cleared ids."""
-    # MVP rebuild owns status in {proto, active} created by fingerprint/legacy rebuild.
-    # Preserve closed / manually curated later; for now clear proto and active from rebuild.
+    """Legacy wipe of rebuild-owned events. Prefer incremental fingerprint rebuild instead."""
+    # Preserve confirmed/closed/locked; only clear proto/active from legacy path.
     proto_ids = list(
-        session.scalars(select(Event.id).where(Event.status.in_(["proto", "active"]))).all()
+        session.scalars(
+            select(Event.id).where(
+                Event.status.in_(["proto", "active"]),
+                Event.status.notin_(list(_PRESERVE_EVENT_STATUSES)),
+            )
+        ).all()
     )
     if not proto_ids:
         return []
@@ -125,22 +139,26 @@ def rebuild_proto_events(
         if len(c.article_ids) >= min_articles
     ][:limit]
 
-    _clear_proto_graph(session)
-
+    # Incremental upsert by fingerprint_hash — do NOT wipe proto/active graph.
     created = 0
+    updated = 0
     event_ids: list[str] = []
     for cl in clusters:
-        eid = _persist_fingerprint_cluster(session, cl)
+        eid, is_new = _persist_fingerprint_cluster(session, cl)
         event_ids.append(eid)
-        created += 1
+        if is_new:
+            created += 1
+        else:
+            updated += 1
     session.flush()
     rollup_event_metrics(session, event_ids=event_ids)
     attitude_n = rollup_country_china_attitude(session, window="30d")
     return {
         "created": created,
+        "updated": updated,
         "seed_articles": len({c.article_id for c in cards}),
         "candidates_written": extract_stats.get("candidates_written", 0),
-        "path": "fingerprint",
+        "path": "fingerprint_incremental",
         "attitude_snapshots": attitude_n,
     }
 
@@ -168,27 +186,78 @@ def _rebuild_legacy_title(
     }
 
 
-def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> str:
-    event_id = str(uuid4())
-    status = "active" if cl.high_confidence else "proto"
+def _stable_event_id(fingerprint: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"gni:event:{fingerprint}"))
+
+
+def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tuple[str, bool]:
+    """Upsert by fingerprint_hash / deterministic UUID. Returns (event_id, created_new)."""
+    fp = cl.fingerprint_hash
+    existing = session.scalar(select(Event).where(Event.fingerprint_hash == fp).limit(1))
+    if existing is None:
+        eid = _stable_event_id(fp)
+        existing = session.get(Event, eid)
+
     loc_label = cl.location_label
     loc_cid = cl.location_country_id
     coords = centroid(loc_cid) if loc_cid else None
     has_phys = coords is not None
+    # True event time only (may be None); never published_at.
+    true_event_time = cl.event_time
+    summary = (
+        f"Fingerprint event from {len(cl.article_ids)} article(s); "
+        f"actor={cl.actor_key} action={cl.action_key}. "
+        + (
+            f"Location hint: {loc_label} ({loc_cid})."
+            if loc_label
+            else "No verified physical EVENT_LOCATION."
+        )
+        + (
+            " event_time unknown (not filled from published_at)."
+            if true_event_time is None
+            else ""
+        )
+    )
+
+    if existing is not None:
+        event_id = existing.id
+        if existing.status not in _PRESERVE_EVENT_STATUSES:
+            existing.title = cl.title
+            existing.summary = summary
+            existing.event_type = cl.cards[0].event_type
+            existing.status = "active" if cl.high_confidence else "proto"
+            existing.importance_score = cl.importance_score
+            existing.window_start = cl.window_start
+            existing.window_end = cl.window_end
+            existing.has_physical_location = has_phys or existing.has_physical_location
+            existing.actor_key = cl.actor_key
+            existing.action_key = cl.action_key
+            existing.object_key = cl.object_key
+            existing.event_time = true_event_time
+            existing.qualifiers = cl.cards[0].qualifiers or {}
+            existing.fingerprint_hash = fp
+            existing.schema_version = "event_v0.2"
+        linked = set(
+            session.scalars(
+                select(EventArticle.article_id).where(EventArticle.event_id == event_id)
+            ).all()
+        )
+        for aid in cl.article_ids:
+            if aid not in linked:
+                session.add(
+                    EventArticle(
+                        id=str(uuid4()), event_id=event_id, article_id=aid, relation="covers"
+                    )
+                )
+        return event_id, False
+
+    event_id = _stable_event_id(fp)
     event = Event(
         id=event_id,
         title=cl.title,
-        summary=(
-            f"Fingerprint event from {len(cl.article_ids)} article(s); "
-            f"actor={cl.actor_key} action={cl.action_key}. "
-            + (
-                f"Location hint: {loc_label} ({loc_cid})."
-                if loc_label
-                else "No verified physical EVENT_LOCATION."
-            )
-        ),
+        summary=summary,
         event_type=cl.cards[0].event_type,
-        status=status,
+        status="active" if cl.high_confidence else "proto",
         importance_score=cl.importance_score,
         window_start=cl.window_start,
         window_end=cl.window_end,
@@ -196,9 +265,9 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> st
         actor_key=cl.actor_key,
         action_key=cl.action_key,
         object_key=cl.object_key,
-        event_time=cl.event_time,
+        event_time=true_event_time,
         qualifiers=cl.cards[0].qualifiers or {},
-        fingerprint_hash=cl.fingerprint_hash,
+        fingerprint_hash=fp,
         schema_version="event_v0.2",
     )
     session.add(event)
@@ -238,7 +307,7 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> st
         session.add(
             EventArticle(id=str(uuid4()), event_id=event_id, article_id=aid, relation="covers")
         )
-    return event_id
+    return event_id, True
 
 
 def _persist_cluster(session: Session, cl: ProtoCluster) -> str:
@@ -391,7 +460,7 @@ def get_event_detail(session: Session, event_id: str) -> dict[str, Any] | None:
                 "url": art.url,
                 "source_name": mname,
                 "sentiment": (structured.get("sentiment") or {}).get("label"),
-                "stance": ((structured.get("stances") or [{}])[0] or {}).get("stance"),
+                "stance": _primary_stance(structured),
                 "frame": (structured.get("framing") or {}).get("primary"),
                 "published_at": (art.published_at or art.first_seen_at).isoformat()
                 if (art.published_at or art.first_seen_at)

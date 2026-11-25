@@ -114,12 +114,16 @@ def analyze_article(
             )
         result["span_count"] = len(spans)
         result["valid_span_count"] = valid_n
+        body_chars = len(content or "")
+        span_chars = sum(len(s.text_original or "") for s in spans if s.validation_status == "valid")
 
         relevance = assess_relevance(
             l2,
             title=article.title,
             span_count=len(spans),
             valid_span_count=valid_n,
+            span_char_total=span_chars,
+            body_char_total=body_chars,
         )
         session.add(
             ArticleRelevanceAssessment(
@@ -144,8 +148,46 @@ def analyze_article(
         result["relevance_level"] = relevance.relevance_level
         result["relevance_weight"] = relevance.relevance_weight
 
+        # Gate: clear not_china_related skips deep analysis (no LLM / heuristic six-dim).
+        if l2.label == "not_china_related":
+            analysis = ArticleAnalysis(
+                id=str(uuid4()),
+                article_id=article.id,
+                analysis_run_id=analysis_run_id,
+                article_version_id=version_id,
+                provider="gate",
+                model_name="skip",
+                prompt_version="l2_gate_v1",
+                schema_version=SCHEMA_VERSION,
+                taxonomy_version=TAXONOMY_VERSION,
+                relevance_weight_version=RELEVANCE_WEIGHT_VERSION,
+                analysis_status="skipped_not_china",
+                confidence=l2.confidence,
+                token_usage=0,
+                estimated_cost_usd=0.0,
+                structured_result={
+                    "analysis_status": "skipped_not_china",
+                    "l2_label": l2.label,
+                    "reason_codes": l2.reason_codes,
+                },
+            )
+            session.add(analysis)
+            article.analysis_status = "skipped_not_china"
+            article.analyzed_at = datetime.now(timezone.utc)
+            article.updated_at = datetime.now(timezone.utc)
+            set_pipeline_state(article, FULLTEXT_SCREENED)
+            result["provider"] = "gate"
+            result["analysis_status"] = "skipped_not_china"
+            result["pipeline_state"] = article.pipeline_state
+            result["token_usage"] = 0
+            result["estimated_cost_usd"] = 0.0
+            return result
+
         use_provider = provider
         if provider == "deepseek" and not allow_llm:
+            use_provider = "heuristic"
+        # possible_china / uncertain: prefer heuristic unless explicitly allowing LLM review
+        if l2.label in {"possible_china", "uncertain"} and not allow_llm:
             use_provider = "heuristic"
 
         structured, used_provider, model_name, tokens, cost = analyze_with_fallback(
@@ -182,9 +224,7 @@ def analyze_article(
         article.analysis_status = analysis.analysis_status
         article.analyzed_at = datetime.now(timezone.utc)
         article.updated_at = datetime.now(timezone.utc)
-        if l2.label == "not_china_related":
-            set_pipeline_state(article, FULLTEXT_SCREENED)
-        elif (article.china_relevance_level or "") in ANALYTICS_RELEVANCE_LEVELS and (
+        if (article.china_relevance_level or "") in ANALYTICS_RELEVANCE_LEVELS and (
             analysis.analysis_status == "completed"
         ):
             set_pipeline_state(article, AVAILABLE_FOR_ANALYTICS)

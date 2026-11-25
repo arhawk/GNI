@@ -99,11 +99,9 @@ def _norm_sentiment(label: str | None) -> str:
 
 
 def _stance_label(structured: dict[str, Any]) -> str:
-    stances = structured.get("stances") or []
-    if stances and isinstance(stances[0], dict):
-        raw = (stances[0].get("stance") or "unknown").strip().lower()
-        return raw or "unknown"
-    return "unknown"
+    from gni.analysis.stance_util import primary_stance_label
+
+    return primary_stance_label(structured)
 
 
 def _topic_primary(structured: dict[str, Any]) -> str | None:

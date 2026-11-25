@@ -113,5 +113,5 @@ def test_run_analysis_batch(db):
         run = run_analysis(session, limit=5, provider="heuristic")
         assert run.status in {"success", "partial"}
         assert run.schema_version == "article_analysis_v0.2"
-        assert run.relevance_weight_version == "provisional_v0.2"
+        assert run.relevance_weight_version == "provisional_v0.3"
         assert (run.stats or {}).get("ok", 0) >= 1

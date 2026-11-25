@@ -182,7 +182,7 @@ def test_fingerprint_rebuild_and_overview_modes(db):
         _seed(session)
         session.flush()
         stats = rebuild_proto_events(session, min_articles=1, limit=20, use_llm=False)
-        assert stats["path"] == "fingerprint"
+        assert stats["path"] == "fingerprint_incremental"
         assert stats["created"] >= 1
         payload = overview_payload(session, days=30)
         assert "event_time_list" in payload["meta"]["map_modes"]

@@ -74,16 +74,18 @@ def rollup_event_metrics(session: Session, *, event_ids: list[str] | None = None
             cid = (src.country_id if src else None) or "UNK"
             country_ids.add(cid)
             structured = (analyses[aid].structured_result if aid in analyses else None) or {}
+            from gni.analysis.stance_util import all_stance_labels, primary_stance_label
+
             sl = _norm_sentiment((structured.get("sentiment") or {}).get("label"))
-            stances = structured.get("stances") or []
-            st = "unknown"
-            if stances and isinstance(stances[0], dict):
-                st = (stances[0].get("stance") or "unknown").lower()
+            # Aggregate all media stances by label; also keep a primary for display compatibility
+            st_labels = all_stance_labels(structured, media_only=True)
+            if not st_labels:
+                st_labels = Counter({primary_stance_label(structured): 1})
             sent[sl] += 1
-            stance[st] += 1
+            stance.update(st_labels)
             by_country[cid]["article_count"] += 1
             by_country[cid]["sentiment"][sl] += 1
-            by_country[cid]["stance"][st] += 1
+            by_country[cid]["stance"].update(st_labels)
 
         by_country_out = {
             cid: {

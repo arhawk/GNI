@@ -5,6 +5,8 @@ import { fetchAlerts, type AlertItem } from '../api'
 const SUB_LABEL: Record<string, string> = {
   volume_spike: '报道量异常',
   attitude_shift: '态度异常',
+  sentiment_shift: '情感异常',
+  stance_shift: '立场异常',
   narrative_shift: '叙事变化',
   major_event: '重大事件',
   transnational: '跨国扩散',

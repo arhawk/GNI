@@ -3,15 +3,15 @@
 **Agent 驱动的官方媒体对华舆情监测系统**：以 China 为固定研究对象，持续监测、理解、量化、发现与报告。
 
 **设计权威：** [docs/BLUEPRINT_V4.md](docs/BLUEPRINT_V4.md)（§22+ 冲突时优先）  
-**当前工程进度：** P1-A～E 已落地；P1-F proto-Event + Event Intelligence UI 壳已接入。
+**当前工程进度：** 见权威表 [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md)（P1-A～E 完成；P1-F1 Fingerprint / P1-F2 Daily Brief 已落地；P1-F3 Alerts 持久化与 P1-F4 周月报待办）。
 
 ## 文档入口
 
-- [Blueprint V4](docs/BLUEPRINT_V4.md) · [筛选 Addendum A1](docs/BLUEPRINT_V4_ADDENDUM_A1.md) · [V4 审计](docs/PHASE0_REPOSITORY_AUDIT_V4.md)
+- [阶段状态（权威）](docs/PHASE_STATUS.md) · [Blueprint V4](docs/BLUEPRINT_V4.md) · [筛选 Addendum A1](docs/BLUEPRINT_V4_ADDENDUM_A1.md)
 - [Event Intelligence IA](docs/EVENT_INTELLIGENCE_IA.md) · [Dashboard](docs/DASHBOARD.md) · [Data Schema](docs/DATA_SCHEMA.md)
-- [PRD](docs/PRD.md) · [指标](docs/METRICS.md) · [Alerts](docs/ALERTS.md)
-- [Provisional 标定](docs/PROVISIONAL_CALIBRATION.md)（P1-C 起临时默认 + 公开评测代理）
-- [Phase 1 任务书（监测型 A～F）](docs/PHASE1_TASK_BRIEF.md) · [P1-A 验收](docs/PHASE1A_ACCEPTANCE.md) · [P1-B 验收](docs/PHASE1B_ACCEPTANCE.md)
+- [报告产品](docs/REPORT_PRODUCTS.md) · [指标](docs/METRICS.md) · [Alerts](docs/ALERTS.md)
+- [Provisional 标定](docs/PROVISIONAL_CALIBRATION.md) · [第二批接口](docs/BATCH2_INTERFACES.md) · [第三批接口](docs/BATCH3_INTERFACES.md)
+- [Phase 1 任务书](docs/PHASE1_TASK_BRIEF.md) · [P1-A 验收](docs/PHASE1A_ACCEPTANCE.md) · [P1-B 验收](docs/PHASE1B_ACCEPTANCE.md)
 - [开发计划](docs/DEVELOPMENT_PLAN.md) · [种子配置](configs/sources_seed.yaml)
 
 MVP 国家：美 / 俄 / 德 / 印 / 澳。**P1-A 门槛：≥5 监测国家**各 ≥1 个 active 源。
@@ -74,11 +74,17 @@ pytest tests/e2e/test_web_react_playwright.py -m e2e
 
 ## 阶段边界
 
+权威细节见 [PHASE_STATUS.md](docs/PHASE_STATUS.md)。摘要：
+
 | 阶段 | 状态 |
 |------|------|
 | Phase 0 + V3/V4 文档对齐 | 完成 |
 | P1-A～P1-E | 完成 |
-| P1-F proto-Event + React 壳 / 总览双地图 / 事件三视图 | 完成（完整事件图谱属 Phase 2） |
+| P1-F1 Fingerprint / 事件 UI | 原型完成（持续加固） |
+| P1-F2 Daily Brief v2 | 已实现 |
+| P1-F3 持久化 Alerts | 待办 |
+| P1-F4 周报/月报 | 规格完成、编码待办 |
+| Phase 2 跨语言事件/叙事 | 后续 |
 
 ## 许可证
 

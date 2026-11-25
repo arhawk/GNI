@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 METRIC_DEFINITION_VERSION = "metrics_v0.4"
-RELEVANCE_WEIGHT_VERSION = "provisional_v0.2"
+RELEVANCE_WEIGHT_VERSION = "provisional_v0.3"
 DEDUPLICATION_METHOD = "content_hash_then_title_hash_v1"
 
 # Core research inclusion (provisional): incidental excluded by default
