@@ -22,6 +22,7 @@ from gni.metrics.definitions import (
 from gni.metrics.service import _latest_analyses
 from gni.reports.risk_tagging import (
     MEDIA_TYPE_ZH,
+    china_signal_score,
     elevate_risk,
     media_type_bucket,
     risk_from_alert_severity,
@@ -31,6 +32,10 @@ from gni.reports.validate import validate_daily_report
 
 MONITOR_DEFAULT = ["US", "RU", "DE", "IN", "AU"]
 SCHEMA_VERSION = "daily_report_schema_v4"
+MIN_TONE_N = 3
+PRIMARY_EVENT_MIN_SCORE = 2.0
+PRIMARY_EVENT_CAP = 10
+_RISK_SORT = {"high": 0, "medium": 1, "watch": 2, "unmapped": 3}
 DISCLAIMER = (
     "全球对华监测产品；当前按接入国/源覆盖统计。"
     "情感条为正面/中立/负面语气分布（≠立场、≠国家态度）；"
@@ -177,6 +182,8 @@ def _dominant(counter: dict[str, int] | Counter[str]) -> str | None:
 def _country_tone_summary(cid: str, n: int, sent: dict[str, int], stance: dict[str, int]) -> str:
     if n <= 0:
         return f"{cid}：当日无可分析涉华样本，不推断态度。"
+    if n < MIN_TONE_N:
+        return f"{cid}：当日可分析样本 n={n}（<{MIN_TONE_N}），情感结论不可用，禁止外推。"
     ds = _dominant(sent) or "unknown"
     dst = _dominant(stance) or "unknown"
     return (
@@ -185,13 +192,116 @@ def _country_tone_summary(cid: str, n: int, sent: dict[str, int], stance: dict[s
     )
 
 
-def _event_overview(title: str, cov: dict[str, Any], imp: float | None) -> str:
+def _country_tone_status(n: int) -> str:
+    if n <= 0:
+        return "no_sample"
+    if n < MIN_TONE_N:
+        return "unavailable"
+    return "ok"
+
+
+def _event_overview(
+    title: str,
+    cov: dict[str, Any],
+    imp: float | None,
+    *,
+    risk_level: str | None = None,
+    sectors: list[dict[str, str]] | None = None,
+    china_score: float | None = None,
+) -> str:
     imp_s = f"{imp:.2f}" if imp is not None else "—"
-    return (
-        f"「{title}」· 重要性 {imp_s} · "
+    sector_labels = [
+        s.get("label") or s.get("id")
+        for s in (sectors or [])
+        if (s.get("id") or "") != "unmapped"
+    ]
+    bits = [
+        f"「{title}」",
+        f"对华信号 {china_score:.1f}" if china_score is not None else None,
+        f"风险 {risk_level or 'unmapped'}",
+        f"赛道 {('、'.join(sector_labels) if sector_labels else '未映射')}",
+        f"重要性 {imp_s}",
         f"关联文章 {cov.get('article_count', 0)} 篇、"
-        f"{cov.get('country_count', 0)} 国、{cov.get('source_count', 0)} 源。"
+        f"{cov.get('country_count', 0)} 国、{cov.get('source_count', 0)} 源",
+    ]
+    return " · ".join(b for b in bits if b)
+
+
+def _build_judgment_text(
+    *,
+    major_events: list[dict[str, Any]],
+    orphan_headlines: list[dict[str, Any]],
+    tone_by_country: list[dict[str, Any]],
+    topic_overall: Counter[str],
+    missing: int,
+    day_total: int,
+    china_n: int,
+) -> tuple[str, str]:
+    """Rule judgment_text + confidence (high|medium|low|unavailable)."""
+    parts: list[str] = []
+    high_n = sum(1 for m in major_events if m.get("risk_level") == "high")
+    sector_n = sum(
+        1
+        for m in major_events
+        if any(sid != "unmapped" for sid in (m.get("sector_ids") or []))
     )
+    topic_total = sum(topic_overall.values()) or 0
+    top_topic = topic_overall.most_common(1)[0] if topic_overall else None
+    taxonomy_low = False
+    if top_topic and topic_total:
+        label, cnt = top_topic
+        share = cnt / topic_total
+        if share > 0.6 and label in {"technology", "other_unknown"}:
+            taxonomy_low = True
+            parts.append(f"议题过度集中于「{label}」（taxonomy 低置信）")
+        elif label != "technology":
+            parts.append(f"主议题偏「{label}」")
+        else:
+            parts.append(f"主议题偏「{label}」")
+    if high_n or sector_n:
+        parts.append(f"高风险事件 {high_n}、已映射赛道事件 {sector_n}")
+    tops = sorted(
+        major_events,
+        key=lambda m: -(m.get("china_signal_score") or 0),
+    )[:3]
+    tops = [m for m in tops if (m.get("china_signal_score") or 0) >= 2.0]
+    if tops:
+        parts.append("优先关注：" + "；".join(str(m.get("title") or "")[:56] for m in tops))
+    elif orphan_headlines:
+        parts.append(
+            "指纹外敏感标题：" + str(orphan_headlines[0].get("title") or "")[:56]
+        )
+    for row in tone_by_country:
+        st = row.get("status")
+        if st == "ok":
+            # short polarity hint only when gated ok
+            sc = row.get("sentiment_counts") or {}
+            dom = _dominant(sc)
+            if dom in {"positive", "negative"}:
+                parts.append(
+                    f"{row.get('country_id')} 媒体语气偏{SENT_ZH.get(dom, dom)}"
+                    f"（n={row.get('n')}）"
+                )
+        elif st == "unavailable" and int(row.get("n") or 0) > 0:
+            parts.append(f"{row.get('country_id')} 样本不足不可外推")
+
+    backlog_ratio = missing / max(1, day_total)
+    if backlog_ratio > 0.5:
+        parts.append("分析覆盖不足，结论暂缓")
+        confidence = "unavailable"
+    elif high_n >= 1 and backlog_ratio < 0.3 and not taxonomy_low:
+        confidence = "high"
+    elif china_n < 5 and high_n == 0 and not orphan_headlines:
+        confidence = "low"
+    else:
+        confidence = "medium"
+
+    if not parts:
+        parts.append("当日可研判素材有限，维持常规监测")
+    text = "；".join(parts)
+    if not text.endswith("。"):
+        text += "。"
+    return text, confidence
 
 
 def _china_count_in_window(
@@ -349,11 +459,13 @@ def build_daily_report(
         sc = dict(blob["sentiment_counts"])
         stc = dict(blob["stance_counts"])
         n = int(blob["n"])
+        tone_status = _country_tone_status(n)
         tone_by_country.append(
             {
                 "country_id": cid,
                 "n": n,
-                "sentiment_counts": sc,
+                "status": tone_status,
+                "sentiment_counts": sc if tone_status == "ok" else sc,
                 "stance_counts": stc,
                 "summary_text": _country_tone_summary(cid, n, sc, stc),
                 "href": f"/countries?c={cid}",
@@ -431,6 +543,8 @@ def build_daily_report(
                     "sentiment": sl,
                     "stance": st,
                     "published_at": t.isoformat() if t else None,
+                    "china_relevance_weight": float(art.china_relevance_weight or 0.0),
+                    "china_relevance_level": art.china_relevance_level,
                 }
             )
 
@@ -497,12 +611,17 @@ def build_daily_report(
         primary_country = (
             country_art_n.most_common(1)[0][0] if country_art_n else (sorted(countries_reporting)[0] if countries_reporting else None)
         )
+        evidence_titles = [str(ev.get("title") or "") for ev in evidence[:8]]
         tags = tag_text(
             e.get("title"),
             e.get("summary"),
             e.get("event_type"),
-            " ".join(ev.get("title") or "" for ev in evidence[:6]),
+            " ".join(evidence_titles),
         )
+        weights = [
+            float(ev.get("china_relevance_weight") or 0.0) for ev in evidence if ev.get("china_relevance_weight")
+        ]
+        avg_w = (sum(weights) / len(weights)) if weights else 0.0
         shares = sent_bar["sentiment_shares"]
         neg_share = float(shares.get("negative") or 0)
         dom_sent = "negative" if neg_share >= max(shares.get("positive", 0), shares.get("neutral", 0)) else (
@@ -523,6 +642,14 @@ def build_daily_report(
             "flagged": bool(anomaly_reasons),
             "reasons": anomaly_reasons,
         }
+        css = china_signal_score(
+            title=e.get("title"),
+            evidence_titles=evidence_titles,
+            tags=tags,
+            anomaly_flagged=bool(anomaly_reasons),
+            importance=float(imp) if imp is not None else None,
+            avg_china_weight=avg_w,
+        )
         timeline = []
         if first_seen:
             timeline.append({"at": first_seen.isoformat(), "label": "first_seen"})
@@ -546,16 +673,38 @@ def build_daily_report(
         for t in tags["sectors"]:
             if t["id"] != "unmapped":
                 narrative_labels.append(t["label"])
+        # Risk-aware follow-ups for high/medium
+        if tags["risk_level"] == "high":
+            follow_ups = [
+                "核对制裁/管制清单是否已生效及覆盖实体",
+                "追踪产业供应链与相关上市公司披露",
+                "监测他国官媒/政府源是否跟进定性",
+            ]
+        elif tags["risk_level"] == "medium":
+            follow_ups = [
+                "是否有官方细则或后续声明？",
+                "是否升级为出口管制/安全协议条款？",
+                "其他监测国媒体是否跟进？",
+            ]
         major_events.append(
             {
                 "event_id": eid,
                 "title": e["title"],
                 "importance_score": imp,
+                "china_signal_score": css,
+                "avg_china_relevance_weight": round(avg_w, 4),
                 "event_type": e.get("event_type"),
                 "event_time": event_time.isoformat() if event_time else e.get("event_time"),
                 "first_seen_at": first_seen.isoformat() if first_seen else None,
                 "status": e.get("status"),
-                "overview_text": _event_overview(e["title"], cov, imp),
+                "overview_text": _event_overview(
+                    e["title"],
+                    cov,
+                    imp,
+                    risk_level=tags["risk_level"],
+                    sectors=tags["sectors"],
+                    china_score=css,
+                ),
                 "core": {
                     "actor": (ev_obj.actor_key if ev_obj else None),
                     "action": (ev_obj.action_key if ev_obj else None),
@@ -588,17 +737,32 @@ def build_daily_report(
 
     major_events.sort(
         key=lambda x: (
+            -(x.get("china_signal_score") or 0),
+            _RISK_SORT.get(str(x.get("risk_level") or "unmapped"), 9),
             -(x.get("importance_score") or 0),
             -((x.get("coverage") or {}).get("country_count") or 0),
-            -((x.get("coverage") or {}).get("article_count") or 0),
         )
     )
-    major_events = major_events[:12]
+    for m in major_events:
+        score = float(m.get("china_signal_score") or 0)
+        risk = str(m.get("risk_level") or "unmapped")
+        if score >= PRIMARY_EVENT_MIN_SCORE or risk in {"high", "medium"}:
+            m["list_tier"] = "primary"
+        else:
+            m["list_tier"] = "secondary"
+    primary_events = [m for m in major_events if m.get("list_tier") == "primary"][:PRIMARY_EVENT_CAP]
+    secondary_events = [m for m in major_events if m.get("list_tier") == "secondary"][:8]
+    if not primary_events and major_events:
+        for m in major_events[:PRIMARY_EVENT_CAP]:
+            m["list_tier"] = "primary"
+            primary_events.append(m)
+        secondary_events = [m for m in major_events if m not in primary_events][:8]
+    major_events = primary_events
     high_major = sum(1 for m in major_events if (m.get("importance_score") or 0) >= 0.7)
 
     # New events first_seen today
     new_events_n = 0
-    for m in major_events:
+    for m in major_events + secondary_events:
         fs = m.get("first_seen_at")
         if not fs:
             continue
@@ -608,6 +772,46 @@ def build_daily_report(
                 new_events_n += 1
         except ValueError:
             pass
+
+    # Orphan sensitive headlines: china_day articles not covered by fingerprint events
+    covered_aids: set[str] = set()
+    for m in major_events + secondary_events:
+        for ev in m.get("evidence") or []:
+            aid = ev.get("article_id")
+            if aid:
+                covered_aids.add(str(aid))
+    orphan_headlines: list[dict[str, Any]] = []
+    china_sorted = sorted(
+        china_day,
+        key=lambda a: float(a.china_relevance_weight or 0.0),
+        reverse=True,
+    )
+    for art in china_sorted:
+        if str(art.id) in covered_aids:
+            continue
+        snippet = (art.content_clean or "")[:240]
+        tags = tag_text(art.title, snippet)
+        risk = tags["risk_level"]
+        mapped = [s for s in tags["sector_ids"] if s != "unmapped"]
+        if risk not in {"high", "medium"} and not mapped:
+            continue
+        src = sources.get(art.source_id)
+        orphan_headlines.append(
+            {
+                "article_id": art.id,
+                "title": art.title,
+                "country_id": src.country_id if src else None,
+                "source_id": art.source_id,
+                "china_relevance_weight": float(art.china_relevance_weight or 0.0),
+                "risk_level": risk,
+                "sectors": tags["sectors"],
+                "sector_ids": tags["sector_ids"],
+                "matched_triggers": tags["matched_triggers"],
+                "href": f"/search?q={art.id}",
+            }
+        )
+        if len(orphan_headlines) >= 8:
+            break
 
     # Signals from alert engine (intelligence only) — scoped to report-day window
     signals: list[dict[str, Any]] = []
@@ -640,11 +844,55 @@ def build_daily_report(
             }
         )
 
+    # Synthetic signals from high-score events / orphans (avoid empty signal rail)
+    for m in major_events[:5]:
+        if m.get("risk_level") not in {"high", "medium"} and (m.get("china_signal_score") or 0) < 4:
+            continue
+        sub = "policy_risk" if m.get("risk_level") in {"high", "medium"} else "sector_watch"
+        signals.append(
+            {
+                "id": f"synth_event_{m.get('event_id')}",
+                "subcategory": sub,
+                "severity": "high" if m.get("risk_level") == "high" else "medium",
+                "title": m.get("title"),
+                "summary": f"对华信号分 {m.get('china_signal_score')} · 风险 {m.get('risk_level')}",
+                "status": "needs_review",
+                "href": m.get("href") or "/events",
+                "evidence": {"event_id": m.get("event_id"), "synthetic": True},
+            }
+        )
+    for oh in orphan_headlines[:4]:
+        sub = "policy_risk" if oh.get("risk_level") in {"high", "medium"} else "sector_watch"
+        signals.append(
+            {
+                "id": f"synth_orphan_{oh.get('article_id')}",
+                "subcategory": sub,
+                "severity": "high" if oh.get("risk_level") == "high" else "medium",
+                "title": oh.get("title"),
+                "summary": "指纹事件外敏感标题（需复核）",
+                "status": "needs_review",
+                "href": oh.get("href") or "/search",
+                "evidence": {"article_id": oh.get("article_id"), "synthetic": True, "orphan": True},
+            }
+        )
+    # Dedupe by title prefix
+    seen_sig: set[str] = set()
+    deduped_signals: list[dict[str, Any]] = []
+    for sig in signals:
+        key = (str(sig.get("title") or "")[:48]).lower()
+        if key in seen_sig:
+            continue
+        seen_sig.add(key)
+        deduped_signals.append(sig)
+    signals = deduped_signals[:12]
+
     # Elevate event risk from overlapping alert titles; build anomalies list
     for m in major_events:
         title_l = (m.get("title") or "").lower()
         for sig in signals:
             if (sig.get("severity") or "") != "high":
+                continue
+            if (sig.get("evidence") or {}).get("synthetic"):
                 continue
             st = (sig.get("title") or "").lower()
             if st and (st[:24] in title_l or title_l[:24] in st):
@@ -655,18 +903,32 @@ def build_daily_report(
 
     anomalies: list[dict[str, Any]] = []
     for m in major_events:
-        if (m.get("anomaly") or {}).get("flagged"):
+        if (m.get("anomaly") or {}).get("flagged") or m.get("risk_level") == "high":
             anomalies.append(
                 {
                     "kind": "event_anomaly",
                     "event_id": m.get("event_id"),
                     "title": m.get("title"),
                     "risk_level": m.get("risk_level"),
-                    "reasons": (m.get("anomaly") or {}).get("reasons") or [],
+                    "reasons": (m.get("anomaly") or {}).get("reasons")
+                    or (["高风险事件"] if m.get("risk_level") == "high" else []),
                     "href": m.get("href"),
                 }
             )
+    for oh in orphan_headlines:
+        anomalies.append(
+            {
+                "kind": "orphan_headline",
+                "article_id": oh.get("article_id"),
+                "title": oh.get("title"),
+                "risk_level": oh.get("risk_level"),
+                "reasons": ["指纹簇外敏感标题"] + list(oh.get("matched_triggers") or [])[:3],
+                "href": oh.get("href"),
+            }
+        )
     for sig in signals:
+        if (sig.get("evidence") or {}).get("synthetic"):
+            continue
         anomalies.append(
             {
                 "kind": "signal",
@@ -797,16 +1059,30 @@ def build_daily_report(
     }
 
     ops_follow_ups = []
-    for m in major_events[:5]:
+    for m in major_events[:8]:
         if m.get("risk_level") in {"high", "medium"} or (m.get("anomaly") or {}).get("flagged"):
+            action = (m.get("follow_ups") or ["追踪官方细则与他国跟进报道"])[0]
             ops_follow_ups.append(
                 {
                     "event_id": m.get("event_id"),
                     "title": m.get("title"),
-                    "action": "追踪官方细则与他国跟进报道",
+                    "action": action,
                     "href": m.get("href"),
                 }
             )
+        if len(ops_follow_ups) >= 3:
+            break
+    for oh in orphan_headlines:
+        if len(ops_follow_ups) >= 3:
+            break
+        ops_follow_ups.append(
+            {
+                "article_id": oh.get("article_id"),
+                "title": oh.get("title"),
+                "action": "复核指纹外敏感标题并评估是否建事件",
+                "href": oh.get("href"),
+            }
+        )
     if not ops_follow_ups and major_events:
         ops_follow_ups.append(
             {
@@ -855,13 +1131,26 @@ def build_daily_report(
 
     china_n = len(china_day)
     delta_y = china_n - yesterday_china
+    day_total_for_gate = max(int(overview_stats["ingest"]["day_total"] or 0), 1)
+    judgment_text, judgment_confidence = _build_judgment_text(
+        major_events=major_events,
+        orphan_headlines=orphan_headlines,
+        tone_by_country=tone_by_country,
+        topic_overall=topic_overall,
+        missing=missing,
+        day_total=day_total_for_gate,
+        china_n=china_n,
+    )
     overview_text = (
+        f"{judgment_text} "
         f"{risk_banner['text']} "
         f"今日涉华有效报道 {china_n} 篇（昨日 {yesterday_china}，"
         f"{'↑' if delta_y > 0 else '↓' if delta_y < 0 else '→'}{abs(delta_y)}；"
         f"近 7 日日均 {week_avg}），覆盖约 {len(reporting_countries)} 国、"
-        f"{len(reporting_sources)} 源；重大/相关事件 {len(major_events)} 个"
-        f"（高重要 {high_major}，新发现约 {new_events_n}）。"
+        f"{len(reporting_sources)} 源；主列表事件 {len(major_events)} 个"
+        f"（高重要 {high_major}，新发现约 {new_events_n}；次要 {len(secondary_events)}；"
+        f"孤儿敏感标题 {len(orphan_headlines)}）。"
+        f"研判置信度 {judgment_confidence}。"
         f"采集异常源 {overview_stats['crawl_summary']['failing']}。"
     )
 
@@ -932,18 +1221,41 @@ def build_daily_report(
                 },
                 "top_changes": top_changes,
                 "overview_text": overview_text,
+                "judgment_text": judgment_text,
+                "confidence": judgment_confidence,
                 "risk_banner": risk_banner,
             },
             "overview_stats": overview_stats,
             "major_events": major_events,
+            "secondary_events": secondary_events,
+            "orphan_headlines": orphan_headlines,
             "coverage": {
                 "by_country": coverage_by_country,
                 "by_source": by_source,
                 "topics_top": _top_n(topic_overall, 8),
                 "frames_top": _top_n(frame_overall, 8),
+                "taxonomy_confidence": (
+                    "low"
+                    if topic_overall
+                    and (
+                        topic_overall.most_common(1)[0][1] / max(1, sum(topic_overall.values()))
+                    )
+                    > 0.6
+                    else "normal"
+                ),
                 "note": (
                     f"全球监测覆盖（当前接入 {connected_countries} 国）。"
                     "Article Count 与 Weighted Volume 分列；加权不替代实际篇数。"
+                    + (
+                        " 当日 >60% 主题落入同一桶，taxonomy 低置信。"
+                        if topic_overall
+                        and (
+                            topic_overall.most_common(1)[0][1]
+                            / max(1, sum(topic_overall.values()))
+                        )
+                        > 0.6
+                        else ""
+                    )
                 ),
             },
             "tone": {
@@ -951,8 +1263,10 @@ def build_daily_report(
                 "overall_stance_counts": dict(stance_overall),
                 "by_country": tone_by_country,
                 "by_media_type": overview_stats["sentiment_by_media_type"],
+                "min_n": MIN_TONE_N,
                 "note": (
                     "情感条：正面 / 中立 / 负面（语气）；"
+                    f"分国 n<{MIN_TONE_N} 时 status=unavailable，禁止「以负面为主」类外推；"
                     "立场绑定对华 Target，分列展示；引述≠媒体自身立场；"
                     "score_mean 为技术均值非舆情总分。"
                 ),
@@ -986,7 +1300,7 @@ def build_daily_report(
             },
         },
         "narratives": {
-            "executive": overview_text,
+            "executive": judgment_text,
             "risk": risk_banner["text"],
             "coverage": (
                 f"涉华报道量居前："
@@ -998,11 +1312,15 @@ def build_daily_report(
                 or "各国当日涉华样本不足"
             )
             + "。",
-            "tone": "见分国情感/立场摘要；勿外推为国家立场。",
-            "signals": f"情报信号 {len(signals)} 条；异动 {len(anomalies)} 条。",
+            "tone": f"分国情感门禁 n≥{MIN_TONE_N}；勿外推为国家立场。",
+            "signals": (
+                f"情报信号 {len(signals)} 条；异动 {len(anomalies)} 条；"
+                f"孤儿敏感标题 {len(orphan_headlines)}。"
+            ),
             "quality": f"分析积压 {missing}；采集异常源 "
             f"{overview_stats['crawl_summary']['failing']}；"
-            f"无样本国家 {countries_without_sample or '无'}。",
+            f"无样本国家 {countries_without_sample or '无'}；"
+            f"研判置信度 {judgment_confidence}。",
         },
     }
 
@@ -1043,8 +1361,9 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
         "",
         "## 1. Executive Summary",
         "",
-        summary.get("overview_text") or nar.get("executive") or "",
+        summary.get("judgment_text") or nar.get("executive") or summary.get("overview_text") or "",
         "",
+        f"- 研判置信度: **{summary.get('confidence') or '—'}**",
         f"- 涉华文章: **{kpis.get('china_articles')}**",
         f"- 报道国家: **{kpis.get('reporting_countries')}**",
         f"- 报道媒体: **{kpis.get('reporting_sources')}**",

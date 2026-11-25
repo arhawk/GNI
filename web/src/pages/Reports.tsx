@@ -26,9 +26,13 @@ export function ReportsPage() {
     if (tab === 'daily') {
       fetchDailyReport()
         .then((payload) => {
-          if (!payload?.sections?.summary?.kpis) {
+          const v4 =
+            payload?.schema_version === 'daily_report_schema_v4' &&
+            payload?.sections?.overview_stats != null &&
+            payload?.sections?.summary?.risk_banner != null
+          if (!v4) {
             setError(
-              `日报 schema 不匹配（收到 ${payload?.schema_version || 'unknown'}）。请重启 API 加载 daily_report_schema_v4。`,
+              `日报空壳/旧版（收到 ${payload?.schema_version || 'unknown'}，缺 overview_stats 或 risk_banner）。请重启 gni api serve 加载 daily_report_schema_v4，勿继续渲染空五段。`,
             )
             return
           }
@@ -335,9 +339,12 @@ function DailyBrief({
       <section className="brief-section">
         <h2>1 · 当日摘要</h2>
         <div className={`risk-banner ${risk?.has_high_risk ? 'hot' : 'calm'}`}>
-          {risk?.text || nar.risk || '风险条生成中…'}
+          {risk?.text || nar.risk || '—'}
         </div>
-        <p className="brief-lede">{summary.overview_text || nar.executive}</p>
+        <p className="brief-lede">{summary.judgment_text || nar.executive || summary.overview_text}</p>
+        {summary.confidence && (
+          <p className="muted small">研判置信度：{summary.confidence}</p>
+        )}
         <ol className="brief-changes">
           {(summary.top_changes || []).map((c) => (
             <li key={c.title}>
@@ -384,14 +391,15 @@ function DailyBrief({
           <tbody>
             {s.tone.by_country.map((row) => {
               const sc = row.sentiment_counts || {}
+              const unavailable = row.status === 'unavailable' || row.status === 'no_sample'
               return (
-                <tr key={row.country_id}>
+                <tr key={row.country_id} className={unavailable ? 'tone-unavailable' : undefined}>
                   <td>
                     <Link to={row.href || `/countries?c=${row.country_id}`}>{row.country_id}</Link>
                   </td>
                   <td>{row.n}</td>
                   <td className="muted small">
-                    {sc.positive ?? 0}/{sc.neutral ?? 0}/{sc.negative ?? 0}
+                    {unavailable ? '样本不足' : `${sc.positive ?? 0}/${sc.neutral ?? 0}/${sc.negative ?? 0}`}
                   </td>
                   <td className="small">{row.summary_text}</td>
                 </tr>
@@ -485,7 +493,42 @@ function DailyBrief({
             </tbody>
           </table>
         </div>
+        {(s.secondary_events || []).length > 0 && (
+          <details className="secondary-events">
+            <summary className="muted small">次要 / 弱对华相关事件（{s.secondary_events!.length}）</summary>
+            <ul className="event-list">
+              {s.secondary_events!.map((ev) => (
+                <li key={ev.event_id}>
+                  <Link to={ev.href || `/events/${ev.event_id}`}>{ev.title}</Link>
+                  <span className="muted small">
+                    {' '}
+                    · 信号 {ev.china_signal_score ?? '—'} · {ev.risk_level || 'unmapped'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {(s.orphan_headlines || []).length > 0 && (
+          <div className="orphan-headlines">
+            <h3>指纹外敏感标题</h3>
+            <ul className="event-list">
+              {s.orphan_headlines!.map((oh) => (
+                <li key={String(oh.article_id)}>
+                  <strong>{oh.title}</strong>
+                  <span className="muted small">
+                    {' '}
+                    · {oh.country_id || '—'} · {oh.risk_level}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <TopicBars topics={s.coverage.topics_top || []} />
+        {s.coverage.taxonomy_confidence === 'low' && (
+          <p className="callout">议题 taxonomy 低置信（当日主题过度集中）。</p>
+        )}
         <button type="button" className="linkish" onClick={() => setShowCoverageDetail(!showCoverageDetail)}>
           {showCoverageDetail ? '收起事件证据明细' : '展开事件证据 / 覆盖明细'}
         </button>

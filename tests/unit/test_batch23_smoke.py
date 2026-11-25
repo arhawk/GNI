@@ -110,9 +110,10 @@ def test_daily_sentiment_bar_skips_government():
 
 
 def test_risk_tagging_and_validate_v4_shape():
-    from gni.reports.risk_tagging import tag_text
+    from gni.reports.risk_tagging import _cfg, tag_text
     from gni.reports.validate import validate_daily_report
 
+    _cfg.cache_clear()
     tags = tag_text("Congress hearing on export controls and optical modules")
     assert tags["risk_level"] in {"high", "medium"}
     assert "optical_modules" in tags["sector_ids"]
@@ -123,7 +124,13 @@ def test_risk_tagging_and_validate_v4_shape():
         "period": "2026-11-25",
         "disclaimer": "test",
         "sections": {
-            "summary": {"kpis": {"china_articles": 0}, "overview_text": "x"},
+            "summary": {
+                "kpis": {"china_articles": 0},
+                "overview_text": "x",
+                "judgment_text": "维持常规监测。",
+                "confidence": "low",
+                "risk_banner": {"has_high_risk": False, "high_risk_event_count": 0, "text": "突发高风险：未见。"},
+            },
             "overview_stats": {},
             "major_events": [],
             "coverage": {},

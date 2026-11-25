@@ -92,3 +92,60 @@ def risk_from_alert_severity(severity: str | None) -> str:
 def _rank(level: str) -> int:
     order = {"high": 0, "medium": 1, "watch": 2, "unmapped": 3}
     return order.get(level, 9)
+
+
+CHINA_MARKERS = (
+    "china",
+    "chinese",
+    "beijing",
+    "prc",
+    "taiwan",
+    "huawei",
+    "中国",
+    "中方",
+    "北京",
+    "台海",
+    "南海",
+    "华为",
+)
+
+
+def china_signal_score(
+    *,
+    title: str | None,
+    evidence_titles: list[str] | None = None,
+    tags: dict[str, Any] | None = None,
+    anomaly_flagged: bool = False,
+    importance: float | None = None,
+    avg_china_weight: float | None = None,
+) -> float:
+    """Explainable China-sensitivity score for daily event ranking."""
+    tags = tags or {}
+    hay = " ".join(
+        [title or "", *(evidence_titles or [])]
+    ).lower()
+    score = 0.0
+    risk = str(tags.get("risk_level") or "unmapped")
+    if risk == "high":
+        score += 5.0
+    elif risk == "medium":
+        score += 3.0
+    elif risk == "watch":
+        score += 1.5
+    sector_ids = [s for s in (tags.get("sector_ids") or []) if s != "unmapped"]
+    score += min(4.0, 2.0 * len(sector_ids))
+    if anomaly_flagged:
+        score += 2.0
+    score += min(3.0, float(avg_china_weight or 0.0) * 3.0)
+    score += min(2.0, float(importance or 0.0) * 2.0)
+    has_china_marker = any(m in hay for m in CHINA_MARKERS)
+    weak = (
+        not has_china_marker
+        and risk == "unmapped"
+        and not sector_ids
+    )
+    if weak:
+        score *= 0.25
+    elif not has_china_marker and risk in {"watch", "unmapped"} and not sector_ids:
+        score *= 0.5
+    return round(score, 4)

@@ -43,6 +43,18 @@ def validate_daily_report(payload: dict[str, Any]) -> dict[str, Any]:
     summary = sections.get("summary") or {}
     kpis = summary.get("kpis") or {}
     ok("kpi_china_articles", isinstance(kpis.get("china_articles"), int))
+    if schema == "daily_report_schema_v4":
+        ok(
+            "judgment_text",
+            isinstance(summary.get("judgment_text"), str) and bool(summary.get("judgment_text")),
+            "missing judgment_text",
+        )
+        ok(
+            "confidence",
+            summary.get("confidence") in {"high", "medium", "low", "unavailable"},
+            str(summary.get("confidence")),
+        )
+        ok("risk_banner", isinstance(summary.get("risk_banner"), dict))
 
     events = sections.get("major_events") or []
     ids = [e.get("event_id") for e in events if e.get("event_id")]

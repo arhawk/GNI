@@ -197,6 +197,8 @@ export type DailyReport = {
         evidence?: Record<string, unknown>
       }>
       overview_text: string
+      judgment_text?: string
+      confidence?: 'high' | 'medium' | 'low' | 'unavailable' | string
       risk_banner?: {
         has_high_risk: boolean
         high_risk_event_count: number
@@ -227,6 +229,8 @@ export type DailyReport = {
       event_id: string
       title: string
       importance_score?: number | null
+      china_signal_score?: number | null
+      list_tier?: string
       event_type?: string | null
       event_time?: string | null
       first_seen_at?: string | null
@@ -282,6 +286,20 @@ export type DailyReport = {
         published_at?: string | null
       }>
     }>
+    secondary_events?: Array<{
+      event_id: string
+      title: string
+      china_signal_score?: number | null
+      risk_level?: string
+      href?: string
+    }>
+    orphan_headlines?: Array<{
+      article_id: string
+      title: string
+      country_id?: string | null
+      risk_level?: string
+      sectors?: Array<{ id: string; label: string }>
+    }>
     anomalies?: Array<Record<string, unknown>>
     ops?: {
       follow_ups?: Array<{
@@ -317,15 +335,18 @@ export type DailyReport = {
       }>
       topics_top: Array<{ label: string; count: number; share: number }>
       frames_top: Array<{ label: string; count: number; share: number }>
+      taxonomy_confidence?: string
       note?: string
     }
     tone: {
       note?: string
+      min_n?: number
       overall_sentiment_counts: Record<string, number>
       overall_stance_counts: Record<string, number>
       by_country: Array<{
         country_id: string
         n: number
+        status?: 'ok' | 'unavailable' | 'no_sample' | string
         sentiment_counts: Record<string, number>
         stance_counts: Record<string, number>
         summary_text: string

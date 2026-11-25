@@ -15,12 +15,43 @@ PROMPT_VERSION = "heuristic_v0.1"
 MODEL_NAME = "heuristic-rules"
 
 TOPIC_KEYWORDS: list[tuple[str, list[str]]] = [
+    # Prefer multi-token / specific terms; avoid bare "ai"/"tech" false positives.
     ("economy_trade", ["trade", "tariff", "export", "import", "investment", "wto", "贸易", "出口", "关税"]),
-    ("technology", ["ai", "chip", "semiconductor", "huawei", "tech", "5g", "芯片", "半导体", "科技"]),
-    ("security_military", ["military", "navy", "missile", "security", "defense", "pla", "军事", "安全", "国防"]),
-    ("international_relations", ["diplomacy", "summit", "bilateral", "alliance", "外交", "峰会", "关系"]),
-    ("environment_energy", ["climate", "carbon", "energy", "oil", "climate", "气候", "能源", "碳"]),
-    ("politics_governance", ["party", "governance", "election", "policy", "政府", "政策", "治理"]),
+    (
+        "technology",
+        [
+            "artificial intelligence",
+            "generative ai",
+            "semiconductor",
+            "chip export",
+            "export control",
+            "huawei",
+            "5g",
+            "芯片",
+            "半导体",
+            "人工智能",
+            "出口管制",
+        ],
+    ),
+    (
+        "security_military",
+        [
+            "military",
+            "navy",
+            "missile",
+            "defense",
+            "defence",
+            "security pact",
+            "security agreement",
+            "pla",
+            "军事",
+            "国防",
+            "安全协议",
+        ],
+    ),
+    ("international_relations", ["diplomacy", "summit", "bilateral", "alliance", "外交", "峰会"]),
+    ("environment_energy", ["climate", "carbon", "energy", "oil", "气候", "能源"]),
+    ("politics_governance", ["election", "governance", "legislature", "选举", "治理"]),
     ("society_culture", ["culture", "education", "society", "人口", "社会", "文化", "教育"]),
 ]
 
@@ -52,7 +83,12 @@ def _count_hits(text: str, words: set[str] | list[str]) -> int:
     for w in words:
         if not w:
             continue
-        if re.search(rf"(?<![a-z0-9]){re.escape(w.casefold())}(?![a-z0-9])", folded) or w in folded:
+        wf = w.casefold()
+        # CJK: allow substring; Latin: word-boundary only (avoid "pla"∈"players").
+        if re.search(r"[\u4e00-\u9fff]", w):
+            if w in folded or wf in folded:
+                n += 1
+        elif re.search(rf"(?<![a-z0-9]){re.escape(wf)}(?![a-z0-9])", folded):
             n += 1
     return n
 
@@ -62,7 +98,8 @@ def _pick_topic(blob: str) -> tuple[str | None, list[str]]:
     for topic_id, kws in TOPIC_KEYWORDS:
         scores.append((_count_hits(blob, kws), topic_id))
     scores.sort(reverse=True)
-    if not scores or scores[0][0] == 0:
+    # Require at least one solid hit; weak single-letter style matches removed upstream.
+    if not scores or scores[0][0] < 1:
         return "other_unknown", []
     primary = scores[0][1]
     secondary = [t for c, t in scores[1:3] if c > 0]

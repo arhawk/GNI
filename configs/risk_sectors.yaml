@@ -1,5 +1,5 @@
 # Keyword → sector / risk tagging for Daily Ops/Risk v4 (rule MVP).
-# Matches against title + summary + topic/frame labels (case-insensitive).
+# Matches against title + summary + evidence titles (case-insensitive).
 
 sectors:
   semiconductors:
@@ -17,6 +17,9 @@ sectors:
       - 芯片
       - 半导体
       - 光刻
+      - diversion
+      - diverted
+      - 转口
   optical_modules:
     label: 光模块
     keywords:
@@ -32,27 +35,46 @@ sectors:
       - gpu
       - data center
       - 算力
-      - 人工智能
+      - generative ai
   trade:
     label: 贸易
     keywords:
       - tariff
       - trade war
-      - export
-      - import
+      - export control
+      - export controls
+      - entity list
+      - blacklist
+      - black list
       - 关税
       - 贸易
+      - 黑名单
+      - 实体清单
   geopolitics:
-    label: 地缘
+    label: 地缘安全
     keywords:
       - south china sea
       - taiwan
       - border
       - military
+      - security pact
+      - security agreement
+      - solomon
+      - solomon islands
       - 南海
       - 台海
       - 边境
       - 军演
+      - 安全协议
+      - 所罗门
+  finance_cooperation:
+    label: 金融合作
+    keywords:
+      - brics
+      - payment system
+      - financial cooperation
+      - 金融合作
+      - 结算
 
 risk_triggers:
   high:
@@ -62,31 +84,43 @@ risk_triggers:
     - entity list
     - export control
     - export controls
+    - blacklist
+    - black list
     - blockade
+    - diversion
+    - diverted
     - 制裁
     - 出口管制
     - 实体清单
     - 禁运
+    - 黑名单
   medium:
     - bill
     - hearing
     - legislation
     - investigation
     - tariff
+    - security pact
+    - security agreement
+    - cancel
+    - cancelled
+    - canceled
     - 法案
     - 听证
     - 调查
     - 关税
+    - 安全协议
   watch:
     - concern
     - warning
     - review
     - probe
+    - joint statement
     - 关切
     - 警告
     - 审查
+    - 联合声明
 
-# Map alert severity → display risk_level
 alert_severity_to_risk:
   high: high
   medium: medium

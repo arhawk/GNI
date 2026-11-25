@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from gni import __version__
@@ -26,6 +26,7 @@ from gni.events.service import (
     rebuild_proto_events,
 )
 from gni.infrastructure.db import ensure_schema, session_scope
+from gni.reports.daily import SCHEMA_VERSION as DAILY_SCHEMA_VERSION
 from gni.reports.daily import build_daily_report
 from gni.reports.monthly import build_monthly_report
 from gni.reports.weekly import build_weekly_report
@@ -48,7 +49,11 @@ def _startup() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "version": __version__}
+    return {
+        "status": "ok",
+        "version": __version__,
+        "daily_schema": DAILY_SCHEMA_VERSION,
+    }
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -117,12 +122,15 @@ def api_country_china_attitude(
 
 @app.get("/api/reports/daily")
 def api_daily_report(
+    response: Response,
     date: str | None = Query(None, description="YYYY-MM-DD in Asia/Shanghai"),
     polish: bool = Query(False, description="LLM narrative polish only"),
 ) -> dict:
     try:
         with session_scope() as session:
-            return build_daily_report(session, day=date, polish=polish)
+            payload = build_daily_report(session, day=date, polish=polish)
+        response.headers["X-GNI-Report-Schema"] = str(payload.get("schema_version") or DAILY_SCHEMA_VERSION)
+        return payload
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
