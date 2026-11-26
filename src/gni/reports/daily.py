@@ -433,7 +433,11 @@ def build_daily_report(
         src = sources.get(a.source_id)
         cid = (src.country_id if src else None) or "UNK"
         bucket = media_type_bucket(src)
-        sl = _norm_sentiment((structured.get("sentiment") or {}).get("label"))
+        sl = _norm_sentiment(
+            (structured.get("sentiment") or {}).get("label")
+            if isinstance(structured.get("sentiment"), dict)
+            else (structured.get("sentiment") if isinstance(structured.get("sentiment"), str) else None)
+        )
         st = _stance_label(structured)
         tp = _topic_primary(structured)
         fr = _frame_primary(structured)
@@ -533,7 +537,11 @@ def build_daily_report(
             structured = (
                 (analyses[art.id].structured_result if art.id in analyses else None) or {}
             )
-            sl = _norm_sentiment((structured.get("sentiment") or {}).get("label"))
+            sl = _norm_sentiment(
+            (structured.get("sentiment") or {}).get("label")
+            if isinstance(structured.get("sentiment"), dict)
+            else (structured.get("sentiment") if isinstance(structured.get("sentiment"), str) else None)
+        )
             st = _stance_label(structured)
             fr = _frame_primary(structured)
             if cid:
