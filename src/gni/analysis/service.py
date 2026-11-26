@@ -14,9 +14,23 @@ from gni.analysis.budget import llm_allowed, snapshot_budget
 from gni.analysis.deepseek import PROMPT_VERSION as DEEPSEEK_PROMPT, analyze_with_fallback
 from gni.analysis.heuristic import PROMPT_VERSION as HEURISTIC_PROMPT, SCHEMA_VERSION, TAXONOMY_VERSION
 from gni.analysis.l2_fulltext import SCHEMA_VERSION as L2_SCHEMA, screen_fulltext
-from gni.analysis.l3_spans import extract_china_spans
-from gni.analysis.relevance import RELEVANCE_WEIGHT_VERSION, assess_relevance
+from gni.analysis.l3_spans import ChinaSpan, extract_china_spans, validate_span_quote
+from gni.analysis.relevance import RELEVANCE_WEIGHT_VERSION, RelevanceAssessment, assess_relevance
 from gni.core.config import get_settings
+from gni.core.contracts import (
+    ARTICLE_INTELLIGENCE_VERSION,
+    ArticleAnalysisMetadataContract,
+    ArticleEntityContract,
+    ArticleEventCandidateContract,
+    ArticleIntelligenceContract,
+    ArticleNarrativeContract,
+    ArticleQualityContract,
+    ArticleRelevanceContract,
+    ArticleSentimentContract,
+    ArticleStanceContract,
+    ArticleTopicContract,
+    EvidenceSpanRef,
+)
 from gni.infrastructure.models import (
     AnalysisRun,
     Article,
@@ -201,6 +215,18 @@ def analyze_article(
             settings=settings,
         )
         prompt_version = DEEPSEEK_PROMPT if used_provider == "deepseek" else HEURISTIC_PROMPT
+        structured = validate_and_enrich_article_intelligence(
+            structured,
+            article=article,
+            article_version_id=version_id,
+            content_clean=content,
+            spans=spans,
+            relevance=relevance,
+            provider=used_provider,
+            model_name=model_name,
+            prompt_version=prompt_version,
+            token_usage=tokens,
+        )
 
         analysis = ArticleAnalysis(
             id=str(uuid4()),
@@ -244,6 +270,306 @@ def analyze_article(
     return result
 
 
+def _locate_quote_in_text(content: str, quote: str) -> tuple[int | None, int | None, bool]:
+    """Verify quote against content_clean and return (start, end, validated)."""
+    if not content or not quote:
+        return None, None, False
+    q = quote.strip()
+    if not q:
+        return None, None, False
+    idx = content.find(q)
+    if idx >= 0:
+        return idx, idx + len(q), True
+    # Case-insensitive fallback for minor casing differences
+    idx_ci = content.casefold().find(q.casefold())
+    if idx_ci >= 0:
+        return idx_ci, idx_ci + len(q), True
+    return None, None, False
+
+
+def validate_and_enrich_article_intelligence(
+    structured: dict[str, Any],
+    *,
+    article: Article,
+    article_version_id: str | None,
+    content_clean: str | None,
+    spans: list[ChinaSpan],
+    relevance: RelevanceAssessment,
+    provider: str,
+    model_name: str,
+    prompt_version: str,
+    token_usage: int,
+) -> dict[str, Any]:
+    """Deterministic Evidence alignment, cross-field validation, Quality scoring & V2.0 contract projection."""
+    text = content_clean or ""
+    flags: list[str] = []
+    needs_review = False
+    validated_evidence: list[dict[str, Any]] = []
+    seen_ev_ids: set[str] = set()
+
+    # 1. Align and verify existing evidence entries against content_clean
+    raw_ev = structured.get("evidence") if isinstance(structured.get("evidence"), list) else []
+    for i, item in enumerate(raw_ev):
+        if not isinstance(item, dict):
+            continue
+        quote = str(item.get("quote") or item.get("text_span") or "").strip()
+        if not quote:
+            continue
+        ev_id = str(item.get("evidence_id") or f"ev_{i}")
+        s_off = item.get("start_offset")
+        e_off = item.get("end_offset")
+        is_valid = validate_span_quote(text, quote, s_off, e_off) if text else False
+        if not is_valid and text:
+            s_off, e_off, is_valid = _locate_quote_in_text(text, quote)
+        rec = EvidenceSpanRef(
+            evidence_id=ev_id,
+            article_id=article.id,
+            article_version_id=article_version_id,
+            text_span=quote[:500],
+            start_offset=s_off,
+            end_offset=e_off,
+            paragraph_index=item.get("paragraph_index"),
+            evidence_type=str(item.get("evidence_type") or "general"),
+            supports_claim=str(item.get("supports_claim") or item.get("field_path") or ""),
+            analysis_task="article_intelligence",
+            validated=is_valid,
+        ).model_dump()
+        # Preserve backward-compatible quote / field_path keys
+        rec["quote"] = rec["text_span"]
+        if item.get("field_path"):
+            rec["field_path"] = item["field_path"]
+        validated_evidence.append(rec)
+        seen_ev_ids.add(ev_id)
+
+    # 2. Verify china_stance.stance_evidence quotes against original text
+    cs = structured.get("china_stance") if isinstance(structured.get("china_stance"), dict) else {}
+    stance_ev_raw = cs.get("stance_evidence") if isinstance(cs.get("stance_evidence"), list) else []
+    aligned_stance_ev: list[dict[str, Any]] = []
+    stance_ev_refs: list[str] = []
+    unverified_stance_quotes = 0
+    for idx, sev in enumerate(stance_ev_raw):
+        if isinstance(sev, str):
+            sev = {"quote": sev}
+        if not isinstance(sev, dict):
+            continue
+        quote = str(sev.get("quote") or sev.get("text_span") or "").strip()
+        if not quote:
+            continue
+        s_off = sev.get("start_offset")
+        e_off = sev.get("end_offset")
+        is_valid = validate_span_quote(text, quote, s_off, e_off) if text else False
+        if not is_valid and text:
+            s_off, e_off, is_valid = _locate_quote_in_text(text, quote)
+        if not is_valid:
+            unverified_stance_quotes += 1
+        ev_id = str(sev.get("evidence_id") or f"ev_stance_quote_{idx}")
+        aligned = {
+            **sev,
+            "evidence_id": ev_id,
+            "article_id": article.id,
+            "article_version_id": article_version_id,
+            "quote": quote[:500],
+            "start_offset": s_off,
+            "end_offset": e_off,
+            "validated": is_valid,
+        }
+        aligned_stance_ev.append(aligned)
+        stance_ev_refs.append(ev_id)
+        if ev_id not in seen_ev_ids:
+            validated_evidence.append(
+                EvidenceSpanRef(
+                    evidence_id=ev_id,
+                    article_id=article.id,
+                    article_version_id=article_version_id,
+                    text_span=quote[:500],
+                    start_offset=s_off,
+                    end_offset=e_off,
+                    paragraph_index=sev.get("paragraph_index"),
+                    evidence_type="stance",
+                    supports_claim=f"china_stance={cs.get('stance_label')}",
+                    validated=is_valid,
+                ).model_dump()
+                | {"quote": quote[:500]}
+            )
+            seen_ev_ids.add(ev_id)
+
+    if aligned_stance_ev:
+        cs["stance_evidence"] = aligned_stance_ev
+    if unverified_stance_quotes > 0:
+        flags.append("unverified_stance_quote")
+        needs_review = True
+
+    # 3. Cross-field validation: quoted_actor stance must not masquerade as media stance
+    owner = str(cs.get("expression_owner") or "unclear").strip().lower()
+    if owner not in {"media", "quoted_actor", "unclear"}:
+        owner = "unclear"
+    cs["expression_owner"] = owner
+    cs.setdefault("target", "china_mainland")
+    stance_label = str(cs.get("stance_label") or "Unclassified")
+    if owner == "quoted_actor" and stance_label in {"Positive", "Neutral", "Negative"}:
+        flags.append("quoted_actor_stance_excluded_from_media")
+        needs_review = True
+    if stance_label in {"Positive", "Negative"} and not any(x.get("validated") for x in aligned_stance_ev):
+        flags.append("directional_stance_missing_verified_evidence")
+        needs_review = True
+    structured["china_stance"] = cs
+
+    # 4. Compute ArticleQualityContract
+    valid_spans = [s for s in spans if s.validation_status == "valid"]
+    if not text or len(text) < 120:
+        ext_q = "insufficient"
+        flags.append("short_or_missing_body")
+        needs_review = True
+    elif article.quality_status == "rss_stub":
+        ext_q = "stub"
+        flags.append("rss_stub_only")
+    elif article.quality_status in {"fetch_failed", "processing_failed"}:
+        ext_q = "failed"
+        flags.append("extraction_failed")
+        needs_review = True
+    else:
+        ext_q = "ok"
+
+    lang_q = "ok" if (article.language and article.language != "und") else "unknown"
+    if lang_q == "unknown":
+        flags.append("language_unknown")
+
+    if stance_label == "Unclassified":
+        cls_q = "unclassified"
+    elif (cs.get("stance_confidence") or 0.0) >= 0.7 and not unverified_stance_quotes:
+        cls_q = "high"
+    elif (cs.get("stance_confidence") or 0.0) >= 0.45:
+        cls_q = "medium"
+    else:
+        cls_q = "low"
+        needs_review = True
+
+    dims_present = sum(
+        [
+            1 if relevance.relevance_level not in {"uncertain"} else 0,
+            1 if (structured.get("topics_v1") or []) else 0,
+            1 if isinstance(structured.get("sentiment"), dict) and structured["sentiment"].get("label") else 0,
+            1 if stance_label in {"Positive", "Neutral", "Negative"} else 0,
+            1 if (structured.get("narratives") or structured.get("entities")) else 0,
+            1 if any(e.get("validated") for e in validated_evidence) else 0,
+        ]
+    )
+    completeness = round(dims_present / 6.0, 4)
+
+    quality = ArticleQualityContract(
+        completeness=completeness,
+        language_quality=lang_q,
+        extraction_quality=ext_q,
+        classification_quality=cls_q,
+        needs_review=needs_review,
+        quality_flags=sorted(set(flags)),
+    )
+
+    # 5. Build canonical V2.0 ArticleIntelligenceContract projection
+    raw_sent = structured.get("sentiment") if isinstance(structured.get("sentiment"), dict) else {}
+    sent_label_raw = str(raw_sent.get("label") or "").strip().lower()
+    sent_label = sent_label_raw if sent_label_raw in {"positive", "neutral", "negative", "mixed", "unknown"} else None
+
+    topics_models: list[ArticleTopicContract] = []
+    for t in structured.get("topics_structured") or []:
+        if isinstance(t, dict) and t.get("topic_id"):
+            topics_models.append(ArticleTopicContract.model_validate(t))
+    if not topics_models and structured.get("topics_v1"):
+        for idx, tid in enumerate(structured.get("topics_v1") or []):
+            topics_models.append(
+                ArticleTopicContract(
+                    topic_id=str(tid),
+                    relevance="primary" if idx == 0 else "secondary",
+                    evidence_refs=stance_ev_refs[:1],
+                )
+            )
+
+    nar_models = []
+    for n in structured.get("narratives") or []:
+        if isinstance(n, dict):
+            try:
+                nar_models.append(ArticleNarrativeContract.model_validate(n))
+            except Exception:
+                continue
+
+    ent_models = []
+    for idx, e in enumerate(structured.get("entities") or []):
+        if isinstance(e, dict):
+            ec = dict(e)
+            ec.setdefault("entity_id", str(ec.get("normalized_id") or f"ent_{idx}"))
+            ec.setdefault("canonical_name", str(ec.get("text") or ec["entity_id"]))
+            ec.setdefault("entity_type", str(ec.get("type") or "other"))
+            try:
+                ent_models.append(ArticleEntityContract.model_validate(ec))
+            except Exception:
+                continue
+
+    ev_cand_models = []
+    for c in structured.get("event_candidates") or []:
+        if isinstance(c, dict):
+            try:
+                ev_cand_models.append(ArticleEventCandidateContract.model_validate(c))
+            except Exception:
+                continue
+
+    ev_span_models = [EvidenceSpanRef.model_validate(e) for e in validated_evidence]
+
+    contract = ArticleIntelligenceContract(
+        article_id=article.id,
+        analysis_version=ARTICLE_INTELLIGENCE_VERSION,
+        relevance=ArticleRelevanceContract(
+            is_china_related=relevance.relevance_level in {"core", "substantial", "secondary", "incidental"}
+            if relevance.relevance_level != "uncertain"
+            else None,
+            china_relevance_level=relevance.relevance_level,
+            china_relevance_score=relevance.relevance_weight,
+            relevant_passages=[s.text_original[:400] for s in valid_spans[:5]],
+            relevance_reason=relevance.reasoning_summary or "",
+        ),
+        topics=topics_models,
+        sentiment=ArticleSentimentContract(
+            sentiment_label=sent_label,
+            sentiment_target=str(raw_sent.get("sentiment_target") or "china_mainland"),
+            evidence_refs=list(raw_sent.get("evidence_refs") or []),
+            confidence=raw_sent.get("confidence", 0.0),
+            reasoning=str(raw_sent.get("reasoning") or ""),
+        ),
+        stance=[
+            ArticleStanceContract(
+                target=str(cs.get("target") or "china_mainland"),
+                stance_label=stance_label if stance_label in {"Positive", "Neutral", "Negative", "Unclassified"} else "Unclassified",
+                expression_owner=owner,
+                evidence_refs=stance_ev_refs,
+                confidence=cs.get("stance_confidence", 0.0),
+                reasoning=str(cs.get("reasoning") or ""),
+            )
+        ],
+        narratives=nar_models,
+        entities=ent_models,
+        events=ev_cand_models,
+        evidence=ev_span_models,
+        quality=quality,
+        analysis_metadata=ArticleAnalysisMetadataContract(
+            model_name=model_name,
+            model_version=model_name,
+            prompt_version=prompt_version,
+            analysis_version=ARTICLE_INTELLIGENCE_VERSION,
+            schema_version=str(structured.get("schema_version") or SCHEMA_VERSION),
+            taxonomy_version=str(structured.get("taxonomy_version") or TAXONOMY_VERSION),
+            article_version_id=article_version_id,
+            processed_at=datetime.now(timezone.utc).isoformat(),
+            token_usage=int(token_usage or 0),
+            processing_status=str(structured.get("analysis_status") or "completed"),
+        ),
+    )
+
+    structured["article_intelligence_version"] = ARTICLE_INTELLIGENCE_VERSION
+    structured["evidence"] = validated_evidence
+    structured["quality"] = quality.model_dump()
+    structured["article_intelligence"] = contract.model_dump()
+    return structured
+
+
 def _overall_confidence(confidence: Any) -> float | None:
     """DeepSeek sometimes returns confidence as a bare float instead of {overall: ...}."""
     if confidence is None:
@@ -264,6 +590,7 @@ def _select_articles_for_analysis(
     source_id: str | None,
     article_id: str | None,
     reanalyze: bool,
+    reanalyze_legacy: bool = False,
     per_country: int | None,
     articles_remaining: int,
 ) -> tuple[list[Article], dict[str, int]]:
@@ -276,13 +603,33 @@ def _select_articles_for_analysis(
         art = session.get(Article, article_id)
         return ([art] if art else []), {}
 
+    legacy_article_ids: set[str] | None = None
+    if reanalyze_legacy and not reanalyze:
+        # Select articles whose latest ArticleAnalysis is NOT article_analysis_v1.0/v1.1
+        all_ana = session.scalars(
+            select(ArticleAnalysis).order_by(ArticleAnalysis.created_at.desc())
+        ).all()
+        latest_sv: dict[str, str | None] = {}
+        for row in all_ana:
+            if row.article_id not in latest_sv:
+                latest_sv[row.article_id] = row.schema_version
+        legacy_article_ids = {
+            aid
+            for aid, sv in latest_sv.items()
+            if sv not in {"article_analysis_v1.0", "article_analysis_v1.1"}
+        }
+        if not legacy_article_ids:
+            return [], {}
+
     q = select(Article).where(
         Article.processing_status == "done",
         Article.exclude_from_metrics.is_(False),
     )
     if source_id:
         q = q.where(Article.source_id == source_id)
-    if not reanalyze:
+    if legacy_article_ids is not None:
+        q = q.where(Article.id.in_(list(legacy_article_ids)))
+    elif not reanalyze:
         q = q.where(Article.analysis_status.in_(["pending", "failed"]))
     q = q.order_by(Article.first_seen_at.asc())
 
@@ -311,7 +658,9 @@ def _select_articles_for_analysis(
             )
             if source_id:
                 cq = cq.where(Article.source_id == source_id)
-            if not reanalyze:
+            if legacy_article_ids is not None:
+                cq = cq.where(Article.id.in_(list(legacy_article_ids)))
+            elif not reanalyze:
                 cq = cq.where(Article.analysis_status.in_(["pending", "failed"]))
             cq = cq.order_by(Article.first_seen_at.asc()).limit(take)
             rows = list(session.scalars(cq).all())
@@ -350,6 +699,7 @@ def run_analysis(
     article_id: str | None = None,
     provider: str | None = None,
     reanalyze: bool = False,
+    reanalyze_legacy: bool = False,
     per_country: int | None = None,
 ) -> AnalysisRun:
     settings = get_settings()
@@ -421,6 +771,7 @@ def run_analysis(
         source_id=source_id,
         article_id=article_id,
         reanalyze=reanalyze,
+        reanalyze_legacy=reanalyze_legacy,
         per_country=per_country,
         articles_remaining=remaining if not article_id else 10**9,
     )

@@ -16,12 +16,19 @@ from gni.analysis.l3_spans import ChinaSpan
 from gni.analysis.provider import BaseLLMProvider
 from gni.analysis.relevance import RELEVANCE_WEIGHT_VERSION, RelevanceAssessment
 from gni.core.config import Settings, get_settings
+from gni.core.contracts import (
+    ARTICLE_INTELLIGENCE_VERSION,
+    ArticleEntityContract,
+    ArticleEventCandidateContract,
+    ArticleNarrativeContract,
+)
 from gni.metrics.taxonomy_v1 import boards_for_topics, normalize_topic_ids, taxonomy_prompt_block
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "deepseek_analyze_v1.0"
+PROMPT_VERSION = "deepseek_analyze_v1.1"
 _VALID_STANCE_LABELS = {"Positive", "Neutral", "Negative", "Unclassified"}
+_VALID_OWNERS = {"media", "quoted_actor", "unclear"}
 
 
 @dataclass
@@ -173,19 +180,28 @@ class DeepSeekLLMProvider(BaseLLMProvider):
 
     def analyze(self, article: dict[str, Any], *, schema: dict[str, Any], prompt_version: str) -> dict[str, Any]:
         prompt = (
-            f"schema_version={SCHEMA_VERSION} taxonomy={TAXONOMY_VERSION} prompt_version={prompt_version}\n"
-            f"Analyze China-related content and return ONLY valid JSON.\n"
-            f"Rules (GNI Statistical Methodology V1.0):\n"
+            f"schema_version={SCHEMA_VERSION} intel_version={ARTICLE_INTELLIGENCE_VERSION} "
+            f"taxonomy={TAXONOMY_VERSION} prompt_version={prompt_version}\n"
+            f"Analyze ONLY China-related content and return ONLY valid JSON.\n"
+            f"Rules (GNI Statistical Methodology V1.0 & Intelligence V2.0):\n"
             f"1. Multi-label topics_v1 MUST be based on article body/spans (never title-only). "
             f"An article may match 0, 1, or multiple topics across boards.\n"
-            f"2. Evaluate china_stance toward Mainland China (NOT general emotion, NOT quoted interviewee alone). "
-            f"stance_label MUST be one of: Positive, Neutral, Negative, Unclassified.\n"
-            f"3. If mixed positive and negative without a clear dominant stance, or insufficient evidence, "
+            f"2. Evaluate china_stance toward Mainland China (target='china_mainland'). "
+            f"Keep Sentiment and Stance independent. MUST set expression_owner to one of: "
+            f"'media' (outlet's own framing/editorial voice), 'quoted_actor' (primarily quoted interviewee/official), "
+            f"or 'unclear'. Never treat a quoted speaker's view as the media's own stance.\n"
+            f"3. stance_label MUST be one of: Positive, Neutral, Negative, Unclassified. "
+            f"If mixed without clear dominance, purely quoted without editorial stance, or insufficient evidence, "
             f"set stance_label='Unclassified' and analysis_status='unclassified'.\n"
-            f"4. Include stance_evidence as a list of objects with 'quote' copied verbatim from the text.\n"
-            f"Required JSON keys: topics_v1 (list of topic IDs), china_stance "
-            f"({{stance_label, stance_confidence, stance_evidence, analysis_status}}), "
-            f"sentiment, stances, framing, summary.\n"
+            f"4. Include stance_evidence as a list of objects with 'quote' copied VERBATIM from the provided text.\n"
+            f"5. Extract narratives[] (frame, claim, actor, target, attribution in [mention,quote,support,refute,unclear], "
+            f"tone, quote, confidence), key entities[] (entity_id, canonical_name, entity_type, mentions, roles), "
+            f"and event_candidates[] (event_relation in [new_event_candidate,existing_event_update,background_reference,unrelated], "
+            f"actor, action, object, event_time=null unless explicitly stated in text, location, summary, confidence). "
+            f"NEVER fill unknown event_time with published_at.\n"
+            f"Required JSON keys: topics_v1, china_stance ({{target, stance_label, expression_owner, stance_confidence, "
+            f"stance_evidence, reasoning, analysis_status}}), sentiment ({{label, sentiment_target, confidence, reasoning}}), "
+            f"narratives, entities, event_candidates, stances, framing, summary.\n"
             f"{taxonomy_prompt_block()}\n"
             f"Title: {article.get('title')}\n"
             f"Language: {article.get('language')}\n"
@@ -197,6 +213,7 @@ class DeepSeekLLMProvider(BaseLLMProvider):
         if parsed is None:
             raise ValueError("DeepSeek response was not valid JSON")
         parsed["schema_version"] = SCHEMA_VERSION
+        parsed["article_intelligence_version"] = ARTICLE_INTELLIGENCE_VERSION
         parsed["taxonomy_version"] = TAXONOMY_VERSION
         parsed.setdefault("relevance_weight_version", RELEVANCE_WEIGHT_VERSION)
 
@@ -208,23 +225,82 @@ class DeepSeekLLMProvider(BaseLLMProvider):
         parsed["topics_v1"] = valid_topics
         parsed["boards_v1"] = boards_for_topics(valid_topics)
 
-        # Validate V1.0 china_stance
+        # Validate V1.0/V2.0 china_stance (target + expression_owner)
         raw_cs = parsed.get("china_stance") if isinstance(parsed.get("china_stance"), dict) else {}
         raw_label = str(raw_cs.get("stance_label") or "").strip()
         label = raw_label if raw_label in _VALID_STANCE_LABELS else "Unclassified"
+        raw_owner = str(raw_cs.get("expression_owner") or "unclear").strip().lower()
+        if raw_owner in {"outlet", "editorial", "author"}:
+            owner = "media"
+        elif raw_owner in {"quoted", "quote", "interviewee", "third_party", "cited"}:
+            owner = "quoted_actor"
+        else:
+            owner = raw_owner if raw_owner in _VALID_OWNERS else "unclear"
         ev = raw_cs.get("stance_evidence") if isinstance(raw_cs.get("stance_evidence"), list) else []
         try:
             conf = float(raw_cs.get("stance_confidence", 0.0))
         except (TypeError, ValueError):
             conf = 0.0
         parsed["china_stance"] = {
+            "target": str(raw_cs.get("target") or "china_mainland"),
             "stance_label": label,
+            "expression_owner": owner,
             "stance_confidence": max(0.0, min(1.0, conf)),
             "stance_evidence": ev,
+            "reasoning": str(raw_cs.get("reasoning") or "").strip(),
             "analysis_status": "classified" if label in {"Positive", "Neutral", "Negative"} else "unclassified",
             "model_version": self.settings.llm_model,
             "prompt_version": prompt_version,
         }
+
+        # Normalize narratives / entities / event_candidates via V2.0 contracts
+        raw_nars = parsed.get("narratives") if isinstance(parsed.get("narratives"), list) else []
+        norm_nars: list[dict[str, Any]] = []
+        for idx, item in enumerate(raw_nars[:8]):
+            if not isinstance(item, dict) or not (item.get("claim") or item.get("frame")):
+                continue
+            item_copy = dict(item)
+            item_copy.setdefault("narrative_id", f"nar_{idx}")
+            item_copy.setdefault("frame", "unspecified")
+            item_copy.setdefault("claim", item_copy["frame"])
+            try:
+                norm_nars.append(ArticleNarrativeContract.model_validate(item_copy).model_dump())
+            except Exception:
+                continue
+        parsed["narratives"] = norm_nars
+
+        raw_ents = parsed.get("entities") if isinstance(parsed.get("entities"), list) else []
+        norm_ents: list[dict[str, Any]] = []
+        for idx, item in enumerate(raw_ents[:15]):
+            if not isinstance(item, dict):
+                continue
+            cname = str(item.get("canonical_name") or item.get("text") or "").strip()
+            if not cname:
+                continue
+            item_copy = dict(item)
+            item_copy.setdefault("entity_id", str(item.get("normalized_id") or f"ent_{idx}"))
+            item_copy["canonical_name"] = cname
+            item_copy.setdefault("entity_type", item.get("type") or "other")
+            try:
+                ed = ArticleEntityContract.model_validate(item_copy).model_dump()
+                ed["text"] = ed["canonical_name"]
+                ed["type"] = ed["entity_type"]
+                norm_ents.append(ed)
+            except Exception:
+                continue
+        if norm_ents:
+            parsed["entities"] = norm_ents
+
+        raw_evs = parsed.get("event_candidates") if isinstance(parsed.get("event_candidates"), list) else []
+        norm_evs: list[dict[str, Any]] = []
+        for item in raw_evs[:5]:
+            if not isinstance(item, dict):
+                continue
+            try:
+                norm_evs.append(ArticleEventCandidateContract.model_validate(item).model_dump())
+            except Exception:
+                continue
+        parsed["event_candidates"] = norm_evs
         return parsed
 
 
@@ -298,17 +374,21 @@ def analyze_with_fallback(
             )
             for key in (
                 "schema_version",
+                "article_intelligence_version",
                 "taxonomy_version",
                 "language",
                 "china_relevance",
                 "topics",
                 "topics_v1",
                 "boards_v1",
+                "topics_structured",
                 "china_stance",
                 "sentiment",
                 "stances",
                 "framing",
+                "narratives",
                 "entities",
+                "event_candidates",
                 "evidence",
                 "field_status",
                 "confidence",

@@ -6,6 +6,7 @@ METRIC_DEFINITION_VERSION = "metrics_v0.4"
 METHODOLOGY_VERSION = "methodology_v1.0"
 TAXONOMY_V1_VERSION = "taxonomy_v1.0"
 V1_ANALYSIS_VERSION = "article_analysis_v1.0"
+V1_COMPATIBLE_ANALYSIS_VERSIONS = frozenset({"article_analysis_v1.0", "article_analysis_v1.1"})
 STANCE_LABELS_V1 = ("Positive", "Neutral", "Negative")
 UNCLASSIFIED_LABEL = "Unclassified"
 RELEVANCE_WEIGHT_VERSION = "provisional_v0.3"

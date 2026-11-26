@@ -7,6 +7,7 @@ from typing import Any
 
 from gni.analysis.l3_spans import ChinaSpan
 from gni.analysis.relevance import RELEVANCE_WEIGHT_VERSION, RelevanceAssessment
+from gni.core.contracts import ARTICLE_INTELLIGENCE_VERSION
 from gni.metrics.taxonomy_v1 import (
     TAXONOMY_V1_VERSION,
     boards_for_topics,
@@ -17,8 +18,23 @@ from gni.processing.title_l1 import _fold
 
 TAXONOMY_VERSION = TAXONOMY_V1_VERSION
 SCHEMA_VERSION = "article_analysis_v1.0"
-PROMPT_VERSION = "heuristic_v1.0"
+PROMPT_VERSION = "heuristic_v1.1"
 MODEL_NAME = "heuristic-rules"
+
+_QUOTE_MARKERS = (
+    "said ",
+    "according to",
+    "told reporters",
+    "stated that",
+    "spokesperson",
+    "in a statement",
+    "\" ",
+    "“",
+    "表示",
+    "称",
+    "指出",
+    "回应称",
+)
 
 TOPIC_KEYWORDS: list[tuple[str, list[str]]] = [
     # Prefer multi-token / specific terms; avoid bare "ai"/"tech" false positives.
@@ -114,6 +130,18 @@ def _pick_topics_v1(body_text: str) -> tuple[list[str], list[str]]:
     return topic_ids, boards_for_topics(topic_ids)
 
 
+def _detect_expression_owner(text: str) -> str:
+    """Heuristic check whether stance-bearing text is predominantly quoted third-party speech."""
+    if not (text or "").strip():
+        return "unclear"
+    low = text.casefold()
+    quote_hits = sum(1 for m in _QUOTE_MARKERS if m in low or m in text)
+    # Only flag quoted_actor when multiple explicit attribution cues appear and quotes wrap text
+    if quote_hits >= 2 and ('"' in text or "“" in text):
+        return "quoted_actor"
+    return "media"
+
+
 def _china_stance_v1(
     body_text: str,
     valid_spans: list[ChinaSpan],
@@ -125,9 +153,12 @@ def _china_stance_v1(
     """Article-level China-related stance (Positive/Neutral/Negative or Unclassified)."""
     if level in {"none", "uncertain"} or not valid_spans or not (body_text or "").strip():
         return {
+            "target": "china_mainland",
             "stance_label": "Unclassified",
+            "expression_owner": "unclear",
             "stance_confidence": 0.0,
             "stance_evidence": [],
+            "reasoning": "Insufficient China-related body spans to classify stance.",
             "analysis_status": "unclassified",
             "model_version": model_version,
             "prompt_version": prompt_version,
@@ -135,22 +166,27 @@ def _china_stance_v1(
 
     neg = _count_hits(body_text, NEG_WORDS)
     pos = _count_hits(body_text, POS_WORDS)
+    owner = _detect_expression_owner(body_text)
     evidence = [
         {
+            "evidence_id": f"ev_span_{i}",
             "quote": s.text_original[:500],
             "start_offset": s.char_start if s.char_start >= 0 else None,
             "end_offset": s.char_end if s.char_end >= 0 else None,
             "paragraph_index": s.paragraph_index,
         }
-        for s in valid_spans[:3]
+        for i, s in enumerate(valid_spans[:3])
     ]
 
     # Mixed stance without clear dominant direction -> Unclassified (V1.0 §4.3)
     if neg > 0 and pos > 0 and abs(neg - pos) <= 1:
         return {
+            "target": "china_mainland",
             "stance_label": "Unclassified",
+            "expression_owner": owner,
             "stance_confidence": 0.35,
             "stance_evidence": evidence,
+            "reasoning": f"Mixed positive ({pos}) and negative ({neg}) cues without clear dominance.",
             "analysis_status": "unclassified",
             "model_version": model_version,
             "prompt_version": prompt_version,
@@ -158,17 +194,23 @@ def _china_stance_v1(
     if neg > pos:
         label = "Negative"
         conf = min(0.85, 0.50 + 0.08 * (neg - pos))
+        reason = f"Negative China-related lexical cues ({neg}) outweigh positive ({pos})."
     elif pos > neg:
         label = "Positive"
         conf = min(0.85, 0.50 + 0.08 * (pos - neg))
+        reason = f"Positive China-related lexical cues ({pos}) outweigh negative ({neg})."
     else:
         label = "Neutral"
         conf = 0.55
+        reason = "Descriptive China-related spans without clear directional polarity."
 
     return {
+        "target": "china_mainland",
         "stance_label": label,
+        "expression_owner": owner,
         "stance_confidence": round(conf, 3),
         "stance_evidence": evidence,
+        "reasoning": reason,
         "analysis_status": "classified",
         "model_version": model_version,
         "prompt_version": prompt_version,
@@ -251,9 +293,9 @@ def _entities_from_matches(matched: list[dict[str, Any]]) -> list[dict[str, Any]
     seen: set[str] = set()
     type_map = {
         "country": "country",
-        "government": "organization",
+        "government": "government_agency",
         "party": "organization",
-        "person": "person",
+        "person": "political_figure",
         "company": "company",
         "geography": "location",
         "policy": "policy",
@@ -266,15 +308,99 @@ def _entities_from_matches(matched: list[dict[str, Any]]) -> list[dict[str, Any]
             continue
         seen.add(eid)
         et = str(m.get("entity_type") or "other")
+        mapped_type = type_map.get(et, "other")
+        cname = str(m.get("canonical_name") or eid)
+        aliases = [str(a) for a in (m.get("aliases_hit") or []) if a]
         out.append(
             {
-                "text": m.get("canonical_name") or eid,
-                "type": type_map.get(et, "other"),
+                "entity_id": eid,
+                "canonical_name": cname,
+                "entity_type": mapped_type,
+                "mentions": aliases or [cname],
+                "roles": [str(m.get("inclusion_scope") or "mentioned")],
+                "evidence_refs": [],
+                # Backward-compatible keys
+                "text": cname,
+                "type": mapped_type,
                 "normalized_id": m.get("entity_id"),
                 "confidence": 0.75,
             }
         )
     return out
+
+
+def _topics_structured_from_v1(topics_v1: list[str], evidence_ids: list[str]) -> list[dict[str, Any]]:
+    tax = load_taxonomy_v1()
+    tmap = {t.id: t for t in tax.topics}
+    out: list[dict[str, Any]] = []
+    for idx, tid in enumerate(topics_v1):
+        t = tmap.get(tid)
+        out.append(
+            {
+                "topic_id": tid,
+                "topic_name": t.name_zh if t else tid,
+                "sector_id": t.board_id if t else "",
+                "relevance": "primary" if idx == 0 else "secondary",
+                "evidence_refs": evidence_ids[:2],
+            }
+        )
+    return out
+
+
+def _narratives_heuristic(
+    frame_primary: str | None,
+    valid_spans: list[ChinaSpan],
+    sent_label: str | None,
+    owner: str,
+) -> list[dict[str, Any]]:
+    if not frame_primary or frame_primary == "other_unknown" or not valid_spans:
+        return []
+    span0 = valid_spans[0]
+    return [
+        {
+            "narrative_id": f"nar_heur_{frame_primary}",
+            "frame": frame_primary,
+            "claim": span0.text_original[:240],
+            "actor": "quoted_source" if owner == "quoted_actor" else "media_outlet",
+            "target": "china_mainland",
+            "attribution": "quote" if owner == "quoted_actor" else "mention",
+            "tone": sent_label if sent_label in {"positive", "neutral", "negative", "mixed"} else "unclear",
+            "evidence_refs": ["ev_span_0"],
+            "confidence": 0.45,
+        }
+    ]
+
+
+def _event_candidates_heuristic(
+    title: str | None,
+    valid_spans: list[ChinaSpan],
+) -> list[dict[str, Any]]:
+    t = (title or "").strip()
+    if not t or not valid_spans:
+        return []
+    m = re.search(
+        r"(?P<actor>[A-Z][\w\.\-]+(?:\s+[A-Z][\w\.\-]+){0,2})\s+"
+        r"(?P<action>announces?|unveils?|signs?|launches?|approves?|sanctions?|warns?|meets?|visits?|imposes?)\s+"
+        r"(?P<object>.{3,80})",
+        t,
+        re.I,
+    )
+    if not m:
+        return []
+    return [
+        {
+            "event_id": None,
+            "event_relation": "new_event_candidate",
+            "actor": m.group("actor").strip(" .,;:"),
+            "action": m.group("action").strip().lower(),
+            "object": m.group("object").strip(" .,;:"),
+            "event_time": None,  # Never substitute published_at
+            "location": None,
+            "summary": t[:240],
+            "event_evidence_refs": ["ev_span_0"],
+            "confidence": 0.5,
+        }
+    ]
 
 
 def build_structured_analysis(
@@ -381,45 +507,75 @@ def build_structured_analysis(
         }
         evidence = []
         for i, s in enumerate(valid_spans[:5]):
+            ev_id = f"ev_span_{i}"
             evidence.append(
                 {
+                    "evidence_id": ev_id,
                     "field_path": "china_relevance",
                     "quote": s.text_original[:500],
+                    "text_span": s.text_original[:500],
                     "start_offset": s.char_start if s.char_start >= 0 else None,
                     "end_offset": s.char_end if s.char_end >= 0 else None,
                     "paragraph_index": s.paragraph_index,
                     "evidence_type": "relevance",
+                    "supports_claim": "china_relevance",
+                    "analysis_task": "article_intelligence",
+                    "validated": True,
                     "confidence": s.extraction_confidence,
                 }
             )
             if i == 0 and sent.get("label"):
                 evidence.append(
                     {
+                        "evidence_id": "ev_sentiment_0",
                         "field_path": "sentiment.label",
                         "quote": s.text_original[:500],
+                        "text_span": s.text_original[:500],
                         "start_offset": s.char_start if s.char_start >= 0 else None,
                         "end_offset": s.char_end if s.char_end >= 0 else None,
                         "paragraph_index": s.paragraph_index,
                         "evidence_type": "sentiment",
+                        "supports_claim": f"sentiment={sent.get('label')}",
+                        "analysis_task": "article_intelligence",
+                        "validated": True,
                         "confidence": 0.45,
                     }
                 )
                 evidence.append(
                     {
-                        "field_path": "stances[0].stance",
+                        "evidence_id": "ev_stance_0",
+                        "field_path": "china_stance.stance_label",
                         "quote": s.text_original[:500],
+                        "text_span": s.text_original[:500],
                         "start_offset": s.char_start if s.char_start >= 0 else None,
                         "end_offset": s.char_end if s.char_end >= 0 else None,
                         "paragraph_index": s.paragraph_index,
                         "evidence_type": "stance",
-                        "confidence": 0.4,
+                        "supports_claim": f"stance={china_stance.get('stance_label')}",
+                        "analysis_task": "article_intelligence",
+                        "validated": True,
+                        "confidence": china_stance.get("stance_confidence") or 0.4,
                     }
                 )
 
     entities = _entities_from_matches(l2_matched_entities)
+    ev_ids = [f"ev_span_{i}" for i in range(len(valid_spans[:5]))]
+    topics_structured = _topics_structured_from_v1(topics_v1, ev_ids)
+    narratives = _narratives_heuristic(
+        frame_primary,
+        valid_spans,
+        sent.get("label") if isinstance(sent, dict) else None,
+        str(china_stance.get("expression_owner") or "unclear"),
+    )
+    event_candidates = _event_candidates_heuristic(title, valid_spans)
+    sent.setdefault("sentiment_target", "china_mainland")
+    sent.setdefault("confidence", 0.5 if sent.get("label") else 0.0)
+    sent.setdefault("reasoning", "Lexical polarity over valid China spans.")
+    sent.setdefault("evidence_refs", ["ev_sentiment_0"] if valid_spans and sent.get("label") else [])
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "article_intelligence_version": ARTICLE_INTELLIGENCE_VERSION,
         "taxonomy_version": TAXONOMY_VERSION,
         "relevance_weight_version": RELEVANCE_WEIGHT_VERSION,
         "language": language or "und",
@@ -443,6 +599,7 @@ def build_structured_analysis(
         },
         "topics_v1": topics_v1,
         "boards_v1": boards_v1,
+        "topics_structured": topics_structured,
         "china_stance": china_stance,
         "sentiment": sent,
         "stances": stances,
@@ -451,8 +608,10 @@ def build_structured_analysis(
             "secondary": frame_secondary,
             "status": frame_status,
         },
+        "narratives": narratives,
         "entities": entities,
-        "claims": [],
+        "event_candidates": event_candidates,
+        "claims": [n["claim"] for n in narratives],
         "evidence": evidence,
         "summary": relevance.reasoning_summary,
         "analysis_status": analysis_status,

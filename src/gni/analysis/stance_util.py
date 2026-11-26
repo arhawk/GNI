@@ -8,26 +8,49 @@ from typing import Any
 from gni.metrics.taxonomy_v1 import boards_for_topics, normalize_topic_ids
 
 V1_ANALYSIS_SCHEMA_VERSION = "article_analysis_v1.0"
+V1_COMPATIBLE_SCHEMA_VERSIONS = frozenset({"article_analysis_v1.0", "article_analysis_v1.1"})
 VALID_V1_STANCES = frozenset({"Positive", "Neutral", "Negative"})
 UNCLASSIFIED_STANCE = "Unclassified"
+
+
+def extract_v1_expression_owner(
+    structured: dict[str, Any] | None,
+    schema_version: str | None = None,
+) -> str:
+    """Return 'media' | 'quoted_actor' | 'unclear' for V1.0+ china_stance."""
+    if not isinstance(structured, dict):
+        return "unclear"
+    sv = schema_version or structured.get("schema_version")
+    if sv not in V1_COMPATIBLE_SCHEMA_VERSIONS:
+        return "unclear"
+    cs = structured.get("china_stance")
+    if not isinstance(cs, dict):
+        return "unclear"
+    owner = str(cs.get("expression_owner") or "unclear").strip().lower()
+    if owner in {"media", "quoted_actor", "unclear"}:
+        return owner
+    return "unclear"
 
 
 def extract_v1_china_stance(
     structured: dict[str, Any] | None,
     schema_version: str | None = None,
 ) -> str:
-    """Strict V1.0 China-related stance reader.
+    """Strict V1.0+ China-related media stance reader.
 
-    Legacy (non-article_analysis_v1.0) analyses are NEVER coerced into Positive/Neutral/Negative
-    and always return 'Unclassified'.
+    - Legacy (non-v1.0/v1.1) analyses are NEVER coerced into Positive/Neutral/Negative.
+    - Purely quoted_actor expressions are NEVER counted as the media outlet's own stance.
     """
     if not isinstance(structured, dict):
         return UNCLASSIFIED_STANCE
     sv = schema_version or structured.get("schema_version")
-    if sv != V1_ANALYSIS_SCHEMA_VERSION:
+    if sv not in V1_COMPATIBLE_SCHEMA_VERSIONS:
         return UNCLASSIFIED_STANCE
     cs = structured.get("china_stance")
     if not isinstance(cs, dict):
+        return UNCLASSIFIED_STANCE
+    owner = str(cs.get("expression_owner") or "").strip().lower()
+    if owner == "quoted_actor":
         return UNCLASSIFIED_STANCE
     label = str(cs.get("stance_label") or "").strip()
     if label in VALID_V1_STANCES:
@@ -42,7 +65,7 @@ def extract_v1_stance_evidence(
     if not isinstance(structured, dict):
         return []
     sv = schema_version or structured.get("schema_version")
-    if sv != V1_ANALYSIS_SCHEMA_VERSION:
+    if sv not in V1_COMPATIBLE_SCHEMA_VERSIONS:
         return []
     cs = structured.get("china_stance")
     if not isinstance(cs, dict):
@@ -55,11 +78,11 @@ def extract_v1_topics(
     structured: dict[str, Any] | None,
     schema_version: str | None = None,
 ) -> list[str]:
-    """Strict V1.0 multi-label topics reader (only valid 15-topic IDs from V1.0 analyses)."""
+    """Strict V1.0+ multi-label topics reader (only valid 15-topic IDs)."""
     if not isinstance(structured, dict):
         return []
     sv = schema_version or structured.get("schema_version")
-    if sv != V1_ANALYSIS_SCHEMA_VERSION:
+    if sv not in V1_COMPATIBLE_SCHEMA_VERSIONS:
         return []
     raw = structured.get("topics_v1")
     if not isinstance(raw, list):

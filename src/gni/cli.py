@@ -404,6 +404,7 @@ def cmd_analyze_run(args: argparse.Namespace) -> int:
             article_id=args.article,
             provider=provider,
             reanalyze=args.reanalyze,
+            reanalyze_legacy=getattr(args, "reanalyze_legacy", False),
             per_country=per_country,
         )
         payload = {
@@ -553,6 +554,11 @@ def main(argv: list[str] | None = None) -> None:
         "--reanalyze",
         action="store_true",
         help="Include already analyzed articles",
+    )
+    p_arun.add_argument(
+        "--reanalyze-legacy",
+        action="store_true",
+        help="Re-analyze only articles whose latest analysis is pre-V1.0 legacy schema",
     )
     p_arun.add_argument(
         "--once",

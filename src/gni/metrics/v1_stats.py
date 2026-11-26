@@ -23,6 +23,7 @@ from gni.metrics.definitions import (
     TAXONOMY_V1_VERSION,
     UNCLASSIFIED_LABEL,
     V1_ANALYSIS_VERSION,
+    V1_COMPATIBLE_ANALYSIS_VERSIONS,
 )
 from gni.metrics.taxonomy_v1 import boards_for_topics, load_taxonomy_v1, normalize_topic_ids
 
@@ -189,8 +190,11 @@ def deduplicate_v1_articles(rows: Iterable[V1ArticleInput]) -> list[V1ArticleInp
 
 
 def _effective_stance(row: V1ArticleInput) -> str:
-    """Strict V1.0 stance: non-V1.0 schema or invalid label -> Unclassified."""
-    if row.analysis_schema_version is not None and row.analysis_schema_version != V1_ANALYSIS_VERSION:
+    """Strict V1.0+ stance: non-V1.0/v1.1 schema or invalid label -> Unclassified."""
+    if (
+        row.analysis_schema_version is not None
+        and row.analysis_schema_version not in V1_COMPATIBLE_ANALYSIS_VERSIONS
+    ):
         return UNCLASSIFIED_LABEL
     if row.stance_label in _VALID_STANCES:
         return row.stance_label
@@ -198,7 +202,10 @@ def _effective_stance(row: V1ArticleInput) -> str:
 
 
 def _effective_topics(row: V1ArticleInput) -> list[str]:
-    if row.analysis_schema_version is not None and row.analysis_schema_version != V1_ANALYSIS_VERSION:
+    if (
+        row.analysis_schema_version is not None
+        and row.analysis_schema_version not in V1_COMPATIBLE_ANALYSIS_VERSIONS
+    ):
         return []
     return normalize_topic_ids(row.topics_v1)
 

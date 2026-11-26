@@ -13,6 +13,8 @@ def _norm_classification(value: Any) -> str:
         return "Fact"
     if raw in {"hypothesis", "hypotheses", "假设", "待验证"}:
         return "Hypothesis"
+    if raw in {"outlook", "展望", "条件性展望"}:
+        return "Outlook"
     return "Inference"
 
 
@@ -95,8 +97,10 @@ class Finding(BaseModel):
 
     title: str
     conclusion: str
-    classification: Literal["Fact", "Inference", "Hypothesis"] = "Inference"
+    classification: Literal["Fact", "Inference", "Hypothesis", "Outlook"] = "Inference"
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    supporting_metrics: list[str] = Field(default_factory=list)
+    counter_evidence: list[EvidenceRef] = Field(default_factory=list)
     reasoning: str = ""
     confidence: Literal["high", "medium", "low"] = "medium"
     limitations: list[str] = Field(default_factory=list)
@@ -113,7 +117,7 @@ class Finding(BaseModel):
     def _v_conf(cls, v: Any) -> str:
         return _norm_confidence(v)
 
-    @field_validator("limitations", "validation_notes", mode="before")
+    @field_validator("limitations", "validation_notes", "supporting_metrics", mode="before")
     @classmethod
     def _v_str_list(cls, v: Any) -> list[str]:
         return _ensure_str_list(v)
@@ -251,11 +255,15 @@ class OutlookSignal(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     signal: str
+    observation_object: str = ""
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    trigger_metrics: list[str] = Field(default_factory=list)
     reasoning: str = ""
     confidence: Literal["high", "medium", "low"] = "medium"
     what_to_monitor: list[str] = Field(default_factory=list)
     potential_trigger: str = ""
+    alternative_explanation: str = ""
+    alternative_scenario: str = ""
     uncertainty: str = ""
     needs_review: bool = False
 
@@ -264,7 +272,7 @@ class OutlookSignal(BaseModel):
     def _v_conf(cls, v: Any) -> str:
         return _norm_confidence(v)
 
-    @field_validator("what_to_monitor", mode="before")
+    @field_validator("what_to_monitor", "trigger_metrics", mode="before")
     @classmethod
     def _v_mon(cls, v: Any) -> list[str]:
         return _ensure_str_list(v)
