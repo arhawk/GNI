@@ -94,7 +94,7 @@ def test_us_sources_seed_pilot_hygiene():
     active_us = [s for s in us_sources if s.get("active_status") == "active"]
 
     # Pilot active US feeds, each bound to a registered organization
-    assert 5 <= len(active_us) <= 10
+    assert 5 <= len(active_us) <= 20
     for s in us_sources:
         assert s.get("organization_id") in orgs
         assert s.get("source_type") in {

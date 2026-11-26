@@ -100,6 +100,66 @@ organizations:
   organization_type: commercial_media
   ownership_type: private
   government_control_level: none
+- id: org_us_whitehouse
+  country_id: US
+  name: The White House
+  organization_type: government_department
+  ownership_type: government
+  government_control_level: high
+- id: org_us_axios
+  country_id: US
+  name: Axios Media (Cox Enterprises)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_wsj
+  country_id: US
+  name: Dow Jones / The Wall Street Journal
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_the_verge
+  country_id: US
+  name: The Verge (Vox Media)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_mit_tech_review
+  country_id: US
+  name: MIT Technology Review
+  organization_type: commercial_media
+  ownership_type: non_profit
+  government_control_level: none
+- id: org_us_wired
+  country_id: US
+  name: Wired (Conde Nast)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_the_hindu
+  country_id: IN
+  name: The Hindu Group
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_indian_express
+  country_id: IN
+  name: The Indian Express Group
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_ndtv
+  country_id: IN
+  name: NDTV
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_au_guardian
+  country_id: AU
+  name: Guardian Australia (Scott Trust)
+  organization_type: commercial_media
+  ownership_type: non_profit
+  government_control_level: none
 - id: org_dw
   country_id: DE
   name: Deutsche Welle
@@ -1187,3 +1247,319 @@ sources:
   verification_status: verified
   feed_or_api_url: https://rss.dw.com/rdf/rss-en-world
   notes: Verified World desk; panel uses de_dw_english as 2nd DE slot; kept as backup.
+- source_id: us_whitehouse_briefings
+  name: White House — Briefings & Statements (RSS)
+  country_id: US
+  organization_id: org_us_whitehouse
+  canonical_url: https://www.whitehouse.gov/briefings-statements/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.whitehouse.gov/copyright/
+  compliance_status: allowed_internal
+  evidence_url: https://www.whitehouse.gov/briefings-statements/
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GOVERNMENT_RELEASES
+  feed_or_api_url: https://www.whitehouse.gov/briefings-statements/feed/
+  config:
+    user_agent: Mozilla/5.0 (compatible; GNI-ResearchBot/0.1; +internal-research)
+  notes: >
+    Active US gov_comms (2026-11-26): HTTP 200, n=30, sample articles HTTP 200.
+- source_id: us_whitehouse_actions
+  name: White House — Presidential Actions (RSS)
+  country_id: US
+  organization_id: org_us_whitehouse
+  canonical_url: https://www.whitehouse.gov/presidential-actions/
+  source_type: gov_comms
+  ownership_type: government
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.whitehouse.gov/copyright/
+  compliance_status: allowed_internal
+  evidence_url: https://www.whitehouse.gov/presidential-actions/
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GOVERNMENT_RELEASES
+  feed_or_api_url: https://www.whitehouse.gov/presidential-actions/feed/
+  config:
+    user_agent: Mozilla/5.0 (compatible; GNI-ResearchBot/0.1; +internal-research)
+  notes: >
+    Active US gov_comms (2026-11-26): HTTP 200, n=30, sample articles HTTP 200.
+- source_id: us_axios
+  name: Axios (RSS)
+  country_id: US
+  organization_id: org_us_axios
+  canonical_url: https://www.axios.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.axios.com/legal/terms-of-use
+  compliance_status: allowed_internal
+  evidence_url: https://www.axios.com/
+  classification_confidence: medium
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://api.axios.com/feed/
+  notes: >
+    Active US mainstream_independent (2026-11-26): HTTP 200, n=100, today=6, sample articles HTTP 200.
+- source_id: us_wsj
+  name: Wall Street Journal — US News (RSS)
+  country_id: US
+  organization_id: org_us_wsj
+  canonical_url: https://www.wsj.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.dowjones.com/terms-of-use/
+  compliance_status: restricted
+  evidence_url: https://www.wsj.com/news/rss-news-and-feeds
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://feeds.content.dowjones.io/public/rss/RSSUSnews
+  notes: >
+    Inactive candidate (2026-11-26): Feed HTTP 200 (n=40, today=9), but article URLs return HTTP 401/paywall.
+- source_id: us_the_verge
+  name: The Verge (RSS)
+  country_id: US
+  organization_id: org_us_the_verge
+  canonical_url: https://www.theverge.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.voxmedia.com/legal/terms-of-use
+  compliance_status: allowed_internal
+  evidence_url: https://www.theverge.com/
+  classification_confidence: medium
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: TOPIC_FEED
+  feed_or_api_url: https://www.theverge.com/rss/index.xml
+  notes: >
+    Active US tech policy/industry (2026-11-26): HTTP 200, n=10, today=10, sample articles HTTP 200.
+- source_id: us_mit_tech_review
+  name: MIT Technology Review (RSS)
+  country_id: US
+  organization_id: org_us_mit_tech_review
+  canonical_url: https://www.technologyreview.com/
+  source_type: mainstream_independent
+  ownership_type: non_profit
+  funding_type: mixed
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.technologyreview.com/terms-of-service/
+  compliance_status: allowed_internal
+  evidence_url: https://www.technologyreview.com/
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: TOPIC_FEED
+  feed_or_api_url: https://www.technologyreview.com/feed/
+  notes: >
+    Active US tech policy/industry (2026-11-26): HTTP 200, n=10, today=1, sample articles HTTP 200.
+- source_id: us_wired
+  name: Wired (RSS)
+  country_id: US
+  organization_id: org_us_wired
+  canonical_url: https://www.wired.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.condenast.com/user-agreement
+  compliance_status: allowed_internal
+  evidence_url: https://www.wired.com/
+  classification_confidence: medium
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: TOPIC_FEED
+  feed_or_api_url: https://www.wired.com/feed/rss
+  notes: >
+    Active US tech/society (2026-11-26): HTTP 200, n=50, today=1, sample articles HTTP 200.
+- source_id: in_the_hindu
+  name: The Hindu — National (RSS)
+  country_id: IN
+  organization_id: org_in_the_hindu
+  canonical_url: https://www.thehindu.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.thehindu.com/termsofuse/
+  compliance_status: allowed_internal
+  evidence_url: https://www.thehindu.com/rssfeeds/
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.thehindu.com/news/national/feeder/default.rss
+  notes: >
+    Active IN mainstream_independent (2026-11-26): HTTP 200, n=60, today=60, sample articles HTTP 200.
+- source_id: in_indian_express
+  name: The Indian Express — India (RSS)
+  country_id: IN
+  organization_id: org_in_indian_express
+  canonical_url: https://indianexpress.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://indianexpress.com/terms-and-conditions/
+  compliance_status: restricted
+  evidence_url: https://indianexpress.com/syndication/
+  classification_confidence: medium
+  reviewed_by: catalog_probe_20261126
+  active_status: inactive
+  verification_status: failed
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://indianexpress.com/section/india/feed/
+  notes: >
+    Inactive candidate (2026-11-26): Feed returned HTTP 403.
+- source_id: in_ndtv
+  name: NDTV — Top Stories (RSS)
+  country_id: IN
+  organization_id: org_in_ndtv
+  canonical_url: https://www.ndtv.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: medium
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.ndtv.com/convergence/ndtv/new/disclaimer.aspx
+  compliance_status: restricted
+  evidence_url: https://www.ndtv.com/rss
+  classification_confidence: medium
+  reviewed_by: catalog_probe_20261126
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://feeds.feedburner.com/ndtvnews-top-stories
+  notes: >
+    Inactive candidate (2026-11-26): Feed HTTP 200 (n=20, today=20), but article URLs return HTTP 403.
+- source_id: au_guardian
+  name: The Guardian — Australia News (RSS)
+  country_id: AU
+  organization_id: org_au_guardian
+  canonical_url: https://www.theguardian.com/au
+  source_type: mainstream_independent
+  ownership_type: non_profit
+  funding_type: mixed
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.theguardian.com/help/terms-of-service
+  compliance_status: allowed_internal
+  evidence_url: https://www.theguardian.com/au
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.theguardian.com/australia-news/rss
+  notes: >
+    Active AU mainstream_independent (2026-11-26): HTTP 200, n=20, today=8, sample articles HTTP 200.
+- source_id: au_guardian_pacific
+  name: The Guardian — Pacific Islands (RSS)
+  country_id: AU
+  organization_id: org_au_guardian
+  canonical_url: https://www.theguardian.com/world/pacific-islands
+  source_type: mainstream_independent
+  ownership_type: non_profit
+  funding_type: mixed
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.theguardian.com/help/terms-of-service
+  compliance_status: allowed_internal
+  evidence_url: https://www.theguardian.com/world/pacific-islands
+  classification_confidence: high
+  reviewed_by: catalog_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: INTERNATIONAL_NEWS
+  feed_or_api_url: https://www.theguardian.com/world/pacific-islands/rss
+  notes: >
+    Active AU/Pacific regional security (2026-11-26): HTTP 200, n=20, sample articles HTTP 200.
