@@ -152,7 +152,10 @@ def rollup_country_china_attitude(
         src = sources.get(a.source_id)
         cid = (src.country_id if src else None) or "UNK"
         structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
-        label = _norm_sentiment((structured.get("sentiment") or {}).get("label"))
+        sent_raw = structured.get("sentiment")
+        label = _norm_sentiment(
+            sent_raw.get("label") if isinstance(sent_raw, dict) else sent_raw
+        )
         buckets[cid][label] = buckets[cid].get(label, 0) + 1
         if len(buckets[cid]["samples"]) < 8:
             buckets[cid]["samples"].append(a.id)

@@ -158,7 +158,8 @@ def primary_stance_label(
 
 
 def sentiment_label(structured: dict[str, Any] | None) -> str:
-    raw = ((structured or {}).get("sentiment") or {}).get("label")
+    sent_val = (structured or {}).get("sentiment")
+    raw = sent_val.get("label") if isinstance(sent_val, dict) else sent_val
     if not raw:
         return "unknown"
     s = str(raw).strip().lower()
