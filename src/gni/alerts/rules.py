@@ -59,7 +59,8 @@ def _aware(t: datetime | None) -> datetime | None:
 
 
 def _article_time(a: Article) -> datetime | None:
-    return _aware(a.published_at or a.first_seen_at)
+    """Strict V1.0 Methodology: article-level stats/alerts use published_at only."""
+    return _aware(a.published_at)
 
 
 def _dedupe_key(category: str, subcategory: str, evidence: dict[str, Any] | None) -> str:
@@ -156,8 +157,12 @@ def generate_intelligence_alerts(session: Session) -> list[dict[str, Any]]:
                 )
             )
 
-    # 2. Sentiment shift + Stance shift (separate; never mix into one "negative" rate)
-    from gni.analysis.stance_util import all_stance_labels, sentiment_label
+    # 2. Sentiment shift + Stance shift (separate; strict V1.0 media-only stance, never mixing quoted_actor)
+    from gni.analysis.stance_util import (
+        extract_v1_china_stance,
+        extract_v1_topics,
+        sentiment_label,
+    )
 
     att = th.get("attitude_shift") or {}
     rh = int(att.get("recent_hours", 48))
@@ -181,18 +186,18 @@ def generate_intelligence_alerts(session: Session) -> list[dict[str, Any]]:
         return (neg / n if n else 0.0), n
 
     def critical_stance_share(rows: list[Article]) -> tuple[float, int]:
-        """Media stance only; opposing/critical/oppose toward any target."""
+        """Strict V1.0 media-only China stance (Positive/Neutral/Negative; Unclassified excluded from denominator)."""
         hit = 0
         n = 0
         for a in rows:
-            if a.id not in analyses:
+            ana = analyses.get(a.id)
+            if not ana:
                 continue
-            structured = analyses[a.id].structured_result or {}
-            labels = all_stance_labels(structured, media_only=True)
-            if not labels:
+            label = extract_v1_china_stance(ana.structured_result, ana.schema_version)
+            if label not in {"Positive", "Neutral", "Negative"}:
                 continue
             n += 1
-            if any(k in {"critical", "opposing", "oppose", "negative"} for k in labels):
+            if label == "Negative":
                 hit += 1
         return (hit / n if n else 0.0), n
 

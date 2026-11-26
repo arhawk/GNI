@@ -353,54 +353,108 @@ def _narratives_heuristic(
     sent_label: str | None,
     owner: str,
 ) -> list[dict[str, Any]]:
-    if not frame_primary or frame_primary == "other_unknown" or not valid_spans:
+    if not valid_spans:
         return []
-    span0 = valid_spans[0]
-    return [
-        {
-            "narrative_id": f"nar_heur_{frame_primary}",
-            "frame": frame_primary,
-            "claim": span0.text_original[:240],
-            "actor": "quoted_source" if owner == "quoted_actor" else "media_outlet",
-            "target": "china_mainland",
-            "attribution": "quote" if owner == "quoted_actor" else "mention",
-            "tone": sent_label if sent_label in {"positive", "neutral", "negative", "mixed"} else "unclear",
-            "evidence_refs": ["ev_span_0"],
-            "confidence": 0.45,
-        }
-    ]
+    out: list[dict[str, Any]] = []
+    base_frame = frame_primary if (frame_primary and frame_primary != "other_unknown") else "general_china_coverage"
+    refute_markers = ("rejected", "denied", "dismissed", "countered", "refuted", "however", "in contrast", "反驳", "否认", "回应称")
+
+    for i, sp in enumerate(valid_spans[:4]):
+        txt = sp.text_original
+        neg = _count_hits(txt, NEG_WORDS)
+        pos = _count_hits(txt, POS_WORDS)
+        low = txt.casefold()
+        is_refute = any(m in low or m in txt for m in refute_markers)
+        is_quoted = _detect_expression_owner(txt) == "quoted_actor" or owner == "quoted_actor"
+
+        if is_refute:
+            attr = "refute"
+        elif is_quoted:
+            attr = "quote"
+        elif pos > neg:
+            attr = "support"
+        else:
+            attr = "mention"
+
+        if neg > pos:
+            tone = "negative"
+        elif pos > neg:
+            tone = "positive"
+        elif neg > 0 and pos > 0:
+            tone = "mixed"
+        else:
+            tone = sent_label if sent_label in {"positive", "neutral", "negative", "mixed"} else "neutral"
+
+        # Emit first span always, and subsequent spans when they add a contrasting tone/attribution
+        if i == 0 or (out and (tone != out[0]["tone"] or attr != out[0]["attribution"])):
+            out.append(
+                {
+                    "narrative_id": f"nar_heur_{base_frame}_{i}",
+                    "frame": base_frame,
+                    "claim": txt[:240],
+                    "actor": "quoted_source" if is_quoted else "media_outlet",
+                    "target": "china_mainland",
+                    "attribution": attr,
+                    "tone": tone,
+                    "evidence_refs": [f"ev_span_{i}"],
+                    "confidence": 0.45,
+                }
+            )
+        if len(out) >= 3:
+            break
+    return out
+
+
+_EVENT_RE = re.compile(
+    r"(?P<actor>[A-Z][\w\.\-]+(?:\s+[A-Z][\w\.\-]+){0,2})\s+"
+    r"(?P<action>announces?|announced|unveils?|unveiled|signs?|signed|launches?|launched|"
+    r"approves?|approved|sanctions?|sanctioned|warns?|warned|meets?|met|visits?|visited|"
+    r"imposes?|imposed|lifts?|lifted)\s+"
+    r"(?P<object>[^.;\n]{3,80})",
+    re.I,
+)
 
 
 def _event_candidates_heuristic(
     title: str | None,
     valid_spans: list[ChinaSpan],
 ) -> list[dict[str, Any]]:
-    t = (title or "").strip()
-    if not t or not valid_spans:
+    if not valid_spans:
         return []
-    m = re.search(
-        r"(?P<actor>[A-Z][\w\.\-]+(?:\s+[A-Z][\w\.\-]+){0,2})\s+"
-        r"(?P<action>announces?|unveils?|signs?|launches?|approves?|sanctions?|warns?|meets?|visits?|imposes?)\s+"
-        r"(?P<object>.{3,80})",
-        t,
-        re.I,
-    )
-    if not m:
-        return []
-    return [
-        {
-            "event_id": None,
-            "event_relation": "new_event_candidate",
-            "actor": m.group("actor").strip(" .,;:"),
-            "action": m.group("action").strip().lower(),
-            "object": m.group("object").strip(" .,;:"),
-            "event_time": None,  # Never substitute published_at
-            "location": None,
-            "summary": t[:240],
-            "event_evidence_refs": ["ev_span_0"],
-            "confidence": 0.5,
-        }
-    ]
+    candidates: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str]] = set()
+    sources_to_scan: list[tuple[str, str]] = []
+    if (title or "").strip():
+        sources_to_scan.append(((title or "").strip(), "ev_span_0"))
+    for idx, sp in enumerate(valid_spans[:4]):
+        sources_to_scan.append((sp.text_original, f"ev_span_{idx}"))
+
+    for text_chunk, ev_ref in sources_to_scan:
+        for m in _EVENT_RE.finditer(text_chunk):
+            actor = m.group("actor").strip(" .,;:")
+            action = m.group("action").strip().lower()
+            obj = m.group("object").strip(" .,;:")
+            key = (actor.lower(), action[:5])
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            candidates.append(
+                {
+                    "event_id": None,
+                    "event_relation": "new_event_candidate",
+                    "actor": actor,
+                    "action": action,
+                    "object": obj,
+                    "event_time": None,  # Never substitute published_at
+                    "location": None,
+                    "summary": f"{actor} {action} {obj}"[:240],
+                    "event_evidence_refs": [ev_ref],
+                    "confidence": 0.5,
+                }
+            )
+            if len(candidates) >= 4:
+                return candidates
+    return candidates
 
 
 def build_structured_analysis(

@@ -164,6 +164,36 @@ def analyze_article(
 
         # Gate: clear not_china_related skips deep analysis (no LLM / heuristic six-dim).
         if l2.label == "not_china_related":
+            gate_structured = validate_and_enrich_article_intelligence(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "taxonomy_version": TAXONOMY_VERSION,
+                    "relevance_weight_version": RELEVANCE_WEIGHT_VERSION,
+                    "analysis_status": "skipped_not_china",
+                    "l2_label": l2.label,
+                    "reason_codes": l2.reason_codes,
+                    "topics_v1": [],
+                    "boards_v1": [],
+                    "china_stance": {
+                        "target": "china_mainland",
+                        "stance_label": "Unclassified",
+                        "expression_owner": "unclear",
+                        "stance_confidence": 0.0,
+                        "stance_evidence": [],
+                        "reasoning": "Not China-related (L2 gate).",
+                        "analysis_status": "not_applicable",
+                    },
+                },
+                article=article,
+                article_version_id=version_id,
+                content_clean=content,
+                spans=[],
+                relevance=relevance,
+                provider="gate",
+                model_name="skip",
+                prompt_version="l2_gate_v1",
+                token_usage=0,
+            )
             analysis = ArticleAnalysis(
                 id=str(uuid4()),
                 article_id=article.id,
@@ -179,11 +209,7 @@ def analyze_article(
                 confidence=l2.confidence,
                 token_usage=0,
                 estimated_cost_usd=0.0,
-                structured_result={
-                    "analysis_status": "skipped_not_china",
-                    "l2_label": l2.label,
-                    "reason_codes": l2.reason_codes,
-                },
+                structured_result=gate_structured,
             )
             session.add(analysis)
             article.analysis_status = "skipped_not_china"
@@ -550,6 +576,7 @@ def validate_and_enrich_article_intelligence(
         evidence=ev_span_models,
         quality=quality,
         analysis_metadata=ArticleAnalysisMetadataContract(
+            record_source="model",
             model_name=model_name,
             model_version=model_name,
             prompt_version=prompt_version,

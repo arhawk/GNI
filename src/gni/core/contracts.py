@@ -295,6 +295,9 @@ class ArticleQualityContract(BaseModel):
 class ArticleAnalysisMetadataContract(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    record_source: Literal["model", "human_override", "hybrid"] = "model"
+    human_reviewed_by: str | None = None
+    human_reviewed_at: str | None = None
     model_name: str = ""
     model_version: str = ""
     prompt_version: str = ""
@@ -349,6 +352,7 @@ class EventIntelligenceContract(BaseModel):
     article_ids: list[str] = Field(default_factory=list)
     evidence_refs: list[str] = Field(default_factory=list)
     confidence: float = 0.5
+    record_source: Literal["model", "human_override", "hybrid"] = "model"
     schema_version: str = EVENT_INTELLIGENCE_VERSION
 
 
@@ -371,6 +375,7 @@ class NarrativeIntelligenceContract(BaseModel):
     last_observed_at: datetime | None = None
     trend_status: NarrativeTrendStatus = "emerging"
     confidence: float = 0.5
+    record_source: Literal["model", "human_override", "hybrid"] = "model"
     schema_version: str = NARRATIVE_INTELLIGENCE_VERSION
 
 

@@ -96,18 +96,38 @@ class FingerprintCluster:
         return self.importance_score >= 0.75 and len(self.article_ids) >= 2
 
 
+def _is_false_merge_pair(a: FingerprintCard, b: FingerprintCard) -> bool:
+    """Reject keyword/country-only false merges when explicit actor or action diverge sharply."""
+    if a.actor_key and b.actor_key and a.actor_key != b.actor_key:
+        # Different primary actors cannot be force-merged unless they share strong object overlap
+        toks_a = set((a.object_key or "").split())
+        toks_b = set((b.object_key or "").split())
+        overlap = len(toks_a & toks_b) / max(len(toks_a | toks_b), 1)
+        if overlap < 0.5:
+            return True
+    if a.action_key and b.action_key and a.action_key != b.action_key:
+        toks_a = set((a.object_key or "").split())
+        toks_b = set((b.object_key or "").split())
+        overlap = len(toks_a & toks_b) / max(len(toks_a | toks_b), 1)
+        if overlap < 0.6:
+            return True
+    return False
+
+
 def cluster_fingerprints(
     cards: list[FingerprintCard],
     *,
     use_llm: bool = True,
 ) -> list[FingerprintCluster]:
-    """Greedy SAME_EVENT clustering. Skip INSUFFICIENT cards (no dictionary actor/action)."""
+    """Greedy SAME_EVENT clustering with anti-false-merge guard. Skip INSUFFICIENT cards."""
     clusters: list[FingerprintCluster] = []
     for card in cards:
         if card.is_insufficient:
             continue
         placed = False
         for cl in clusters:
+            if _is_false_merge_pair(card, cl.cards[0]):
+                continue
             # compare against cluster representative
             rel, _score = resolve_relation(card, cl.cards[0], use_llm=use_llm)
             if rel == "SAME_EVENT":

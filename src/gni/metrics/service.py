@@ -249,6 +249,7 @@ def run_v1_stat_snapshots(
     period_end: datetime,
     persist: bool = True,
     include_zero_taxonomy: bool = True,
+    include_source_scope: bool = False,
 ) -> dict[str, Any]:
     """Compute (and optionally persist) V1.0 traceable stat snapshots across 4 scopes."""
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
@@ -282,6 +283,11 @@ def run_v1_stat_snapshots(
                 stance_label=stance,
                 stance_evidence=ev,
                 analysis_schema_version=schema_ver,
+                sentiment_label=(
+                    (structured.get("sentiment") or {}).get("label")
+                    if isinstance(structured.get("sentiment"), dict)
+                    else None
+                ),
             )
         )
 
@@ -292,6 +298,7 @@ def run_v1_stat_snapshots(
         period_end=period_end,
         generated_at=generated_at,
         include_zero_taxonomy=include_zero_taxonomy,
+        include_source_scope=include_source_scope,
     )
 
     if persist:
@@ -334,3 +341,50 @@ def run_v1_stat_snapshots(
         "snapshots": [r.to_dict() for r in rows],
         "evidence_by_article": evidence_by_article,
     }
+
+
+def get_historical_trend(
+    session: Session,
+    *,
+    scope_type: str,
+    scope_id: str,
+    limit: int = 30,
+) -> list[dict[str, Any]]:
+    """Return chronological historical StatSnapshot series for a given scope."""
+    rows = list(
+        session.scalars(
+            select(StatSnapshot)
+            .where(
+                StatSnapshot.scope_type == scope_type,
+                StatSnapshot.scope_id == scope_id,
+            )
+            .order_by(StatSnapshot.period_start.desc(), StatSnapshot.generated_at.desc())
+            .limit(max(1, limit * 3))
+        ).all()
+    )
+    # Keep latest generated snapshot per (period_start, period_end)
+    dedup: dict[tuple[datetime, datetime], StatSnapshot] = {}
+    for r in rows:
+        key = (r.period_start, r.period_end)
+        if key not in dedup:
+            dedup[key] = r
+    ordered = sorted(dedup.values(), key=lambda x: x.period_start)[-limit:]
+    return [
+        {
+            "period_start": r.period_start.isoformat(),
+            "period_end": r.period_end.isoformat(),
+            "scope_type": r.scope_type,
+            "scope_id": r.scope_id,
+            "article_count": r.article_count,
+            "positive_count": r.positive_count,
+            "neutral_count": r.neutral_count,
+            "negative_count": r.negative_count,
+            "unclassified_count": r.unclassified_count,
+            "positive_rate": r.positive_rate,
+            "neutral_rate": r.neutral_rate,
+            "negative_rate": r.negative_rate,
+            "stance_coverage_rate": r.stance_coverage_rate,
+            "methodology_version": r.methodology_version,
+        }
+        for r in ordered
+    ]

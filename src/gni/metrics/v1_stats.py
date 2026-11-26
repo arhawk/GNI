@@ -65,6 +65,7 @@ class V1ArticleInput:
     stance_label: str = UNCLASSIFIED_LABEL
     stance_evidence: list[dict[str, Any]] = field(default_factory=list)
     analysis_schema_version: str | None = None
+    sentiment_label: str | None = None
 
 
 @dataclass
@@ -73,7 +74,7 @@ class StatSnapshotRow:
 
     period_start: datetime
     period_end: datetime
-    scope_type: str  # GLOBAL | COUNTRY | BOARD | TOPIC
+    scope_type: str  # GLOBAL | COUNTRY | BOARD | TOPIC | SOURCE
     scope_id: str
     article_count: int
     positive_count: int
@@ -91,6 +92,7 @@ class StatSnapshotRow:
     article_ids: list[str] = field(default_factory=list)
     label_zh: str | None = None
     board_id: str | None = None
+    sentiment_counts: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -118,6 +120,8 @@ class StatSnapshotRow:
             out["label_zh"] = self.label_zh
         if self.board_id is not None:
             out["board_id"] = self.board_id
+        if self.sentiment_counts:
+            out["sentiment_counts"] = dict(self.sentiment_counts)
         return out
 
 
@@ -251,6 +255,14 @@ def _aggregate_bucket(
 
     coverage: float | None = round(classified / article_count, 6) if article_count > 0 else None
 
+    sent_counts: dict[str, int] = defaultdict(int)
+    for r in by_id.values():
+        sl = (r.sentiment_label or "").strip().lower()
+        if sl in {"positive", "neutral", "negative", "mixed"}:
+            sent_counts[sl] += 1
+        elif sl:
+            sent_counts["unknown"] += 1
+
     return StatSnapshotRow(
         period_start=_as_utc(period_start) or period_start,
         period_end=_as_utc(period_end) or period_end,
@@ -269,6 +281,7 @@ def _aggregate_bucket(
         article_ids=sorted(by_id.keys()),
         label_zh=label_zh,
         board_id=board_id,
+        sentiment_counts=dict(sent_counts),
     )
 
 
@@ -279,8 +292,9 @@ def compute_v1_stat_snapshots(
     period_end: datetime,
     generated_at: datetime | None = None,
     include_zero_taxonomy: bool = True,
+    include_source_scope: bool = False,
 ) -> list[StatSnapshotRow]:
-    """Compute deterministic V1.0 stat snapshots across GLOBAL, COUNTRY, BOARD, and TOPIC."""
+    """Compute deterministic V1.0 stat snapshots across GLOBAL, COUNTRY, BOARD, TOPIC (and optional SOURCE)."""
     p_start = _as_utc(period_start)
     p_end = _as_utc(period_end)
     assert p_start is not None and p_end is not None
@@ -367,6 +381,25 @@ def compute_v1_stat_snapshots(
                     generated_at=gen_at,
                     label_zh=t.name_zh,
                     board_id=t.board_id,
+                )
+            )
+
+    # 5. Optional SOURCE scope (strictly by source_id)
+    if include_source_scope:
+        by_source: dict[str, list[V1ArticleInput]] = defaultdict(list)
+        for r in unique_rows:
+            sid = (r.source_id or "").strip()
+            if sid:
+                by_source[sid].append(r)
+        for sid in sorted(by_source.keys()):
+            snapshots.append(
+                _aggregate_bucket(
+                    articles=by_source[sid],
+                    period_start=p_start,
+                    period_end=p_end,
+                    scope_type="SOURCE",
+                    scope_id=sid,
+                    generated_at=gen_at,
                 )
             )
 

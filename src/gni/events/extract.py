@@ -175,13 +175,75 @@ def persist_candidates(session: Session, cards: list[FingerprintCard]) -> int:
     return n
 
 
+def extract_from_structured_candidates(
+    *,
+    article_id: str,
+    structured: dict[str, Any] | None,
+    published_at: datetime | None,
+    analysis_id: str | None = None,
+    article_version_id: str | None = None,
+) -> list[FingerprintCard]:
+    """Consume Phase 3 structured event_candidates[] first; never fill NULL event_time with published_at."""
+    if not isinstance(structured, dict):
+        return []
+    raw_cands = structured.get("event_candidates")
+    if not isinstance(raw_cands, list) or not raw_cands:
+        return []
+    cards: list[FingerprintCard] = []
+    for item in raw_cands:
+        if not isinstance(item, dict):
+            continue
+        relation = str(item.get("event_relation") or "new_event_candidate").strip().lower()
+        if relation == "unrelated":
+            continue
+        actor = str(item.get("actor") or "").strip() or None
+        action = str(item.get("action") or "").strip() or None
+        obj = str(item.get("object") or "").strip() or None
+        summary = str(item.get("summary") or "").strip() or None
+        if not (actor or action or obj or summary):
+            continue
+        et_raw = item.get("event_time")
+        event_time: datetime | None = None
+        if isinstance(et_raw, str) and et_raw.strip():
+            try:
+                event_time = datetime.fromisoformat(et_raw.strip().replace("Z", "+00:00"))
+            except ValueError:
+                event_time = None
+        loc_raw = str(item.get("location") or "").strip() or None
+        loc_label, loc_cid = guess_location_from_text(loc_raw or summary or "")
+        cards.append(
+            FingerprintCard(
+                article_id=article_id,
+                actor=actor,
+                action=action,
+                object=obj,
+                event_type=None,
+                location_label=loc_raw or loc_label,
+                location_country_id=loc_cid,
+                qualifiers={"event_relation": relation},
+                summary=(summary or f"{actor or ''} {action or ''} {obj or ''}".strip())[:280],
+                event_time=event_time,  # Explicitly None when unknown
+                published_at=published_at,
+                confidence=float(item.get("confidence") or 0.55),
+                evidence={
+                    "mode": "article_intelligence_v2",
+                    "event_relation": relation,
+                    "event_evidence_refs": list(item.get("event_evidence_refs") or []),
+                },
+                analysis_id=analysis_id,
+                article_version_id=article_version_id,
+            )
+        )
+    return cards
+
+
 def extract_for_articles(
     session: Session,
     *,
     article_ids: list[str] | None = None,
     limit: int = 500,
 ) -> dict[str, Any]:
-    """Extract and append candidates for China-set articles."""
+    """Extract and append candidates for China-set articles (prefers structured event_candidates[])."""
     q = select(Article).where(
         Article.exclude_from_metrics.is_(False),
         Article.china_relevance_level.in_(list(CHINA_INCLUDE_LEVELS)),
@@ -195,14 +257,23 @@ def extract_for_articles(
     for a in articles:
         analysis: ArticleAnalysis | None = analyses.get(a.id)
         structured = (analysis.structured_result if analysis else None) or {}
-        spans = _china_spans_from_analysis(structured)
-        cards = heuristic_extract(
+        cards = extract_from_structured_candidates(
             article_id=a.id,
-            title=a.title or "",
-            published_at=a.published_at or a.first_seen_at,
-            spans=spans,
+            structured=structured,
+            published_at=a.published_at,
             analysis_id=analysis.id if analysis else None,
+            article_version_id=analysis.article_version_id if analysis else None,
         )
+        if not cards:
+            spans = _china_spans_from_analysis(structured)
+            cards = heuristic_extract(
+                article_id=a.id,
+                title=a.title or "",
+                published_at=a.published_at,
+                spans=spans,
+                analysis_id=analysis.id if analysis else None,
+                article_version_id=analysis.article_version_id if analysis else None,
+            )
         written += persist_candidates(session, cards)
         cards_out.extend(cards)
     session.flush()

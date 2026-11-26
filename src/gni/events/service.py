@@ -114,6 +114,82 @@ def merge_events(
     return {"keep_id": keep_id, "merge_id": merge_id, "articles_moved": moved, "merge_status": "closed"}
 
 
+def split_event(
+    session: Session,
+    *,
+    source_event_id: str,
+    article_ids_to_split: list[str],
+    new_title: str | None = None,
+    actor: str = "ui",
+) -> dict[str, Any]:
+    """Split selected articles from an existing Event into a new Event with full EventRevision audit."""
+    src = session.get(Event, source_event_id)
+    if not src:
+        raise ValueError("source_event_id not found")
+    split_set = {str(aid).strip() for aid in article_ids_to_split if str(aid).strip()}
+    if not split_set:
+        raise ValueError("article_ids_to_split must be non-empty")
+
+    links = list(
+        session.scalars(select(EventArticle).where(EventArticle.event_id == source_event_id)).all()
+    )
+    to_move = [lk for lk in links if lk.article_id in split_set]
+    if not to_move:
+        raise ValueError("no matching EventArticle links to split")
+
+    new_event_id = str(uuid4())
+    new_ev = Event(
+        id=new_event_id,
+        title=(new_title or f"{src.title} (split)")[:280],
+        summary=src.summary,
+        event_type=src.event_type,
+        event_time=None,  # Never fabricate event_time on split
+        status="proto",
+        importance_score=src.importance_score,
+    )
+    session.add(new_ev)
+    session.flush()
+
+    moved_ids: list[str] = []
+    for lk in to_move:
+        session.add(
+            EventArticle(
+                id=str(uuid4()),
+                event_id=new_event_id,
+                article_id=lk.article_id,
+                relation=lk.relation or "covers",
+            )
+        )
+        moved_ids.append(lk.article_id)
+        session.delete(lk)
+
+    session.add(
+        EventRevision(
+            id=str(uuid4()),
+            event_id=source_event_id,
+            action="split",
+            payload={"split_into": new_event_id, "articles_moved": moved_ids},
+            actor=actor,
+        )
+    )
+    session.add(
+        EventRevision(
+            id=str(uuid4()),
+            event_id=new_event_id,
+            action="split",
+            payload={"split_from": source_event_id, "articles_moved": moved_ids},
+            actor=actor,
+        )
+    )
+    session.flush()
+    return {
+        "source_event_id": source_event_id,
+        "new_event_id": new_event_id,
+        "articles_moved": len(moved_ids),
+        "moved_article_ids": moved_ids,
+    }
+
+
 # Never auto-delete or overwrite these during rebuild (manual / terminal states).
 _PRESERVE_EVENT_STATUSES = frozenset({"confirmed", "closed", "locked"})
 
