@@ -138,6 +138,7 @@ function ChapterCard({ section, defaultOpen }: { section: ReportSection; default
 
 export function DailyReportPackageView({
   pkg,
+  kpis,
   snapshots,
   selectedPeriod,
   onSelectPeriod,
@@ -146,6 +147,13 @@ export function DailyReportPackageView({
   onRunV2,
 }: {
   pkg: ReportPackage
+  kpis?: {
+    china_articles: number
+    prev_day_articles: number
+    delta: number
+    reporting_countries: number
+    major_events: number
+  }
   snapshots: ReportListItem[]
   selectedPeriod: string | undefined
   onSelectPeriod: (period: string) => void
@@ -222,6 +230,30 @@ export function DailyReportPackageView({
         <p className="muted small" style={{ margin: '0.5rem 0 0' }}>
           阅读顺序：结论 (Conclusion) → 关键发现 (Findings) → 解释研判 (Interpretation) → 证据追溯 (Evidence) → 统计附录 (Statistics)
         </p>
+        {kpis && (
+          <div className="kpi-grid compact" style={{ marginTop: '0.75rem' }}>
+            <div>
+              <div className="muted small">涉华唯一文章</div>
+              <strong>{kpis.china_articles}</strong>
+            </div>
+            <div>
+              <div className="muted small">昨日同期文章</div>
+              <strong>{kpis.prev_day_articles}</strong>
+            </div>
+            <div>
+              <div className="muted small">环比变化 Δ</div>
+              <strong>{kpis.delta >= 0 ? `+${kpis.delta}` : kpis.delta}</strong>
+            </div>
+            <div>
+              <div className="muted small">报道国家数</div>
+              <strong>{kpis.reporting_countries}</strong>
+            </div>
+            <div>
+              <div className="muted small">重点事件数</div>
+              <strong>{kpis.major_events}</strong>
+            </div>
+          </div>
+        )}
       </div>
 
       {analyzeError && <p className="error">研判触发失败：{analyzeError}</p>}

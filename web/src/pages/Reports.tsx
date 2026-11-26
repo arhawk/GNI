@@ -158,6 +158,13 @@ export function ReportsPage() {
           {data.report_package && viewMode === 'v2_package' ? (
             <DailyReportPackageView
               pkg={data.report_package}
+              kpis={{
+                china_articles: data.sections.summary.kpis.china_articles,
+                prev_day_articles: data.sections.summary.comparisons?.vs_yesterday?.china_articles ?? 0,
+                delta: data.sections.summary.comparisons?.vs_yesterday?.delta ?? 0,
+                reporting_countries: data.sections.summary.kpis.reporting_countries,
+                major_events: data.sections.summary.kpis.major_events,
+              }}
               snapshots={snapshots}
               selectedPeriod={selectedDailyPeriod}
               onSelectPeriod={(p) => setSelectedDailyPeriod(p || undefined)}
@@ -203,6 +210,7 @@ export function ReportsPage() {
 
 const KPI_LABELS_ZH: Record<string, string> = {
   china_articles: '涉华唯一文章',
+  prev_day_articles: '昨日同期文章',
   prev_week_articles: '上周同期文章',
   prev_month_articles: '上月同期文章',
   delta: '环比变化 Δ',
@@ -647,9 +655,10 @@ function DailyBrief({
   const stats = s.overview_stats
   const ingest = stats?.ingest || {}
   const risk = summary.risk_banner
-  const tech = stats?.sentiment_tech
   const intel = data.intelligence
   const tasks = intel?.tasks || {}
+  const prevDayArticles = cmp?.vs_yesterday?.china_articles ?? 0
+  const deltaYesterday = cmp?.vs_yesterday?.delta ?? 0
 
   return (
     <div className="daily-brief daily-brief-v4">
@@ -662,6 +671,28 @@ function DailyBrief({
           {data.period} · {data.schema_version} · {data.generator || 'rule'}
         </p>
         <p className="callout">{data.disclaimer}</p>
+        <div className="kpi-grid compact">
+          <div>
+            <div className="muted small">涉华唯一文章</div>
+            <strong>{kpis.china_articles}</strong>
+          </div>
+          <div>
+            <div className="muted small">昨日同期文章</div>
+            <strong>{prevDayArticles}</strong>
+          </div>
+          <div>
+            <div className="muted small">环比变化 Δ</div>
+            <strong>{deltaYesterday >= 0 ? `+${deltaYesterday}` : deltaYesterday}</strong>
+          </div>
+          <div>
+            <div className="muted small">报道国家数</div>
+            <strong>{kpis.reporting_countries}</strong>
+          </div>
+          <div>
+            <div className="muted small">重点事件数</div>
+            <strong>{kpis.major_events}</strong>
+          </div>
+        </div>
       </header>
 
       <section className="brief-section">
@@ -709,7 +740,7 @@ function DailyBrief({
       </section>
 
       <section className="brief-section">
-        <h2>2 · 数据统计（程序确定性计算）</h2>
+        <h2>2 · 涉华报道量与对华立场分布</h2>
         <div className="kpi-grid brief-kpis brief-kpis-hero">
           <Kpi label="今日要闻" value={stories} />
           <Kpi label="涉华有效" value={articles} hint={deltaHint(cmp?.vs_yesterday?.delta, '较昨日')} />
@@ -726,44 +757,6 @@ function DailyBrief({
           weekAvg={cmp?.vs_7d_avg?.china_articles}
         />
         {s.v1_stats && <V1StatsBlock v1={s.v1_stats} />}
-        {tech && (
-          <p className="muted small">
-            情感分均值（技术）{tech.score_mean ?? '—'}
-            {tech.vs_yesterday_delta != null ? ` · 较昨 Δ ${tech.vs_yesterday_delta}` : ''} · {tech.note}
-          </p>
-        )}
-        <h3>各国媒体情感简表（仅监测媒体，排除政府公报 · 5 国口径）</h3>
-        <p className="muted small">
-          口径说明：上方 V1.0 表按全库已接入国家与全部涉华有效文章统计对华立场；下方简表为旧媒体情感辅助视图（排除 GOVERNMENT_RELEASES，仅列默认 5 国）。
-        </p>
-        <table className="tone-mini">
-          <thead>
-            <tr>
-              <th>国家</th>
-              <th>n</th>
-              <th>正/中/负</th>
-              <th>摘要</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.tone.by_country.map((row) => {
-              const sc = row.sentiment_counts || {}
-              const unavailable = row.status === 'unavailable' || row.status === 'no_sample'
-              return (
-                <tr key={row.country_id} className={unavailable ? 'tone-unavailable' : undefined}>
-                  <td>
-                    <Link to={row.href || `/countries?c=${row.country_id}`}>{row.country_id}</Link>
-                  </td>
-                  <td>{row.n}</td>
-                  <td className="muted small">
-                    {unavailable ? '样本不足' : `${sc.positive ?? 0}/${sc.neutral ?? 0}/${sc.negative ?? 0}`}
-                  </td>
-                  <td className="small">{row.summary_text}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
         {stats?.media_type_counts_zh && (
           <p className="muted small">
             媒体类型：
@@ -780,7 +773,6 @@ function DailyBrief({
             {JSON.stringify(
               {
                 stance: s.tone.overall_stance_counts,
-                by_media_type: stats?.sentiment_by_media_type,
                 narrative_split: stats?.narrative_split,
               },
               null,
@@ -793,7 +785,7 @@ function DailyBrief({
       <section className="brief-section">
         <div className="brief-section-head">
           <h2>3 · 当日重点事件（深度解读 + 风险表）</h2>
-          <p className="muted small">主国｜媒体类型｜标题与叙事｜覆盖｜情感｜风险；异动行左侧红条提示</p>
+          <p className="muted small">主国｜媒体类型｜标题与叙事｜覆盖｜对华立场｜风险；异动行左侧红条提示</p>
         </div>
         <EventInterpretationCards
           task={tasks.event_analysis}

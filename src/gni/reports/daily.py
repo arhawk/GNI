@@ -1055,20 +1055,10 @@ def build_daily_report(
             "failing": sum(1 for r in crawl_status if r["status"] != "ok"),
             "rate_limited": sum(1 for r in crawl_status if r["status"] == "rate_limited"),
         },
-        "sentiment_tech": {
-            "score_mean": sent_mean,
-            "score_mean_yesterday": y_mean,
-            "vs_yesterday_delta": sent_delta,
-            "n_scored": len(sentiment_scores),
-            "note": "文章情感分均值（技术指标），≠ 舆情总分 / 国家态度。",
-        },
         "narrative_split": {
             "official_topics_top": _top_n(topic_official, 5),
             "media_topics_top": _top_n(topic_media, 5),
             "note": "官方口径≈政府传播源；媒体评论≈其余媒体源主题。",
-        },
-        "sentiment_by_media_type": {
-            k: dict(v) for k, v in sent_by_media_type.items()
         },
     }
 
@@ -1239,6 +1229,8 @@ def build_daily_report(
             "summary": {
                 "kpis": {
                     "china_articles": china_n,
+                    "prev_day_articles": yesterday_china,
+                    "delta": delta_y,
                     "reporting_countries": len(reporting_countries),
                     "reporting_sources": len(reporting_sources),
                     "new_events": new_events_n,
@@ -1298,16 +1290,12 @@ def build_daily_report(
                 ),
             },
             "tone": {
-                "overall_sentiment_counts": dict(sent_overall),
                 "overall_stance_counts": dict(stance_overall),
-                "by_country": tone_by_country,
-                "by_media_type": overview_stats["sentiment_by_media_type"],
+                "by_country": [],
                 "min_n": MIN_TONE_N,
                 "note": (
-                    "情感条：正面 / 中立 / 负面（语气）；"
-                    f"分国 n<{MIN_TONE_N} 时 status=unavailable，禁止「以负面为主」类外推；"
-                    "立场绑定对华 Target，分列展示；引述≠媒体自身立场；"
-                    "score_mean 为技术均值非舆情总分。"
+                    "日报仅保留对华立场分布（target=china_mainland，口径见 v1_stats）；"
+                    "Unclassified 不计入正中负比例分母，引述≠媒体自身立场。"
                 ),
             },
             "anomalies": anomalies,
