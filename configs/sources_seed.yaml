@@ -292,6 +292,24 @@ organizations:
   organization_type: aggregator_discovery
   ownership_type: public
   government_control_level: none
+- id: org_ru_moscow_times
+  country_id: RU
+  name: The Moscow Times
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_ru_meduza
+  country_id: RU
+  name: Meduza
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_au_smh
+  country_id: AU
+  name: The Sydney Morning Herald (Nine Entertainment)
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
 sources:
 - source_id: us_voa_english
   name: Voice of America — China News (RSS)
@@ -366,17 +384,15 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.state.gov/rss-feed/press-releases/feed/
   classification_confidence: high
-  reviewed_by: us_pilot_probe_20261126
-  active_status: paused
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
   feed_scope: GOVERNMENT_RELEASES
-  feed_or_api_url: https://www.state.gov/rss-feed/press-releases/feed/
-  config:
-    user_agent: Mozilla/5.0 (compatible; GNI-ResearchBot/0.1; +internal-research)
+  feed_or_api_url: https://raw.githubusercontent.com/markschaver/State-Department-PR/master/data.rss
   notes: >
-    Paused 2026-11-26: probe returned HTTP 407 (proxy/WAF block). Replaced in active gov_comms
-    slot by us_federal_register_state until access recovers.
+    Recovered 2026-11-26 (attempt 4/4): direct state.gov RSS returns HTTP 407 from this network;
+    switched to public GitHub Action mirror of official state.gov press-releases RSS (HTTP 200, n=10, fresh 2026-11-25).
 - source_id: us_voa_east_asia
   name: Voice of America — East Asia News (RSS)
   country_id: US
@@ -1167,14 +1183,16 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.sbs.com.au/aboutus
   classification_confidence: medium
-  reviewed_by: editorial_probe_20261124
-  active_status: inactive
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
+  feed_scope: INTERNATIONAL_NEWS
   feed_or_api_url: https://www.sbs.com.au/news/topic/world/feed
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
   notes: >
-    Demoted 2026-11-24: slot freed for ABC China + ABC Foreign Affairs topic RSS
-    (higher China density). Kept verified backup.
+    Reactivated 2026-11-26: HTTP 200 (entries=25, today=4, sample articles HTTP 200).
 
 - source_id: au_abc_china
   name: ABC News — China topic RSS
@@ -1931,3 +1949,203 @@ sources:
     maxrecords: 50
   notes: >
     GDELT DOC 2.0 China-focused discovery for DE outlets (FIPS GM; deduped against native RSS by URL; rate-limited 1 req / 6.5s).
+- source_id: ru_moscow_times
+  name: The Moscow Times (RSS)
+  country_id: RU
+  organization_id: org_ru_moscow_times
+  canonical_url: https://www.themoscowtimes.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: mixed
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.themoscowtimes.com/page/terms-of-use
+  compliance_status: allowed_internal
+  evidence_url: https://www.themoscowtimes.com/rss/news
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.themoscowtimes.com/rss/news
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active RU independent English feed from WorldMonitor catalog (2026-11-26): HTTP 200, entries=50, today=7, sample articles HTTP 200.
+- source_id: ru_meduza
+  name: Meduza (Russian RSS)
+  country_id: RU
+  organization_id: org_ru_meduza
+  canonical_url: https://meduza.io/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: mixed
+  government_control_level: none
+  editorial_independence: high
+  language: ru
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://meduza.io/about
+  compliance_status: allowed_internal
+  evidence_url: https://meduza.io/rss/all
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://meduza.io/rss/all
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active RU independent Russian feed from WorldMonitor catalog (2026-11-26): HTTP 200, entries=30, today=26, sample articles HTTP 200.
+- source_id: ru_rt_russia
+  name: RT — Russia News (RSS)
+  country_id: RU
+  organization_id: org_ru_rt
+  canonical_url: https://www.rt.com/russia/
+  source_type: state_controlled
+  ownership_type: state
+  funding_type: public
+  government_control_level: high
+  editorial_independence: low
+  language: en
+  timezone: Europe/Moscow
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.rt.com/terms-of-use/
+  compliance_status: allowed_internal
+  evidence_url: https://www.rt.com/rss/russia/
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.rt.com/rss/russia/
+  notes: >
+    Active RU state_controlled feed from WorldMonitor catalog (2026-11-26): HTTP 200, entries=100, today=5, sample articles HTTP 200.
+- source_id: au_smh_world
+  name: Sydney Morning Herald — World (RSS)
+  country_id: AU
+  organization_id: org_au_smh
+  canonical_url: https://www.smh.com.au/world
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.smh.com.au/terms
+  compliance_status: allowed_internal
+  evidence_url: https://www.smh.com.au/rss/world.xml
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: INTERNATIONAL_NEWS
+  feed_or_api_url: https://www.smh.com.au/rss/world.xml
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active AU mainstream_independent World feed (2026-11-26): HTTP 200, entries=20, today=12, sample articles HTTP 200.
+- source_id: au_abc_justin
+  name: ABC News Australia — Just In (RSS)
+  country_id: AU
+  organization_id: org_au_abc
+  canonical_url: https://www.abc.net.au/news/justin
+  source_type: public_service
+  ownership_type: public
+  funding_type: public
+  government_control_level: low
+  editorial_independence: high
+  language: en
+  timezone: Australia/Sydney
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.abc.net.au/conditions
+  compliance_status: allowed_internal
+  evidence_url: https://www.abc.net.au/news/feed/2942460/rss.xml
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.abc.net.au/news/feed/2942460/rss.xml
+  notes: >
+    Active AU public_service feed from WorldMonitor catalog (2026-11-26): HTTP 200, entries=25, today=12, sample articles HTTP 200.
+- source_id: ru_gdelt_china
+  name: GDELT DOC 2.0 — Russia China Discovery
+  country_id: RU
+  organization_id: org_gdelt
+  canonical_url: https://www.gdeltproject.org/
+  source_type: aggregator_discovery
+  ownership_type: public
+  funding_type: public
+  government_control_level: none
+  editorial_independence: high
+  language: multi
+  timezone: UTC
+  access_method: api
+  adapter_type: gdelt_adapter
+  terms_url: https://www.gdeltproject.org/about.html
+  compliance_status: allowed_internal
+  evidence_url: https://api.gdeltproject.org/api/v2/doc/doc
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
+  feed_or_api_url: https://api.gdeltproject.org/api/v2/doc/doc
+  config:
+    discovery_provider: gdelt
+    gdelt_sourcecountry: RS
+    query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:RS"
+    timespan: 24h
+    maxrecords: 50
+  notes: >
+    GDELT DOC 2.0 China-focused discovery for RU outlets (FIPS RS; deduped against native RSS by URL; rate-limited 1 req / 6.5s).
+- source_id: au_gdelt_china
+  name: GDELT DOC 2.0 — Australia China Discovery
+  country_id: AU
+  organization_id: org_gdelt
+  canonical_url: https://www.gdeltproject.org/
+  source_type: aggregator_discovery
+  ownership_type: public
+  funding_type: public
+  government_control_level: none
+  editorial_independence: high
+  language: multi
+  timezone: UTC
+  access_method: api
+  adapter_type: gdelt_adapter
+  terms_url: https://www.gdeltproject.org/about.html
+  compliance_status: allowed_internal
+  evidence_url: https://api.gdeltproject.org/api/v2/doc/doc
+  classification_confidence: high
+  reviewed_by: ru_au_stale_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
+  feed_or_api_url: https://api.gdeltproject.org/api/v2/doc/doc
+  config:
+    discovery_provider: gdelt
+    gdelt_sourcecountry: AS
+    query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:AS"
+    timespan: 24h
+    maxrecords: 50
+  notes: >
+    GDELT DOC 2.0 China-focused discovery for AU outlets (FIPS AS; deduped against native RSS by URL; rate-limited 1 req / 6.5s).

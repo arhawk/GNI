@@ -9,7 +9,7 @@ from typing import Any
 
 import feedparser
 import httpx
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from gni.ingestion.base import BaseAdapter
 
@@ -55,9 +55,9 @@ class RssAdapter(BaseAdapter):
     def __init__(
         self,
         *,
-        timeout: float = 30.0,
+        timeout: float = 45.0,
         user_agent: str = DEFAULT_UA,
-        max_attempts: int = 3,
+        max_attempts: int = 4,
     ) -> None:
         self.timeout = timeout
         self.user_agent = user_agent
@@ -79,7 +79,7 @@ class RssAdapter(BaseAdapter):
         @retry(
             reraise=True,
             stop=stop_after_attempt(self.max_attempts),
-            wait=wait_exponential(multiplier=0.5, min=0.5, max=8),
+            wait=wait_random_exponential(multiplier=1.0, min=1.0, max=12.0),
             retry=retry_if_exception(_is_retryable_exc),
         )
         def _get() -> str:

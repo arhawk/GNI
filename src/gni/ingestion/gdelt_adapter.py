@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from gni.ingestion.base import BaseAdapter
 from gni.ingestion.rss_adapter import DEFAULT_UA
@@ -72,15 +73,17 @@ class GdeltAdapter(BaseAdapter):
     def __init__(
         self,
         *,
-        timeout: float = 30.0,
+        timeout: float = 45.0,
         user_agent: str = DEFAULT_UA,
-        max_attempts: int = 4,
-        min_interval_sec: float = 6.5,
+        max_attempts: int = 5,
+        min_interval_sec: float = 10.0,
+        jitter_sec: float = 2.5,
     ) -> None:
         self.timeout = timeout
         self.user_agent = user_agent
         self.max_attempts = max_attempts
         self.min_interval_sec = min_interval_sec
+        self.jitter_sec = jitter_sec
 
     def _wait_rate_limit(self) -> None:
         global _LAST_REQUEST_TS
@@ -88,9 +91,12 @@ class GdeltAdapter(BaseAdapter):
             return
         with _RATE_LOCK:
             now = time.monotonic()
+            target_gap = self.min_interval_sec + (
+                random.uniform(0.0, self.jitter_sec) if self.jitter_sec > 0 else 0.0
+            )
             elapsed = now - _LAST_REQUEST_TS
-            if _LAST_REQUEST_TS > 0 and elapsed < self.min_interval_sec:
-                time.sleep(self.min_interval_sec - elapsed)
+            if _LAST_REQUEST_TS > 0 and elapsed < target_gap:
+                time.sleep(target_gap - elapsed)
             _LAST_REQUEST_TS = time.monotonic()
 
     def fetch(self, source_config: dict[str, Any]) -> list[Any]:
@@ -122,7 +128,7 @@ class GdeltAdapter(BaseAdapter):
         @retry(
             reraise=True,
             stop=stop_after_attempt(self.max_attempts),
-            wait=wait_exponential(multiplier=6.0, min=6.0, max=25.0),
+            wait=wait_random_exponential(multiplier=8.0, min=8.0, max=40.0),
             retry=retry_if_exception(_is_retryable_gdelt_exc),
         )
         def _get() -> dict[str, Any]:

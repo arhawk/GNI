@@ -169,6 +169,15 @@ def test_seed_contains_new_worldmonitor_and_gdelt_sources():
         "us_gdelt_china",
         "in_gdelt_china",
         "de_gdelt_china",
+        "ru_gdelt_china",
+        "au_gdelt_china",
+        "ru_moscow_times",
+        "ru_meduza",
+        "ru_rt_russia",
+        "au_smh_world",
+        "au_sbs_world",
+        "au_abc_justin",
+        "us_state_press",
     ):
         assert expected in by_id
         assert by_id[expected]["active_status"] == "active"
