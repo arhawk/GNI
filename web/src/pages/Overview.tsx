@@ -1,312 +1,464 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { fetchDashboard, type DashboardPayload } from '../apiV2'
+import { useEvidenceDrawer } from '../components/EvidenceContext'
 import {
-  fetchCountryChinaAttitude,
-  fetchOverview,
-  type CountryAttitudeDetail,
-  type Overview as OverviewData,
-} from '../api'
-import { DualMap } from '../components/DualMap'
-import { useTimeWindow } from '../TimeWindowContext'
-
-type BoardMode = 'event_time_list' | 'country_china_attitude'
+  ClassificationBadge,
+  EmptyState,
+  ErrorState,
+  fmtDateTime,
+  fmtPct,
+  LoadingState,
+  PartialDataBanner,
+  SampleSizeBadge,
+  SectionCard,
+  StanceBar,
+} from '../components/StateBlocks'
+import '../components/intel.css'
 
 export function OverviewPage() {
-  const { window, setDataExtent } = useTimeWindow()
-  const [data, setData] = useState<OverviewData | null>(null)
+  const { openEvidence } = useEvidenceDrawer()
+  const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<BoardMode>('event_time_list')
-  const [attitudeDetail, setAttitudeDetail] = useState<CountryAttitudeDetail | null>(null)
-  const [attitudeError, setAttitudeError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
+    setLoading(true)
     setError(null)
-    const q =
-      window.presetDays != null
-        ? { days: window.presetDays }
-        : {
-            start: new Date(window.startMs).toISOString(),
-            end: new Date(window.endMs).toISOString(),
-          }
-    fetchOverview(q)
-      .then((payload) => {
-        setData(payload)
-        const min = payload.meta.data_min ? Date.parse(payload.meta.data_min) : null
-        const max = payload.meta.data_max ? Date.parse(payload.meta.data_max) : null
-        setDataExtent(
-          Number.isFinite(min) ? min : null,
-          Number.isFinite(max) ? max : Date.now(),
-        )
+    fetchDashboard(undefined, 14)
+      .then((res) => {
+        if (!cancelled) setData(res)
       })
-      .catch((e: Error) => setError(e.message))
-  }, [window.startMs, window.endMs, window.presetDays, setDataExtent])
-
-  const onCountryClick = useCallback((countryId: string) => {
-    setAttitudeError(null)
-    fetchCountryChinaAttitude(countryId)
-      .then(setAttitudeDetail)
-      .catch((e: Error) => setAttitudeError(e.message))
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
+  if (loading) return <LoadingState label="加载 Global Intelligence Dashboard…" />
   if (error) {
     return (
-      <div className="panel">
-        <p className="error">Failed to load overview: {error}</p>
-        <p className="muted">
-          Start API: <code>gni api serve</code> then rebuild events.
-        </p>
-      </div>
+      <ErrorState
+        error={error}
+        hint="请确认后端 API 正在运行：gni api serve（默认 127.0.0.1:8000）。"
+      />
     )
   }
-  if (!data) return <div className="panel muted">Loading overview…</div>
+  if (!data) return <EmptyState title="暂无仪表盘数据" />
 
-  const k = data.kpis
-  const topicCounts = countsFrom(data.topics)
-  const sentCounts = countsFrom(data.sentiment)
-  const topicEntries = Object.entries(topicCounts).sort((a, b) => b[1] - a[1])
-  const sentEntries = Object.entries(sentCounts).sort((a, b) => b[1] - a[1])
-  const timedEvents = [...data.events].sort((a, b) => {
-    const ta = Date.parse(a.sort_time || a.event_time || a.window_end || a.window_start || '') || 0
-    const tb = Date.parse(b.sort_time || b.event_time || b.window_end || b.window_start || '') || 0
-    return tb - ta
-  })
+  const ov = data.executive_overview
+  const st = ov.stance_distribution
+  const assess = data.executive_assessment
+  const att = data.global_attention
+  const maxTrend = Math.max(1, ...att.volume_trend.map((d) => d.china_articles))
+  const maxTopic = Math.max(1, ...att.topics.map((t) => t.article_count))
 
   return (
-    <div className="overview">
-      <p className="muted small">
-        Window {data.meta.window_start?.slice(0, 16).replace('T', ' ')} →{' '}
-        {data.meta.window_end?.slice(0, 16).replace('T', ' ')} UTC · universe{' '}
-        {k.total_articles_universe ?? '—'}
-      </p>
-
-      <section className="block">
-        <h2>A · 快照</h2>
-        <div className="kpi-grid">
-          <Kpi label="Total articles" value={k.total_articles_universe} hint="in window" />
-          <Kpi label="China article count" value={k.china_article_count} hint="raw count" />
-          <Kpi
-            label="Weighted volume"
-            value={fmtNum(k.weighted_article_volume)}
-            hint="≠ article count"
-          />
-          <Kpi
-            label="Monitoring countries"
-            value={k.monitoring_countries}
-            hint="active panel"
-          />
-          <Kpi
-            label="Active sources (registry)"
-            value={k.active_sources_registry}
-            hint="active_status"
-          />
-          <Kpi
-            label="China-set countries"
-            value={k.china_reporting_countries ?? k.country_count}
-            hint="in window"
-          />
-          <Kpi
-            label="China-set sources"
-            value={k.china_reporting_sources ?? k.source_count}
-            hint="in window"
-          />
-          <Kpi label="Major events" value={k.major_events} hint="proto / Event" />
-          <Kpi label="Alerts" value={k.alerts} />
+    <div className="intel-page">
+      <div className="intel-header-row">
+        <div>
+          <h1 style={{ margin: 0 }}>Global Intelligence Dashboard</h1>
+          <p className="muted small" style={{ margin: '0.25rem 0 0' }}>
+            周期 {data.meta.period} · 窗口 {fmtDateTime(data.meta.period_start)} →{' '}
+            {fmtDateTime(data.meta.period_end)} UTC · 方法论 {data.meta.methodology_version} · 核心指标：
+            {data.meta.core_kpi}
+          </p>
         </div>
-      </section>
+        <div className="intel-chip-row">
+          <Link to={data.daily_report_entry.href} className="intel-btn primary">
+            阅读完整每日情报简报 ({data.daily_report_entry.chapter_count} 章) →
+          </Link>
+          <Link to="/explorer" className="intel-btn">
+            证据与文章浏览
+          </Link>
+        </div>
+      </div>
 
-      <section className="block">
-        <div className="block-head">
-          <h2>B · 看板</h2>
-          <div className="seg" role="group" aria-label="看板模式">
-            <button
-              type="button"
-              className={mode === 'event_time_list' ? 'active' : ''}
-              onClick={() => {
-                setMode('event_time_list')
-                setAttitudeDetail(null)
-              }}
-            >
-              最新事件
-            </button>
-            <button
-              type="button"
-              className={mode === 'country_china_attitude' ? 'active' : ''}
-              onClick={() => setMode('country_china_attitude')}
-            >
-              对华态度（样本）
-            </button>
+      {ov.stance_coverage_rate != null && ov.stance_coverage_rate < 0.8 && (
+        <PartialDataBanner
+          message={`当前窗口立场覆盖率 ${fmtPct(ov.stance_coverage_rate)}（${st.classified_count}/${ov.article_count} 篇已完成 V1.0 对华立场标注，其余 ${st.unclassified_count} 篇为 Unclassified）。正中负比例分母不含 Unclassified。`}
+        />
+      )}
+
+      {/* A. Executive Overview */}
+      <SectionCard
+        title="A · Executive Overview"
+        subtitle="基于确定性 V1.0 统计快照（Unique Article Count，严格按 published_at 与信源国家归属）"
+      >
+        <div className="intel-kpi-row">
+          <div className="intel-kpi-card primary">
+            <div className="intel-kpi-label">今日涉华唯一文章总量 (Article Count)</div>
+            <div className="intel-kpi-value">{ov.article_count}</div>
+            <div className="intel-kpi-sub">
+              较昨日 {ov.vs_yesterday ? `${ov.vs_yesterday.delta >= 0 ? '+' : ''}${ov.vs_yesterday.delta}` : '—'} ·
+              较7日均 {ov.vs_7d_avg ? `${ov.vs_7d_avg.delta >= 0 ? '+' : ''}${ov.vs_7d_avg.delta}` : '—'}
+            </div>
+          </div>
+          <div className="intel-kpi-card">
+            <div className="intel-kpi-label">报道国家 / 接入监测国</div>
+            <div className="intel-kpi-value">
+              {ov.reporting_countries}
+              <span className="muted small"> / {ov.connected_countries ?? '—'}</span>
+            </div>
+            <div className="intel-kpi-sub">按信源所属国 (source_country)</div>
+          </div>
+          <div className="intel-kpi-card">
+            <div className="intel-kpi-label">报道媒体 / 活跃信源</div>
+            <div className="intel-kpi-value">
+              {ov.reporting_sources}
+              <span className="muted small"> / {ov.active_sources ?? '—'}</span>
+            </div>
+            <div className="intel-kpi-sub">当期涉华发稿信源</div>
+          </div>
+          <div className="intel-kpi-card">
+            <div className="intel-kpi-label">Stance Coverage Rate</div>
+            <div className="intel-kpi-value">{fmtPct(ov.stance_coverage_rate)}</div>
+            <div className="intel-kpi-sub">
+              已分类 {st.classified_count} · Unclassified {st.unclassified_count}
+            </div>
           </div>
         </div>
-        <p className="muted small">{data.meta.map_modes_note}</p>
 
-        {mode === 'event_time_list' && (
-          <ul className="event-list board-list">
-            {timedEvents.map((e) => (
-              <li key={e.id}>
-                <Link to={`/events/${e.id}`}>{e.title}</Link>
-                <span className="meta">
-                  {fmtWhen(e.sort_time || e.event_time || e.window_end)} · {e.article_count} arts ·{' '}
-                  {e.status}
-                </span>
-              </li>
-            ))}
-            {timedEvents.length === 0 && (
-              <li className="muted">
-                No events yet — run <code>gni events rebuild</code>.
-              </li>
-            )}
-          </ul>
-        )}
+        <div style={{ marginTop: '0.9rem' }}>
+          <div className="intel-header-row" style={{ marginBottom: '0.35rem' }}>
+            <strong style={{ fontSize: '0.88rem' }}>
+              整体对华立场分布（target: {st.target}）
+            </strong>
+            <Link to="/stance" className="muted small">
+              进入情感与立场分析 →
+            </Link>
+          </div>
+          <StanceBar
+            positiveRate={st.positive_rate}
+            neutralRate={st.neutral_rate}
+            negativeRate={st.negative_rate}
+          />
+          {st.denominator_note && <p className="muted small">{st.denominator_note}</p>}
+        </div>
+      </SectionCard>
 
-        {mode === 'country_china_attitude' && (
-          <>
-            <DualMap
-              mode="country_china_attitude"
-              eventPins={[]}
-              attitudePins={data.maps.country_china_attitude || []}
-              onCountryClick={onCountryClick}
-            />
-            <div className="attitude-panel">
-              {attitudeError && <p className="error">{attitudeError}</p>}
-              {!attitudeDetail && !attitudeError && (
-                <p className="muted small">
-                  Click a colored country for positive / neutral / negative / unknown counts. Grey =
-                  no monitored sample.
-                </p>
-              )}
-              {attitudeDetail && (
-                <>
-                  <h3>
-                    {attitudeDetail.country_id} · {attitudeDetail.label}
-                  </h3>
-                  <p className="muted small">{attitudeDetail.disclaimer}</p>
-                  <div className="kpi-grid compact">
-                    <Kpi label="Positive" value={attitudeDetail.counts.positive} />
-                    <Kpi label="Neutral" value={attitudeDetail.counts.neutral} />
-                    <Kpi label="Negative" value={attitudeDetail.counts.negative} />
-                    <Kpi label="Unknown" value={attitudeDetail.counts.unknown} />
+      {/* B. Executive Assessment */}
+      <SectionCard
+        title="B · Executive Assessment（核心研判结论）"
+        subtitle={`来源：日报第一章 / overall_situation_assessment · 状态：${assess.status}`}
+        right={
+          <Link to="/reports" className="intel-btn">
+            查看完整 6 章报告
+          </Link>
+        }
+      >
+        <div className="intel-banner" style={{ marginBottom: '0.8rem' }}>
+          <div className="muted small" style={{ marginBottom: '0.25rem' }}>
+            Overall Situation
+          </div>
+          <p style={{ margin: 0, lineHeight: 1.6 }}>
+            {assess.overall_situation || '当前周期尚未运行 LLM 研判，已展示确定性统计概览；可在报告中心触发研判。'}
+          </p>
+        </div>
+
+        <div className="intel-grid-2">
+          <div>
+            <h4>Key Findings</h4>
+            {assess.key_findings.length === 0 ? (
+              <p className="muted small">暂无结构化核心发现（可点击报告中心「生成 V2 研判」）。</p>
+            ) : (
+              assess.key_findings.slice(0, 5).map((f, idx) => (
+                <div key={idx} className="intel-finding-item">
+                  <div className="intel-header-row">
+                    <strong>{f.title || `发现 ${idx + 1}`}</strong>
+                    <ClassificationBadge kind={f.classification} />
                   </div>
-                  <ul className="event-list">
-                    {attitudeDetail.articles.slice(0, 12).map((a) => (
-                      <li key={a.article_id}>
-                        {a.url ? (
-                          <a href={a.url} target="_blank" rel="noreferrer">
-                            {a.title || a.article_id}
-                          </a>
-                        ) : (
-                          <span>{a.title || a.article_id}</span>
-                        )}
-                        <span className="meta">
-                          {a.source_name} · {a.sentiment ?? '—'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+                  <p className="small" style={{ margin: '0.35rem 0 0' }}>
+                    {f.statement || f.summary}
+                  </p>
+                  {Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0 && (
+                    <div className="intel-chip-row">
+                      {f.evidence_refs.slice(0, 3).map((ref, rIdx) => {
+                        const rid = ref.evidence_id || ref.article_id || ref.ref_id
+                        if (!rid || ref.type === 'metric') return null
+                        return (
+                          <button
+                            key={rIdx}
+                            type="button"
+                            className="intel-ev-btn"
+                            onClick={() => openEvidence(rid)}
+                          >
+                            证据: {ref.label || rid.slice(0, 12)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div>
+            <h4>Most Important Changes & Watch Items</h4>
+            {assess.most_important_changes.length > 0 && (
+              <ul className="event-list">
+                {assess.most_important_changes.slice(0, 4).map((c, idx) => (
+                  <li key={idx}>
+                    <strong>{c.title}</strong>
+                    <div className="muted small">{c.summary}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {assess.watch_items.length > 0 && (
+              <>
+                <h4 style={{ marginTop: '0.75rem' }}>Important Watch Items</h4>
+                <ul className="event-list">
+                  {assess.watch_items.slice(0, 4).map((w, idx) => (
+                    <li key={idx}>
+                      {typeof w === 'string' ? (
+                        w
+                      ) : (
+                        <>
+                          <strong>{String(w.observation_object || w.title || w.item || '观察项')}</strong>
+                          {w.trigger_condition ? (
+                            <div className="muted small">触发条件：{String(w.trigger_condition)}</div>
+                          ) : null}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div style={{ marginTop: '0.5rem' }}>
+              <Link to="/outlook" className="muted small">
+                查看完整展望与观察清单 →
+              </Link>
             </div>
-          </>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* C. Global Attention */}
+      <SectionCard
+        title="C · Global Attention（全球关注格局）"
+        subtitle={att.topic_overlap_note}
+      >
+        <div className="intel-grid-2">
+          <div>
+            <h4>近 14 日全球涉华报道量趋势</h4>
+            {att.volume_trend.length === 0 ? (
+              <p className="muted small">暂无历史趋势样本</p>
+            ) : (
+              <div className="bars">
+                {att.volume_trend.map((d) => (
+                  <div className="bar-row" key={d.date}>
+                    <span className="bar-label">{d.date.slice(5)}</span>
+                    <div className="bar-track">
+                      <div
+                        className="bar-fill"
+                        style={{ width: `${Math.round((d.china_articles / maxTrend) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="bar-n">{d.china_articles}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="intel-header-row">
+              <h4>国家报道量分布（按信源所属国）</h4>
+              <Link to="/countries" className="muted small">
+                多国对比 →
+              </Link>
+            </div>
+            {att.countries.length === 0 ? (
+              <p className="muted small">当期无国家样本</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>国家</th>
+                    <th>文章数</th>
+                    <th>立场覆盖率</th>
+                    <th>样本</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {att.countries.map((c) => (
+                    <tr key={c.scope_id}>
+                      <td>
+                        <Link to={`/countries?c=${encodeURIComponent(c.scope_id)}`}>
+                          <strong>{c.scope_id}</strong>
+                        </Link>
+                      </td>
+                      <td>{c.article_count}</td>
+                      <td>{fmtPct(c.stance_coverage_rate)}</td>
+                      <td>
+                        <SampleSizeBadge count={c.article_count} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        <div className="intel-grid-2" style={{ marginTop: '1rem' }}>
+          <div>
+            <h4>四大板块分布</h4>
+            <ul className="event-list">
+              {att.boards.map((b) => (
+                <li key={b.scope_id}>
+                  <span>{b.label_zh || b.scope_id}</span>
+                  <span className="meta">{b.article_count} 篇</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <div className="intel-header-row">
+              <h4>十五个固定议题分布（允许重叠）</h4>
+              <Link to="/topics" className="muted small">
+                进入议题分析 →
+              </Link>
+            </div>
+            <div className="bars">
+              {att.topics
+                .slice()
+                .sort((a, b) => b.article_count - a.article_count)
+                .slice(0, 10)
+                .map((t) => (
+                  <div className="bar-row" key={t.scope_id}>
+                    <span className="bar-label" style={{ width: '130px' }}>
+                      <Link to={`/topics?t=${encodeURIComponent(t.scope_id)}`}>
+                        {t.label_zh || t.scope_id}
+                      </Link>
+                    </span>
+                    <div className="bar-track">
+                      <div
+                        className="bar-fill"
+                        style={{ width: `${Math.round((t.article_count / maxTopic) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="bar-n">{t.article_count}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* D. Key Developments */}
+      <SectionCard
+        title="D · Key Developments（重点事件）"
+        subtitle="点击事件查看事件时间线 (event_time)、跨国差异与 7 维事件研判"
+        right={
+          <Link to="/events" className="muted small">
+            全部事件 →
+          </Link>
+        }
+      >
+        {data.key_developments.length === 0 ? (
+          <p className="muted small">当前周期暂无聚合重点事件。</p>
+        ) : (
+          <div className="intel-grid-2">
+            {data.key_developments.slice(0, 6).map((ev) => (
+              <div key={ev.event_id} className="intel-card">
+                <div className="intel-header-row">
+                  <Link to={`/events/${ev.event_id}`}>
+                    <strong>{ev.title}</strong>
+                  </Link>
+                  <span className="intel-badge">{ev.event_type || 'event'}</span>
+                </div>
+                <div className="muted small" style={{ marginTop: '0.25rem' }}>
+                  事件时间：{ev.event_time ? fmtDateTime(ev.event_time) : '时间未知'} · {ev.article_count} 篇 ·{' '}
+                  {ev.country_count} 国 ({ev.countries.join(', ') || '—'}) · {ev.source_count} 家媒体
+                </div>
+                {ev.overview_text && <p className="small">{ev.overview_text}</p>}
+                {ev.representative_articles.length > 0 && (
+                  <div className="intel-chip-row">
+                    {ev.representative_articles.map((a) => (
+                      <button
+                        key={a.article_id}
+                        type="button"
+                        className="intel-ev-btn"
+                        onClick={() => openEvidence(a.article_id)}
+                      >
+                        代表文章: {(a.title || a.article_id).slice(0, 26)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
-      </section>
+      </SectionCard>
 
-      <section className="block">
-        <h2>C · 情感分布</h2>
-        <p className="muted small">情感与立场分列，此处仅情感标签。</p>
-        <div className="bars">
-          {sentEntries.length === 0 && <p className="muted">No sentiment data in window.</p>}
-          {sentEntries.map(([label, n]) => (
-            <Bar key={label} label={label} value={n} max={sentEntries[0]?.[1] || 1} />
-          ))}
+      {/* E. Emerging Signals */}
+      <SectionCard
+        title="E · Emerging Signals（新兴信号：严格区分事实与分析推断）"
+        right={
+          <Link to="/narratives" className="muted small">
+            叙事追踪 →
+          </Link>
+        }
+      >
+        <div className="intel-grid-2">
+          <div>
+            <h4>
+              <ClassificationBadge kind="Fact" /> 已观察到的事实与规则信号
+            </h4>
+            {data.emerging_signals.observed_facts.length === 0 ? (
+              <p className="muted small">当期无新增规则异常事实。</p>
+            ) : (
+              data.emerging_signals.observed_facts.slice(0, 5).map((s, idx) => (
+                <div key={idx} className="intel-finding-item">
+                  <strong>{String(s.title || s.statement || '信号')}</strong>
+                  <div className="muted small">{String(s.summary || '')}</div>
+                </div>
+              ))
+            )}
+          </div>
+          <div>
+            <h4>
+              <ClassificationBadge kind="Inference" /> 分析推断与待验证风险信号
+            </h4>
+            {data.emerging_signals.analytical_inferences.length === 0 ? (
+              <p className="muted small">暂无模型推断信号（运行 V2 研判后自动展示）。</p>
+            ) : (
+              data.emerging_signals.analytical_inferences.slice(0, 5).map((s, idx) => (
+                <div key={idx} className="intel-finding-item">
+                  <strong>{String(s.title || s.statement || '推断')}</strong>
+                  <div className="muted small">{String(s.summary || '')}</div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
-      </section>
+      </SectionCard>
 
-      <section className="block">
-        <h2>D · 议题结构</h2>
-        <p className="muted small">taxonomy_v0.4 主题占比（非威胁分类）。</p>
-        <div className="bars">
-          {topicEntries.length === 0 && <p className="muted">No topic data in window.</p>}
-          {topicEntries.slice(0, 12).map(([label, n]) => (
-            <Bar key={label} label={label} value={n} max={topicEntries[0]?.[1] || 1} />
-          ))}
+      {/* F. Daily Report Entry */}
+      <div className="intel-banner intel-header-row">
+        <div>
+          <strong>F · Daily Intelligence Brief（完整每日情报简报）</strong>
+          <div className="muted small">
+            报告 ID：{data.daily_report_entry.report_id || data.meta.period} · 生成状态：
+            {data.daily_report_entry.generation_status || '—'} · 校验状态：
+            {data.daily_report_entry.validation_status || '—'}
+          </div>
         </div>
-      </section>
-
-      <section className="block">
-        <h2>E · 重要事件与异常</h2>
-        <p className="muted small">{data.anomalies.note}</p>
-        <ul className="event-list">
-          {data.anomalies.items.map((item) => (
-            <li key={item.event_id}>
-              <Link to={`/events/${item.event_id}`}>{item.title}</Link>
-              <span className="meta">
-                score {item.importance_score ?? '—'} · {item.article_count} arts
-              </span>
-            </li>
-          ))}
-          {data.anomalies.items.length === 0 && (
-            <li className="muted">
-              No events yet — run <code>gni events rebuild</code>.
-            </li>
-          )}
-        </ul>
-      </section>
-    </div>
-  )
-}
-
-function Kpi({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: number | string | null | undefined
-  hint?: string
-}) {
-  return (
-    <div className="kpi">
-      <div className="kpi-value">{value ?? '—'}</div>
-      <div className="kpi-label">{label}</div>
-      {hint && <div className="kpi-hint">{hint}</div>}
-    </div>
-  )
-}
-
-function Bar({ label, value, max }: { label: string; value: number; max: number }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0
-  return (
-    <div className="bar-row">
-      <span className="bar-label">{label}</span>
-      <div className="bar-track">
-        <div className="bar-fill" style={{ width: `${pct}%` }} />
+        <Link to="/reports" className="intel-btn primary">
+          进入完整 6 章日报 →
+        </Link>
       </div>
-      <span className="bar-n">{value}</span>
     </div>
-  )
-}
-
-function fmtNum(n: number | null | undefined) {
-  if (n == null) return '—'
-  return Number.isInteger(n) ? n : n.toFixed(2)
-}
-
-function fmtWhen(iso: string | null | undefined) {
-  if (!iso) return '—'
-  return iso.slice(0, 16).replace('T', ' ')
-}
-
-function countsFrom(blob: unknown): Record<string, number> {
-  if (!blob || typeof blob !== 'object') return {}
-  const obj = blob as Record<string, unknown>
-  const counts = obj.counts
-  if (counts && typeof counts === 'object') {
-    return Object.fromEntries(
-      Object.entries(counts as Record<string, unknown>).filter(
-        (e): e is [string, number] => typeof e[1] === 'number',
-      ),
-    )
-  }
-  return Object.fromEntries(
-    Object.entries(obj).filter((e): e is [string, number] => typeof e[1] === 'number'),
   )
 }

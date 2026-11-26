@@ -16,7 +16,8 @@ from gni.events.fingerprint import (
 )
 from gni.events.match import cluster_fingerprints
 from gni.events.rollup import _shares
-from gni.events.service import overview_payload, rebuild_proto_events
+from gni.dashboard.overview import overview_payload
+from gni.events.service import rebuild_proto_events
 from gni.infrastructure.db import ensure_schema, reset_engine, session_scope
 from gni.infrastructure.models import Article, Country, Organization, Source
 from collections import Counter

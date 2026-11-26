@@ -58,7 +58,13 @@ def trends_payload(
         dk = _day_key(t)
         by_day[dk] += 1
         structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
-        label = ((structured.get("sentiment") or {}).get("label") or "unknown").lower()
+        raw_sent = structured.get("sentiment")
+        if isinstance(raw_sent, dict):
+            label = str(raw_sent.get("label") or "unknown").lower()
+        elif isinstance(raw_sent, str) and raw_sent.strip():
+            label = raw_sent.strip().lower()
+        else:
+            label = "unknown"
         sent_by_day[dk][label] += 1
         tp = (structured.get("topics") or {})
         if isinstance(tp, dict) and tp.get("primary"):

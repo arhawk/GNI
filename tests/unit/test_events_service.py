@@ -6,7 +6,8 @@ from uuid import uuid4
 import pytest
 
 from gni.core.config import get_settings
-from gni.events.service import get_event_detail, list_events, overview_payload, rebuild_proto_events
+from gni.dashboard.overview import overview_payload
+from gni.events.service import get_event_detail, list_events, rebuild_proto_events
 from gni.infrastructure.db import ensure_schema, reset_engine, session_scope
 from gni.infrastructure.models import Article, Country, EventLocation, Organization, Source
 

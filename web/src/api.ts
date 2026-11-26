@@ -198,6 +198,7 @@ export type DailyReport = {
     country_ids: string[]
   }
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
+  report_package?: import('./apiV2').ReportPackage
   intelligence?: ReportIntelligenceBlock
   narratives?: {
     executive?: string
@@ -705,12 +706,20 @@ export type ReportIntelligenceBlock = {
 
 export function analyzeReport<T = DailyReport | PeriodReport>(
   reportType: 'daily' | 'weekly' | 'monthly',
-  params?: { period?: string; tasks?: string[]; force?: boolean },
+  params?: {
+    period?: string
+    tasks?: string[]
+    force?: boolean
+    engine?: 'legacy' | 'v2'
+    save_snapshot?: boolean
+  },
 ) {
   return post<T>(`/api/reports/${reportType}/analyze`, {
     period: params?.period ?? null,
     tasks: params?.tasks ?? null,
     force: Boolean(params?.force),
+    engine: params?.engine ?? 'legacy',
+    save_snapshot: Boolean(params?.save_snapshot),
   })
 }
 
@@ -883,3 +892,5 @@ export async function fetchArticleTrace(articleIds: string[], limit = 30) {
   if (!res.ok) throw new Error(`HTTP ${res.status}: /api/articles/trace`)
   return (await res.json()) as { articles: TraceArticle[] }
 }
+
+export * from './apiV2'

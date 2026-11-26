@@ -58,7 +58,4 @@ def test_layer_dependency_direction():
                     if node.module.startswith(forbidden_prefixes):
                         violations.append(f"{py.relative_to(root)} -> {node.module}")
 
-    # Known pre-Phase-4 legacy coupling (overview_payload in events/service.py); no new inversions allowed.
-    known_legacy = {"events/service.py -> gni.dashboard.data"}
-    unexpected = [v for v in violations if v not in known_legacy]
-    assert not unexpected, f"Layer dependency violations: {unexpected}"
+    assert not violations, f"Layer dependency violations: {violations}"

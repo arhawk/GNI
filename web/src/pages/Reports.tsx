@@ -4,11 +4,14 @@ import {
   analyzeReport,
   fetchDailyReport,
   fetchMonthlyReport,
+  fetchReportsList,
   fetchWeeklyReport,
   type DailyReport,
   type PeriodReport,
+  type ReportListItem,
   type V1StatsByScope,
 } from '../api'
+import { DailyReportPackageView } from '../components/DailyReportPackageView'
 import {
   CrossCountryAnalysisBlock,
   EventInterpretationCards,
@@ -30,6 +33,9 @@ export function ReportsPage() {
   const [tab, setTab] = useState<Tab>('daily')
   const [data, setData] = useState<DailyReport | null>(null)
   const [period, setPeriod] = useState<PeriodReport | null>(null)
+  const [snapshots, setSnapshots] = useState<ReportListItem[]>([])
+  const [selectedDailyPeriod, setSelectedDailyPeriod] = useState<string | undefined>(undefined)
+  const [viewMode, setViewMode] = useState<'v2_package' | 'legacy'>('v2_package')
   const [error, setError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
@@ -38,12 +44,18 @@ export function ReportsPage() {
   const [showDetail, setShowDetail] = useState(false)
 
   useEffect(() => {
+    fetchReportsList('daily', 20)
+      .then((r) => setSnapshots(r.reports || []))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     setError(null)
     setAnalyzeError(null)
     setData(null)
     setPeriod(null)
     if (tab === 'daily') {
-      fetchDailyReport()
+      fetchDailyReport(selectedDailyPeriod)
         .then((payload) => {
           const v4 =
             payload?.schema_version === 'daily_report_schema_v4' &&
@@ -64,9 +76,12 @@ export function ReportsPage() {
     loader
       .then((payload) => setPeriod(payload))
       .catch((e: Error) => setError(e.message))
-  }, [tab])
+  }, [tab, selectedDailyPeriod])
 
-  async function triggerAnalyze(reportType: Tab, opts: { force?: boolean; tasks?: string[] }) {
+  async function triggerAnalyze(
+    reportType: Tab,
+    opts: { force?: boolean; tasks?: string[]; engine?: 'legacy' | 'v2'; save_snapshot?: boolean },
+  ) {
     setAnalyzing(true)
     setAnalyzeError(null)
     try {
@@ -80,9 +95,16 @@ export function ReportsPage() {
         period: periodArg,
         force: opts.force,
         tasks: opts.tasks,
+        engine: opts.engine,
+        save_snapshot: opts.save_snapshot,
       })
       if (reportType === 'daily') {
         setData(updated as DailyReport)
+        if (opts.save_snapshot) {
+          fetchReportsList('daily', 20)
+            .then((r) => setSnapshots(r.reports || []))
+            .catch(() => {})
+        }
       } else {
         setPeriod(updated as PeriodReport)
       }
@@ -114,17 +136,51 @@ export function ReportsPage() {
       {error && <p className="error">加载失败: {error}</p>}
       {tab === 'daily' && !error && !data && <p className="muted">加载 Daily Brief…</p>}
       {tab === 'daily' && data && (
-        <DailyBrief
-          data={data}
-          analyzing={analyzing}
-          analyzeError={analyzeError}
-          onGenerate={(force) => triggerAnalyze('daily', { force })}
-          onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
-          showToneDetail={showToneDetail}
-          setShowToneDetail={setShowToneDetail}
-          showCoverageDetail={showCoverageDetail}
-          setShowCoverageDetail={setShowCoverageDetail}
-        />
+        <>
+          {data.report_package && (
+            <div className="intel-chip-row" style={{ marginBottom: '0.75rem' }}>
+              <button
+                type="button"
+                className={viewMode === 'v2_package' ? 'intel-btn primary' : 'intel-btn'}
+                onClick={() => setViewMode('v2_package')}
+              >
+                V2.0 六章情报简报 (Report Package)
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'legacy' ? 'intel-btn primary' : 'intel-btn'}
+                onClick={() => setViewMode('legacy')}
+              >
+                经典统计明细视图 (V4)
+              </button>
+            </div>
+          )}
+          {data.report_package && viewMode === 'v2_package' ? (
+            <DailyReportPackageView
+              pkg={data.report_package}
+              snapshots={snapshots}
+              selectedPeriod={selectedDailyPeriod}
+              onSelectPeriod={(p) => setSelectedDailyPeriod(p || undefined)}
+              analyzing={analyzing}
+              analyzeError={analyzeError}
+              onRunV2={(force) =>
+                triggerAnalyze('daily', { force, engine: 'v2', save_snapshot: true })
+              }
+            />
+          ) : (
+            <DailyBrief
+              data={data}
+              analyzing={analyzing}
+              analyzeError={analyzeError}
+              onGenerate={(force) => triggerAnalyze('daily', { force })}
+              onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
+              showToneDetail={showToneDetail}
+              setShowToneDetail={setShowToneDetail}
+              showCoverageDetail={showCoverageDetail}
+              setShowCoverageDetail={setShowCoverageDetail}
+            />
+          )}
+        </>
       )}
       {(tab === 'weekly' || tab === 'monthly') && !error && !period && (
         <p className="muted">加载{tab === 'weekly' ? '周报' : '月报'}…</p>

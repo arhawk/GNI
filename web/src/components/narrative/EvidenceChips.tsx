@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchArticleTrace, type EvidenceRef, type TraceArticle } from '../../api'
+import { useEvidenceDrawer } from '../EvidenceContext'
 import { EvidenceTraceTable } from '../tables'
 import './narrative.css'
 
@@ -21,6 +22,7 @@ function shortRefLabel(ref: EvidenceRef): string {
 }
 
 export function EvidenceChips({ refs }: { refs?: EvidenceRef[] }) {
+  const { openEvidence } = useEvidenceDrawer()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -86,16 +88,16 @@ export function EvidenceChips({ refs }: { refs?: EvidenceRef[] }) {
               </span>
             )
           }
-          // article ref — opens trace drawer (or direct link)
+          // article / evidence ref — opens global EvidenceDrawer with highlighted span
           return (
             <button
               key={key}
               type="button"
               className="gni-ev-chip"
-              onClick={toggleArticleTrace}
-              title={`点击查看文章溯源证据 (${ref.ref_id})`}
+              onClick={() => openEvidence(ref.ref_id)}
+              title={`点击在侧栏定位原文证据 (${ref.ref_id})`}
             >
-              <span className="gni-ev-chip-kind">文章</span>
+              <span className="gni-ev-chip-kind">证据</span>
               <span>{shortRefLabel(ref)}</span>
             </button>
           )
