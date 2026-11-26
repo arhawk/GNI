@@ -333,6 +333,8 @@ def build_daily_report(
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
+    run_v2_assessments: bool = False,
+    assessment_tasks: list[str] | None = None,
 ) -> dict[str, Any]:
     countries = country_scope or list(MONITOR_DEFAULT)
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
@@ -1406,6 +1408,19 @@ def build_daily_report(
                 payload["validation"] = validate_daily_report(payload)
             else:
                 payload["polish"] = {"applied": False, "reason": "llm_unavailable_or_rejected"}
+
+    # Phase 6: Attach unified 6-Chapter + Appendix ReportPackageContract (100% backward compatible)
+    from gni.reports.daily_package import assemble_daily_report_package
+
+    report_pkg = assemble_daily_report_package(
+        session,
+        payload=payload,
+        run_assessments=run_v2_assessments,
+        assessment_tasks=assessment_tasks,
+        llm_client=llm_client,
+        force=force_analyze,
+    )
+    payload["report_package"] = report_pkg.model_dump(mode="json")
 
     return payload
 

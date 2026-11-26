@@ -167,6 +167,8 @@ class ReportAnalyzeRequest(BaseModel):
     period: str | None = Field(default=None, description="YYYY-MM-DD (daily/weekly end) or YYYY-MM (monthly)")
     tasks: list[str] | None = Field(default=None, description="Optional subset of task_type names to run/retry")
     force: bool = Field(default=False, description="Bypass cache and regenerate targeted tasks")
+    engine: str = Field(default="legacy", description="'legacy' (default 3-task) or 'v2' (unified 9-task assessment engine)")
+    save_snapshot: bool = Field(default=False, description="Persist generated daily report into ReportSnapshot")
 
 
 @app.post("/api/reports/{report_type}/analyze")
@@ -178,13 +180,21 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict:
     try:
         with session_scope() as session:
             if rt == "daily":
-                return build_daily_report(
+                use_v2 = body.engine.strip().lower() == "v2"
+                payload = build_daily_report(
                     session,
                     day=body.period,
-                    analyze=True,
-                    analyze_tasks=body.tasks,
+                    analyze=not use_v2,
+                    analyze_tasks=None if use_v2 else body.tasks,
                     force_analyze=body.force,
+                    run_v2_assessments=use_v2,
+                    assessment_tasks=body.tasks if use_v2 else None,
                 )
+                if body.save_snapshot:
+                    from gni.reports.daily_package import save_daily_report_snapshot
+
+                    save_daily_report_snapshot(session, payload)
+                return payload
             if rt == "weekly":
                 return build_weekly_report(
                     session,

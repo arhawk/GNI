@@ -451,6 +451,44 @@ class EvidencePackageContract(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 6b. Unified Assessment Result Contract (Phase 5.2)
+# ---------------------------------------------------------------------------
+
+
+class AssessmentResultContract(BaseModel):
+    """Unified output contract for all 9 V2.0 Assessment Tasks.
+
+    Strictly separates:
+    - observations: direct facts grounded in EvidencePackage (Fact)
+    - interpretations: analytical explanations of facts & relations (Inference)
+    - hypotheses: tentative hypotheses requiring further verification (Hypothesis)
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    task_type: str
+    executive_summary: str = ""
+    key_findings: list[dict[str, Any]] = Field(default_factory=list)
+    observations: list[dict[str, Any]] = Field(default_factory=list)
+    interpretations: list[dict[str, Any]] = Field(default_factory=list)
+    hypotheses: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_refs: list[dict[str, Any]] = Field(default_factory=list)
+    supporting_metrics: list[str] = Field(default_factory=list)
+    counter_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    confidence: Literal["high", "medium", "low"] = "low"
+    confidence_note: str = "Subjective model confidence only; must not be interpreted as empirical accuracy."
+    limitations: list[str] = Field(default_factory=list)
+    watch_items: list[dict[str, Any]] = Field(default_factory=list)
+    # Task-specific structured details (e.g., 7-part event_interpretations, country_comparisons, outlook_signals)
+    details: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["completed", "needs_review", "insufficient_data", "degraded", "failed"] = "completed"
+    validation_result: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(
+        default_factory=lambda: {"schema_version": ASSESSMENT_SCHEMA_VERSION}
+    )
+
+
+# ---------------------------------------------------------------------------
 # 7. Report Package Contract
 # ---------------------------------------------------------------------------
 
@@ -467,7 +505,8 @@ class ReportSectionContract(BaseModel):
     metrics: list[dict[str, Any]] = Field(default_factory=list)
     visualizations: list[dict[str, Any]] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
-    status: Literal["completed", "partial", "needs_review", "rule_only", "failed"] = "completed"
+    assessment_task_types: list[str] = Field(default_factory=list)
+    status: Literal["completed", "partial", "needs_review", "rule_only", "insufficient_data", "failed"] = "completed"
 
 
 class ReportPackageContract(BaseModel):
@@ -476,11 +515,21 @@ class ReportPackageContract(BaseModel):
     report_id: str
     report_type: Literal["daily", "weekly", "monthly"]
     period: dict[str, Any] = Field(default_factory=dict)
+    period_start: str | None = None
+    period_end: str | None = None
+    generated_at: str | None = None
     metric_run_id: str | None = None
+    metric_snapshot_refs: list[str] = Field(default_factory=list)
+    assessment_refs: list[dict[str, Any]] = Field(default_factory=list)
     assessment_results: list[dict[str, Any]] = Field(default_factory=list)
     sections: list[ReportSectionContract] = Field(default_factory=list)
+    evidence_refs: list[dict[str, Any]] = Field(default_factory=list)
+    methodology: dict[str, Any] = Field(default_factory=dict)
     coverage: dict[str, Any] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
+    generation_status: Literal["completed", "partial", "needs_review", "rule_only", "insufficient_data", "failed"] = "completed"
+    validation_status: Literal["passed", "needs_review", "failed"] = "passed"
+    validation_notes: list[str] = Field(default_factory=list)
     generation_metadata: dict[str, Any] = Field(
         default_factory=lambda: {"report_schema_version": REPORT_PACKAGE_VERSION}
     )

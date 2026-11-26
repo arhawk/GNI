@@ -64,6 +64,18 @@ _REASONING_RULES: list[tuple[str, re.Pattern[str], str, str]] = [
         "downgrade",
         "不得将相关性直接写成绝对因果关系",
     ),
+    (
+        "coordinated_propagation_overclaim",
+        re.compile(r"(?<!并非)(?<!不构成)(?<!不能推断)(?<!并非存在)(存在协调传播|证实了?协调传播|有组织的协同炒作|统一协调宣传)"),
+        "downgrade",
+        "不得仅因多国媒体同时报道或叙事相似就认定存在协调传播",
+    ),
+    (
+        "volume_as_real_risk",
+        re.compile(r"(负面报道(?:数量)?(?:增加|上升|增多)[^。；\n]{0,14}(?:说明|意味着|等同于|证明)[^。；\n]{0,12}(?:现实|实际|战略|政策)风险(?:上升|加剧|恶化))"),
+        "downgrade",
+        "不得将负面报道数量增加直接等同于现实世界战略风险上升",
+    ),
 ]
 
 _CERTAINTY_RE = re.compile(r"(必然发生|一定会|肯定将|已成定局|毫无疑问将)")

@@ -722,9 +722,35 @@ def prepare_evidence_bundle(
         framing = structured.get("framing")
         frame_primary = framing.get("primary") if isinstance(framing, dict) else None
         cs = structured.get("china_stance") if isinstance(structured.get("china_stance"), dict) else {}
+        ai = structured.get("article_intelligence") if isinstance(structured.get("article_intelligence"), dict) else {}
+        raw_ev_spans = ai.get("evidence") if isinstance(ai.get("evidence"), list) else (
+            structured.get("evidence") if isinstance(structured.get("evidence"), list) else []
+        )
+        verified_spans: list[dict[str, Any]] = []
+        for idx_sp, sp in enumerate(raw_ev_spans[:4]):
+            if not isinstance(sp, dict):
+                continue
+            txt = str(sp.get("text_span") or sp.get("quote") or "").strip()
+            if not txt:
+                continue
+            verified_spans.append(
+                {
+                    "evidence_id": str(sp.get("evidence_id") or f"{art.id[:8]}_ev_{idx_sp}"),
+                    "article_id": art.id,
+                    "article_version_id": sp.get("article_version_id") or (ana.article_version_id if ana else None),
+                    "text_span": txt[:320],
+                    "start_offset": sp.get("start_offset"),
+                    "end_offset": sp.get("end_offset"),
+                    "validated": bool(sp.get("validated")),
+                    "evidence_type": str(sp.get("evidence_type") or "general"),
+                }
+            )
+        raw_nars = structured.get("narratives") if isinstance(structured.get("narratives"), list) else []
+        qual = structured.get("quality") if isinstance(structured.get("quality"), dict) else {}
         excerpt = " | ".join(spans_by_aid.get(aid) or []) or (art.content_clean or "")[:650]
         return {
             "article_id": art.id,
+            "article_version_id": ana.article_version_id if ana else None,
             "title": art.title,
             "source_id": art.source_id,
             "source_name": src.name if src else art.source_id,
@@ -735,11 +761,20 @@ def prepare_evidence_bundle(
             "published_at": art.published_at.isoformat() if art.published_at else None,
             "url": art.url,
             "stance_label": stance,
-            "stance_confidence": cs.get("stance_confidence") if sver == "article_analysis_v1.0" else None,
+            "expression_owner": str(cs.get("expression_owner") or "unclear"),
+            "stance_confidence": cs.get("stance_confidence") if sver in {"article_analysis_v1.0", "article_analysis_v1.1"} else None,
+            "sentiment_label": (
+                (structured.get("sentiment") or {}).get("label")
+                if isinstance(structured.get("sentiment"), dict)
+                else None
+            ),
             "topics_v1": topics_v1,
             "boards_v1": boards_v1,
             "framing": frame_primary,
+            "narratives": raw_nars[:3],
             "stance_quotes": quotes,
+            "verified_evidence_spans": verified_spans,
+            "quality_flags": list(qual.get("quality_flags") or []),
             "china_excerpt": excerpt[:700],
             "event_id": event_id,
         }
@@ -1074,3 +1109,351 @@ def prepare_evidence_bundle(
         allowed_numbers=allowed_numbers,
         article_url_map=article_url_map,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5.3: Unified Task-Targeted EvidencePackageContract Builder
+# ---------------------------------------------------------------------------
+
+_TASK_LIMITS: dict[str, dict[str, int]] = {
+    "overall_situation_assessment": {"articles": 12, "events": 5, "narratives": 5, "evidence": 12},
+    "executive_analysis": {"articles": 12, "events": 5, "narratives": 5, "evidence": 12},
+    "change_detection_assessment": {"articles": 10, "events": 4, "narratives": 4, "evidence": 10},
+    "event_analysis": {"articles": 15, "events": 6, "narratives": 4, "evidence": 15},
+    "topic_analysis": {"articles": 12, "events": 4, "narratives": 5, "evidence": 12},
+    "country_comparison": {"articles": 14, "events": 4, "narratives": 4, "evidence": 14},
+    "narrative_analysis": {"articles": 12, "events": 4, "narratives": 8, "evidence": 14},
+    "sentiment_stance_analysis": {"articles": 12, "events": 3, "narratives": 4, "evidence": 14},
+    "risk_signal_assessment": {"articles": 10, "events": 5, "narratives": 5, "evidence": 12},
+    "outlook_assessment": {"articles": 10, "events": 5, "narratives": 6, "evidence": 12},
+    "emerging_signals": {"articles": 10, "events": 5, "narratives": 6, "evidence": 12},
+}
+
+
+def _extract_traceable_evidence_items(
+    articles: list[dict[str, Any]],
+    *,
+    task_type: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for art in articles:
+        if len(out) >= limit:
+            break
+        aid = str(art.get("article_id") or "")
+        if not aid:
+            continue
+        spans = art.get("verified_evidence_spans") or []
+        if spans:
+            for sp in spans[:2]:
+                if len(out) >= limit:
+                    break
+                ev_id = str(sp.get("evidence_id") or f"{aid[:8]}_ev")
+                key = (aid, ev_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(
+                    {
+                        "evidence_id": ev_id,
+                        "article_id": aid,
+                        "article_version_id": sp.get("article_version_id") or art.get("article_version_id"),
+                        "text_span": sp.get("text_span") or "",
+                        "start_offset": sp.get("start_offset"),
+                        "end_offset": sp.get("end_offset"),
+                        "validated": bool(sp.get("validated")),
+                        "source_name": art.get("source_name"),
+                        "source_country": art.get("source_country"),
+                        "published_at": art.get("published_at"),
+                        "stance_label": art.get("stance_label"),
+                        "expression_owner": art.get("expression_owner", "unclear"),
+                        "related_topics": list(art.get("topics_v1") or []),
+                        "related_event_id": art.get("event_id"),
+                        "analysis_task": task_type,
+                    }
+                )
+        else:
+            snippet = (art.get("stance_quotes") or [art.get("china_excerpt") or ""])[0]
+            if not snippet:
+                continue
+            ev_id = f"{aid[:8]}_excerpt"
+            if (aid, ev_id) in seen:
+                continue
+            seen.add((aid, ev_id))
+            out.append(
+                {
+                    "evidence_id": ev_id,
+                    "article_id": aid,
+                    "article_version_id": art.get("article_version_id"),
+                    "text_span": str(snippet)[:320],
+                    "start_offset": None,
+                    "end_offset": None,
+                    "validated": False,
+                    "source_name": art.get("source_name"),
+                    "source_country": art.get("source_country"),
+                    "published_at": art.get("published_at"),
+                    "stance_label": art.get("stance_label"),
+                    "expression_owner": art.get("expression_owner", "unclear"),
+                    "related_topics": list(art.get("topics_v1") or []),
+                    "related_event_id": art.get("event_id"),
+                    "analysis_task": task_type,
+                }
+            )
+    return out
+
+
+def _compute_change_signals_for_package(bundle: EvidenceBundle) -> list[dict[str, Any]]:
+    """Run deterministic Phase 4 multi-factor change detection over bundle metrics."""
+    from gni.metrics.changes import detect_volume_change
+
+    signals: list[dict[str, Any]] = []
+    hist = bundle.historical or {}
+    stat = bundle.statistical or {}
+    g = stat.get("global") if isinstance(stat.get("global"), dict) else {}
+    cur_n = int(g.get("article_count") or bundle.global_article_count or 0)
+    prev_7d = hist.get("vs_7d_avg") if isinstance(hist.get("vs_7d_avg"), dict) else {}
+    base_mean = prev_7d.get("china_articles")
+    if base_mean is None:
+        base_mean = (hist.get("vs_yesterday") or {}).get("china_articles") if isinstance(hist.get("vs_yesterday"), dict) else None
+
+    countries = {a.get("source_country") for a in bundle.articles if a.get("source_country")}
+    sources = {a.get("source_id") for a in bundle.articles if a.get("source_id")}
+    if base_mean is not None:
+        sig = detect_volume_change(
+            subject="GLOBAL",
+            signal_type="attention_change",
+            recent_count=cur_n,
+            baseline_mean=float(base_mean),
+            min_sample_size=5,
+            min_abs_delta=3,
+            min_rel_change=0.4,
+            country_count=max(1, len(countries)),
+            source_count=max(1, len(sources)),
+            supporting_articles=[a["article_id"] for a in bundle.articles[:10]],
+        )
+        if sig is not None:
+            signals.append(sig.model_dump(mode="json"))
+    return signals
+
+
+def _collect_narratives_for_package(
+    session: Session,
+    bundle: EvidenceBundle,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Load persisted NarrativeCluster rows or cluster article-level narratives deterministically."""
+    from gni.events.narratives import ArticleNarrativeInput, cluster_narratives
+    from gni.infrastructure.models import EventNarrativeEvidence, NarrativeCluster
+
+    event_ids = [ev["event_id"] for ev in bundle.events if ev.get("event_id")]
+    persisted: list[dict[str, Any]] = []
+    if event_ids:
+        clusters = list(
+            session.scalars(
+                select(NarrativeCluster).where(NarrativeCluster.event_id.in_(event_ids)).limit(limit)
+            ).all()
+        )
+        if clusters:
+            cids = [c.id for c in clusters]
+            ev_rows = list(
+                session.scalars(
+                    select(EventNarrativeEvidence).where(
+                        EventNarrativeEvidence.narrative_cluster_id.in_(cids)
+                    )
+                ).all()
+            )
+            by_cid: dict[str, list[dict[str, Any]]] = {}
+            for r in ev_rows:
+                by_cid.setdefault(r.narrative_cluster_id, []).append(
+                    {"article_id": r.article_id, "quote": (r.quote or "")[:240]}
+                )
+            for c in clusters:
+                persisted.append(
+                    {
+                        "narrative_cluster_id": c.id,
+                        "event_id": c.event_id,
+                        "canonical_frame": c.frame_id or "unspecified",
+                        "canonical_claim": c.label,
+                        "summary": c.summary or "",
+                        "evidence": by_cid.get(c.id, [])[:5],
+                        "source": "db_narrative_cluster",
+                    }
+                )
+            return persisted[:limit]
+
+    # Fallback: deterministic clustering from article-level narratives[] (Phase 3 -> Phase 4d)
+    nar_inputs: list[ArticleNarrativeInput] = []
+    for art in bundle.articles:
+        pub = None
+        if art.get("published_at"):
+            try:
+                pub = datetime.fromisoformat(str(art["published_at"]).replace("Z", "+00:00"))
+            except ValueError:
+                pub = None
+        for n in art.get("narratives") or []:
+            if not isinstance(n, dict) or not (n.get("frame") and n.get("claim")):
+                continue
+            nar_inputs.append(
+                ArticleNarrativeInput(
+                    article_id=art["article_id"],
+                    country_id=art.get("source_country"),
+                    published_at=pub,
+                    frame=str(n["frame"]),
+                    claim=str(n["claim"]),
+                    attribution=str(n.get("attribution") or "mention"),
+                    tone=str(n.get("tone") or "unclear"),
+                    quote=(art.get("stance_quotes") or [None])[0],
+                    article_version_id=art.get("article_version_id"),
+                    topic_ids=tuple(art.get("topics_v1") or ()),
+                )
+            )
+    clustered = cluster_narratives(nar_inputs)
+    return [c.model_dump(mode="json") for c in clustered[:limit]]
+
+
+def build_task_evidence_package(
+    session: Session,
+    *,
+    task_type: str,
+    report_type: str,
+    payload: dict[str, Any],
+    bundle: EvidenceBundle | None = None,
+) -> tuple[Any, EvidenceBundle]:
+    """Build a task-targeted EvidencePackageContract alongside the DB-backed EvidenceBundle.
+
+    Never passes full raw articles; binds every evidence item to article_id/evidence_id/
+    article_version_id/offsets/source_name/published_at and preserves counter_evidence.
+    """
+    from gni.core.contracts import EvidencePackageContract
+
+    ev_bundle = bundle or prepare_evidence_bundle(session, report_type=report_type, payload=payload)
+    limits = _TASK_LIMITS.get(task_type, {"articles": 12, "events": 5, "narratives": 5, "evidence": 12})
+
+    # Flatten deterministic metric snapshots for package
+    stat = ev_bundle.statistical or {}
+    metrics_list: list[dict[str, Any]] = []
+    if isinstance(stat.get("global"), dict):
+        metrics_list.append(stat["global"])
+    for k in ("countries", "boards", "topics"):
+        for row in (stat.get(k) or []):
+            if isinstance(row, dict):
+                metrics_list.append(row)
+
+    change_signals = _compute_change_signals_for_package(ev_bundle)
+    narratives = _collect_narratives_for_package(session, ev_bundle, limit=limits["narratives"])
+
+    # Task-aware article ordering (keep representative + diverse, never full raw body)
+    selected_articles = list(ev_bundle.articles)
+    if task_type == "sentiment_stance_analysis":
+        selected_articles.sort(
+            key=lambda a: (
+                0 if a.get("expression_owner") == "quoted_actor" else 1,
+                0 if a.get("stance_label") in {"Positive", "Negative"} else 1,
+            )
+        )
+    elif task_type == "country_comparison":
+        # Round-robin across countries
+        by_c: dict[str, list[dict[str, Any]]] = {}
+        for a in selected_articles:
+            by_c.setdefault(str(a.get("source_country") or "UNK"), []).append(a)
+        rr: list[dict[str, Any]] = []
+        while by_c and len(rr) < limits["articles"]:
+            for cid in sorted(list(by_c.keys())):
+                if by_c[cid]:
+                    rr.append(by_c[cid].pop(0))
+                if not by_c[cid]:
+                    by_c.pop(cid, None)
+                if len(rr) >= limits["articles"]:
+                    break
+        selected_articles = rr
+    else:
+        selected_articles = selected_articles[: limits["articles"]]
+
+    rep_evidence = _extract_traceable_evidence_items(
+        selected_articles,
+        task_type=task_type,
+        limit=limits["evidence"],
+    )
+    counter_evidence = _extract_traceable_evidence_items(
+        ev_bundle.counter_examples,
+        task_type=task_type,
+        limit=max(4, limits["evidence"] // 2),
+    )
+
+    g_stat = stat.get("global") if isinstance(stat.get("global"), dict) else {}
+    stance_cov = g_stat.get("stance_coverage_rate")
+    countries_reporting = sorted({a.get("source_country") for a in ev_bundle.articles if a.get("source_country")})
+    sources_reporting = sorted({a.get("source_id") for a in ev_bundle.articles if a.get("source_id")})
+    quoted_count = sum(1 for a in ev_bundle.articles if a.get("expression_owner") == "quoted_actor")
+
+    limitations: list[str] = []
+    if ev_bundle.global_article_count == 0:
+        limitations.append("当前统计窗口内无涉华报道（n=0），证据不足，禁止生成无依据研判。")
+    elif ev_bundle.global_article_count < MIN_RELIABLE_SAMPLE_N:
+        limitations.append(
+            f"当前涉华报道样本偏小（n={ev_bundle.global_article_count} < {MIN_RELIABLE_SAMPLE_N}），比例与趋势仅作提示，不作强结论。"
+        )
+    if stance_cov is not None and float(stance_cov) < 0.5:
+        limitations.append(
+            f"立场覆盖率偏低（{float(stance_cov):.0%}），未判定（Unclassified）占比较高，正中负比例仅反映已判定样本。"
+        )
+    if ev_bundle.low_sample_scopes:
+        limitations.append(f"存在小样本维度（{len(ev_bundle.low_sample_scopes)} 个），应避免仅凭百分比变化推断重大异常。")
+    if quoted_count > 0:
+        limitations.append(f"样本含 {quoted_count} 篇以引述对象观点为主的报道，引述观点不得归属为媒体自身立场。")
+    limitations.append("多国媒体同时报道同一议题或事件不构成协调传播证据。")
+
+    pkg = EvidencePackageContract(
+        package_id=f"evpkg:{report_type}:{ev_bundle.period}:{task_type}:{ev_bundle.evidence_hash[:8]}",
+        task_type=task_type,
+        period={
+            "label": ev_bundle.period,
+            "period_start": ev_bundle.period_start,
+            "period_end": ev_bundle.period_end,
+            "report_type": report_type,
+        },
+        scope={
+            "countries": countries_reporting,
+            "sources": sources_reporting,
+            "event_ids": [ev["event_id"] for ev in ev_bundle.events[: limits["events"]]],
+        },
+        metrics=metrics_list,
+        current_articles=[
+            {
+                "article_id": a["article_id"],
+                "article_version_id": a.get("article_version_id"),
+                "title": a.get("title"),
+                "source_id": a.get("source_id"),
+                "source_name": a.get("source_name"),
+                "source_country": a.get("source_country"),
+                "published_at": a.get("published_at"),
+                "stance_label": a.get("stance_label"),
+                "expression_owner": a.get("expression_owner"),
+                "sentiment_label": a.get("sentiment_label"),
+                "topics_v1": a.get("topics_v1") or [],
+                "framing": a.get("framing"),
+                "event_id": a.get("event_id"),
+            }
+            for a in selected_articles
+        ],
+        historical_comparison=[
+            {"historical": ev_bundle.historical, "change_signals": change_signals, "alerts": ev_bundle.alerts[:8]}
+        ],
+        events=ev_bundle.events[: limits["events"]],
+        narratives=narratives,
+        representative_evidence=rep_evidence,
+        counter_evidence=counter_evidence,
+        coverage={
+            "global_article_count": ev_bundle.global_article_count,
+            "countries_reporting": len(countries_reporting),
+            "sources_reporting": len(sources_reporting),
+            "stance_coverage_rate": stance_cov,
+            "low_sample_scopes": list(ev_bundle.low_sample_scopes),
+            "quoted_actor_articles": quoted_count,
+            "is_insufficient_data": ev_bundle.global_article_count == 0,
+        },
+        limitations=limitations,
+    )
+    return pkg, ev_bundle
