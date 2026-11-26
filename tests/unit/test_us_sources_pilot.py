@@ -102,6 +102,7 @@ def test_us_sources_seed_pilot_hygiene():
             "public_service",
             "mainstream_independent",
             "gov_comms",
+            "aggregator_discovery",
         }
         assert s.get("feed_scope") in {
             "CHINA_FOCUSED",

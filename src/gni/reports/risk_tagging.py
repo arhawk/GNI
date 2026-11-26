@@ -19,18 +19,20 @@ def _cfg() -> dict[str, Any]:
 
 
 def media_type_bucket(src: Any | None) -> str:
-    """government_agency | state_media | public_broadcaster | private_mainstream | other."""
+    """government_agency | state_media | public_broadcaster | private_mainstream | aggregator_discovery | other."""
     if src is None:
         return "other"
     scope = (getattr(src, "feed_scope", None) or "").upper()
     st = (getattr(src, "source_type", None) or "").lower()
     ownership = (getattr(src, "ownership_type", None) or "").lower()
     ctrl = (getattr(src, "government_control_level", None) or "").lower()
+    if st == "aggregator_discovery":
+        return "aggregator_discovery"
     if scope == "GOVERNMENT_RELEASES" or st in {"gov_comms", "government", "government_release"}:
         return "government_agency"
     if ownership in {"public", "public_law"}:
         return "public_broadcaster"
-    if ownership in {"private", "commercial"} or st in {"private", "commercial"}:
+    if ownership in {"private", "commercial"} or st in {"private", "commercial", "mainstream_independent"}:
         return "private_mainstream"
     if ownership in {"state", "government"} or ctrl in {"high", "medium"} or "state" in st:
         return "state_media"
@@ -42,6 +44,7 @@ MEDIA_TYPE_ZH = {
     "state_media": "国有官媒",
     "public_broadcaster": "公共广播",
     "private_mainstream": "私营主流",
+    "aggregator_discovery": "聚合发现",
     "other": "其他",
 }
 

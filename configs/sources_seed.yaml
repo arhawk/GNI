@@ -238,6 +238,60 @@ organizations:
   organization_type: public_broadcaster
   ownership_type: public
   government_control_level: medium
+- id: org_ard_tagesschau
+  country_id: DE
+  name: ARD / Tagesschau
+  organization_type: public_broadcaster
+  ownership_type: public_law
+  government_control_level: low
+- id: org_spiegel
+  country_id: DE
+  name: Der Spiegel
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_zeit
+  country_id: DE
+  name: Die Zeit
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_toi
+  country_id: IN
+  name: The Times of India (Bennett, Coleman & Co.)
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_ht
+  country_id: IN
+  name: Hindustan Times (HT Media)
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_et
+  country_id: IN
+  name: The Economic Times (Bennett, Coleman & Co.)
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_in_livemint
+  country_id: IN
+  name: Mint / Livemint (HT Media)
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_diplomat
+  country_id: US
+  name: The Diplomat
+  organization_type: news_media
+  ownership_type: private
+  government_control_level: none
+- id: org_gdelt
+  country_id: US
+  name: The GDELT Project (DOC 2.0 Discovery)
+  organization_type: aggregator_discovery
+  ownership_type: public
+  government_control_level: none
 sources:
 - source_id: us_voa_english
   name: Voice of America — China News (RSS)
@@ -368,15 +422,15 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.rfa.org/mandarin/
   classification_confidence: medium
-  reviewed_by: connect_probe_20261124
-  active_status: inactive
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
   feed_scope: CHINA_FOCUSED
   feed_or_api_url: https://www.rfa.org/mandarin/rss
   notes: >
-    Inactive backup (5th US slot spare). Probe 2026-11-24: HTTP 429 rate-limited from this network.
-    Prefer English RFA when quota allows.
+    Reactivated 2026-11-26: HTTP 200 (entries=30, today=1, sample articles HTTP 200).
+    High-signal China-focused feed offsetting paused VOA feeds.
 - source_id: us_defense_news
   name: U.S. Department of Defense News Feed
   country_id: US
@@ -918,14 +972,14 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.dw.com/de/über-uns/s-30604
   classification_confidence: medium
-  reviewed_by: editorial_probe_20261124
-  active_status: inactive
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
   verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: GENERAL_NEWS
   feed_or_api_url: https://rss.dw.com/rdf/rss-de-all
-  notes: 'Inactive. Probe 2026-11-24: intl_or_china≈0.36 (below 0.40 bar for non-Asia desk). Denylisted
-    for active; replaced by DW Asia.
-
-    '
+  notes: >
+    Reactivated 2026-11-26 to expand German-language DE coverage: HTTP 200 (entries=88, today=6, sample articles HTTP 200).
 - source_id: in_air_international
   name: Akashvani News — International
   country_id: IN
@@ -1563,3 +1617,317 @@ sources:
   feed_or_api_url: https://www.theguardian.com/world/pacific-islands/rss
   notes: >
     Active AU/Pacific regional security (2026-11-26): HTTP 200, n=20, sample articles HTTP 200.
+- source_id: de_tagesschau
+  name: Tagesschau (ARD)
+  country_id: DE
+  organization_id: org_ard_tagesschau
+  canonical_url: https://www.tagesschau.de/
+  source_type: public_service
+  ownership_type: public_law
+  funding_type: public
+  government_control_level: low
+  editorial_independence: high
+  language: de
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.tagesschau.de/impressum
+  compliance_status: allowed_internal
+  evidence_url: https://www.tagesschau.de/xml/rss2/
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.tagesschau.de/xml/rss2/
+  notes: >
+    Active DE public_service from WorldMonitor catalog (2026-11-26): HTTP 200, entries=40, today=32, sample articles HTTP 200.
+- source_id: de_spiegel
+  name: Der Spiegel — Top News
+  country_id: DE
+  organization_id: org_spiegel
+  canonical_url: https://www.spiegel.de/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: de
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.spiegel.de/nutzungsbedingungen
+  compliance_status: allowed_internal
+  evidence_url: https://www.spiegel.de/schlagzeilen/tops/index.rss
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.spiegel.de/schlagzeilen/tops/index.rss
+  notes: >
+    Active DE mainstream_independent from WorldMonitor catalog (2026-11-26): HTTP 200, entries=23, today=19, sample articles HTTP 200.
+- source_id: de_zeit
+  name: Die Zeit — News
+  country_id: DE
+  organization_id: org_zeit
+  canonical_url: https://www.zeit.de/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: de
+  timezone: Europe/Berlin
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.zeit.de/administratives/agb-kommentarbereich
+  compliance_status: restricted
+  evidence_url: https://newsfeed.zeit.de/index
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://newsfeed.zeit.de/index
+  notes: >
+    Inactive DE candidate (2026-11-26): RSS HTTP 200 (entries=15, today=15), but article HTML returns HTTP 403.
+- source_id: in_toi_world
+  name: Times of India — World (RSS)
+  country_id: IN
+  organization_id: org_in_toi
+  canonical_url: https://timesofindia.indiatimes.com/world
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://timesofindia.indiatimes.com/termsandcondition
+  compliance_status: allowed_internal
+  evidence_url: https://timesofindia.indiatimes.com/rssfeeds/296589292.cms
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: INTERNATIONAL_NEWS
+  feed_or_api_url: https://timesofindia.indiatimes.com/rssfeeds/296589292.cms
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active IN mainstream_independent (2026-11-26): HTTP 200, entries=20, today=18, sample articles HTTP 200.
+- source_id: in_ht_world
+  name: Hindustan Times — World News (RSS)
+  country_id: IN
+  organization_id: org_in_ht
+  canonical_url: https://www.hindustantimes.com/world-news
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.hindustantimes.com/termsofuse
+  compliance_status: allowed_internal
+  evidence_url: https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: INTERNATIONAL_NEWS
+  feed_or_api_url: https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active IN mainstream_independent (2026-11-26): HTTP 200, entries=100, today=100, sample articles HTTP 200.
+- source_id: in_et_news
+  name: The Economic Times — News (RSS)
+  country_id: IN
+  organization_id: org_in_et
+  canonical_url: https://economictimes.indiatimes.com/news
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://economictimes.indiatimes.com/terms-conditions
+  compliance_status: allowed_internal
+  evidence_url: https://economictimes.indiatimes.com/news/rssfeeds/1715249553.cms
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://economictimes.indiatimes.com/news/rssfeeds/1715249553.cms
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active IN mainstream_independent business/policy (2026-11-26): HTTP 200, entries=50, today=50, sample articles HTTP 200.
+- source_id: in_livemint_news
+  name: Livemint — News (RSS)
+  country_id: IN
+  organization_id: org_in_livemint
+  canonical_url: https://www.livemint.com/news
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: Asia/Kolkata
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.livemint.com/termsofuse
+  compliance_status: allowed_internal
+  evidence_url: https://www.livemint.com/rss/news
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.livemint.com/rss/news
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active IN mainstream_independent business/policy (2026-11-26): HTTP 200, entries=35, today=27, sample articles HTTP 200.
+- source_id: us_the_diplomat
+  name: The Diplomat (RSS)
+  country_id: US
+  organization_id: org_us_diplomat
+  canonical_url: https://thediplomat.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://thediplomat.com/terms-of-use/
+  compliance_status: allowed_internal
+  evidence_url: https://thediplomat.com/feed/
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: INTERNATIONAL_NEWS
+  feed_or_api_url: https://thediplomat.com/feed/
+  config:
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  notes: >
+    Active US/Indo-Pacific specialist from WorldMonitor catalog (2026-11-26): HTTP 200, entries=96, today=4, sample articles HTTP 200.
+- source_id: us_gdelt_china
+  name: GDELT DOC 2.0 — US China Discovery
+  country_id: US
+  organization_id: org_gdelt
+  canonical_url: https://www.gdeltproject.org/
+  source_type: aggregator_discovery
+  ownership_type: public
+  funding_type: public
+  government_control_level: none
+  editorial_independence: high
+  language: multi
+  timezone: UTC
+  access_method: api
+  adapter_type: gdelt_adapter
+  terms_url: https://www.gdeltproject.org/about.html
+  compliance_status: allowed_internal
+  evidence_url: https://api.gdeltproject.org/api/v2/doc/doc
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
+  feed_or_api_url: https://api.gdeltproject.org/api/v2/doc/doc
+  config:
+    discovery_provider: gdelt
+    gdelt_sourcecountry: US
+    query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:US"
+    timespan: 24h
+    maxrecords: 50
+  notes: >
+    GDELT DOC 2.0 China-focused discovery for US outlets (deduped against native RSS by URL; rate-limited 1 req / 6.5s).
+- source_id: in_gdelt_china
+  name: GDELT DOC 2.0 — India China Discovery
+  country_id: IN
+  organization_id: org_gdelt
+  canonical_url: https://www.gdeltproject.org/
+  source_type: aggregator_discovery
+  ownership_type: public
+  funding_type: public
+  government_control_level: none
+  editorial_independence: high
+  language: multi
+  timezone: UTC
+  access_method: api
+  adapter_type: gdelt_adapter
+  terms_url: https://www.gdeltproject.org/about.html
+  compliance_status: allowed_internal
+  evidence_url: https://api.gdeltproject.org/api/v2/doc/doc
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
+  feed_or_api_url: https://api.gdeltproject.org/api/v2/doc/doc
+  config:
+    discovery_provider: gdelt
+    gdelt_sourcecountry: IN
+    query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:IN"
+    timespan: 24h
+    maxrecords: 50
+  notes: >
+    GDELT DOC 2.0 China-focused discovery for IN outlets (deduped against native RSS by URL; rate-limited 1 req / 6.5s).
+- source_id: de_gdelt_china
+  name: GDELT DOC 2.0 — Germany China Discovery
+  country_id: DE
+  organization_id: org_gdelt
+  canonical_url: https://www.gdeltproject.org/
+  source_type: aggregator_discovery
+  ownership_type: public
+  funding_type: public
+  government_control_level: none
+  editorial_independence: high
+  language: multi
+  timezone: UTC
+  access_method: api
+  adapter_type: gdelt_adapter
+  terms_url: https://www.gdeltproject.org/about.html
+  compliance_status: allowed_internal
+  evidence_url: https://api.gdeltproject.org/api/v2/doc/doc
+  classification_confidence: high
+  reviewed_by: wm_gdelt_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
+  feed_or_api_url: https://api.gdeltproject.org/api/v2/doc/doc
+  config:
+    discovery_provider: gdelt
+    gdelt_sourcecountry: GM
+    query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:GM"
+    timespan: 24h
+    maxrecords: 50
+  notes: >
+    GDELT DOC 2.0 China-focused discovery for DE outlets (FIPS GM; deduped against native RSS by URL; rate-limited 1 req / 6.5s).

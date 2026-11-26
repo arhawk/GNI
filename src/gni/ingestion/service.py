@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gni.ingestion.base import BaseAdapter
+from gni.ingestion.gdelt_adapter import GdeltAdapter
 from gni.ingestion.rss_adapter import RssAdapter
 from gni.infrastructure.models import (
     Article,
@@ -34,6 +35,7 @@ _RAW_PAYLOAD_MAX_CHARS = 256_000
 def get_adapter(adapter_type: str) -> BaseAdapter:
     mapping: dict[str, type[BaseAdapter]] = {
         "rss_adapter": RssAdapter,
+        "gdelt_adapter": GdeltAdapter,
     }
     cls = mapping.get(adapter_type)
     if cls is None:
@@ -97,20 +99,40 @@ def upsert_article(session: Session, source: Source, item: dict[str, Any]) -> tu
     url = (item.get("url") or "").strip()
     if not url:
         raise ValueError("article url required")
+    canonical_url = (item.get("canonical_url") or url).strip()
     existing = session.scalar(
         select(Article).where(Article.source_id == source.id, Article.url == url)
     )
+    if existing is None and (
+        getattr(source, "adapter_type", None) == "gdelt_adapter"
+        or bool((getattr(source, "config", None) or {}).get("discovery_provider"))
+    ):
+        # Cross-source URL deduplication: native RSS article always remains authoritative.
+        cross_existing = session.scalar(
+            select(Article).where(
+                (Article.url == url) | (Article.canonical_url == canonical_url)
+            )
+        )
+        if cross_existing is not None:
+            return cross_existing, False
+
     title = item.get("title")
     content_original = item.get("content_original")
+    item_lang = item.get("language")
+    resolved_lang = (
+        item_lang
+        if (source.language in {None, "", "multi"} and item_lang)
+        else (source.language or item_lang)
+    )
     if existing is None:
         article = Article(
             id=str(uuid4()),
             source_id=source.id,
             title=title,
             url=url,
-            canonical_url=item.get("canonical_url") or url,
+            canonical_url=canonical_url,
             content_original=content_original,
-            language=source.language,
+            language=resolved_lang,
             published_at=item.get("published_at"),
             content_hash=_hash_text(content_original),
             title_hash=_hash_text(title),
