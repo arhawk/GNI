@@ -12,10 +12,8 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from gni.ingestion.api_adapter import ApiAdapter
 from gni.ingestion.base import BaseAdapter
 from gni.ingestion.rss_adapter import RssAdapter
-from gni.ingestion.web_adapter import WebAdapter
 from gni.infrastructure.models import (
     Article,
     CollectionTask,
@@ -36,8 +34,6 @@ _RAW_PAYLOAD_MAX_CHARS = 256_000
 def get_adapter(adapter_type: str) -> BaseAdapter:
     mapping: dict[str, type[BaseAdapter]] = {
         "rss_adapter": RssAdapter,
-        "api_adapter": ApiAdapter,
-        "web_adapter": WebAdapter,
     }
     cls = mapping.get(adapter_type)
     if cls is None:

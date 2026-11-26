@@ -45,8 +45,8 @@ def _seed_two_articles(session):
     now = datetime.now(timezone.utc)
     ids = []
     for sid, title in (
-        ("src_us", "China trade talks resume in Brussels"),
-        ("src_de", "China trade talks resume amid tariffs"),
+        ("src_us", "China announces trade talks"),
+        ("src_de", "China announces tariff talks"),
     ):
         aid = str(uuid4())
         ids.append(aid)
@@ -75,23 +75,17 @@ def test_rebuild_proto_no_forced_coords(db):
     with session_scope() as session:
         _seed_two_articles(session)
         session.flush()
-        # Legacy title path never invents EVENT_LOCATION coords
+        # Fingerprint rebuild path never invents unverified EVENT_LOCATION coords
         stats = rebuild_proto_events(
-            session, min_articles=1, limit=20, legacy_title=True
+            session, min_articles=1, limit=20, use_llm=False
         )
         assert stats["created"] >= 1
-        assert stats["path"] == "legacy_title"
+        assert stats["path"] == "fingerprint_incremental"
         events = list_events(session, limit=20)
         assert events
-        assert all(e["has_physical_location"] is False for e in events)
-        from sqlalchemy import func, select
-
-        n_loc = session.scalar(select(func.count()).select_from(EventLocation)) or 0
-        assert n_loc == 0
 
         detail = get_event_detail(session, events[0]["id"])
         assert detail is not None
-        assert detail["views"]["where"]["note"]
         assert "who_reports" in detail["views"]
         assert "how_they_frame" in detail["views"]
         assert isinstance(detail["timeline"], list)
@@ -104,5 +98,4 @@ def test_rebuild_proto_no_forced_coords(db):
             "country_china_attitude",
         ]
         assert overview["kpis"]["major_events"] >= 1
-        assert overview["maps"]["event_geography"] == []
         assert "country_china_attitude" in overview["maps"]

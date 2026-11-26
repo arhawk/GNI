@@ -148,31 +148,6 @@ def cmd_process_run(args: argparse.Namespace) -> int:
     return 0 if status in {"success", "partial"} else 1
 
 
-def cmd_dashboard(args: argparse.Namespace) -> int:
-    """Launch Streamlit dashboard (requires optional [dashboard] extra)."""
-    try:
-        import streamlit  # noqa: F401
-    except ImportError:
-        print(
-            "Streamlit not installed. Run: pip install -e '.[dashboard]'",
-            file=sys.stderr,
-        )
-        return 2
-    app = Path(__file__).resolve().parent / "dashboard" / "app.py"
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(app),
-        "--server.headless",
-        "true",
-    ]
-    if args.port:
-        cmd.extend(["--server.port", str(args.port)])
-    return subprocess.run(cmd, check=False).returncode
-
-
 def cmd_events_rebuild(args: argparse.Namespace) -> int:
     from gni.events.service import rebuild_proto_events
     from gni.infrastructure.db import ensure_schema, session_scope
@@ -183,7 +158,6 @@ def cmd_events_rebuild(args: argparse.Namespace) -> int:
             session,
             min_articles=args.min_articles,
             limit=args.limit,
-            legacy_title=bool(getattr(args, "legacy_title", False)),
             extract=not bool(getattr(args, "skip_extract", False)),
         )
     print(json.dumps({"status": "ok", **stats}, ensure_ascii=False, indent=2))
@@ -477,22 +451,13 @@ def main(argv: list[str] | None = None) -> None:
     p_mrun.add_argument("--timezone", default="UTC", help="Display timezone label (data filtered in UTC)")
     p_mrun.set_defaults(func=cmd_metrics_run)
 
-    p_dash = sub.add_parser("dashboard", help="Launch Streamlit dashboard (P1-E debug)")
-    p_dash.add_argument("--port", type=int, default=8501, help="Server port (default 8501)")
-    p_dash.set_defaults(func=cmd_dashboard)
-
     p_events = sub.add_parser("events", help="Event Intelligence / fingerprint commands")
     events_sub = p_events.add_subparsers(dest="events_command", required=True)
     p_ereb = events_sub.add_parser(
-        "rebuild", help="Rebuild events via fingerprint match (default) or legacy titles"
+        "rebuild", help="Rebuild events via fingerprint match"
     )
     p_ereb.add_argument("--min-articles", type=int, default=1, help="Min articles per cluster")
     p_ereb.add_argument("--limit", type=int, default=50, help="Max events to keep")
-    p_ereb.add_argument(
-        "--legacy-title",
-        action="store_true",
-        help="Use legacy title Jaccard clustering instead of fingerprint",
-    )
     p_ereb.add_argument(
         "--skip-extract",
         action="store_true",

@@ -21,6 +21,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+.cursor/
 *.swp
 
 # Data & secrets
@@ -28,6 +29,9 @@ data/raw/
 data/processed/
 data/*.db
 data/*.db-*
+data/articles_preview.*
+data/daily_report_*
+data/metrics_*_raw.json
 *.pem
 credentials*.json
 

@@ -1,4 +1,4 @@
-"""Persist and query proto-Events (fingerprint MVP + legacy title cluster)."""
+"""Persist and query proto-Events (fingerprint incremental pipeline)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,10 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gni.analysis.stance_util import primary_stance_label
-from gni.events.cluster import ArticleSeed, ProtoCluster, cluster_articles, dominant
 from gni.events.extract import extract_for_articles, load_latest_cards
 from gni.events.geo import centroid, location_pin_spec
 from gni.events.match import FingerprintCluster, cluster_fingerprints
@@ -115,76 +114,8 @@ def merge_events(
     return {"keep_id": keep_id, "merge_id": merge_id, "articles_moved": moved, "merge_status": "closed"}
 
 
-def _seeds_from_db(session: Session) -> list[ArticleSeed]:
-    sources = {s.id: s for s in session.scalars(select(Source)).all()}
-    articles = list(
-        session.scalars(
-            select(Article).where(
-                Article.exclude_from_metrics.is_(False),
-                Article.china_relevance_level.in_(list(CHINA_INCLUDE_LEVELS)),
-            )
-        ).all()
-    )
-    analyses = _latest_analyses(session, [a.id for a in articles])
-    seeds: list[ArticleSeed] = []
-    for a in articles:
-        src = sources.get(a.source_id)
-        structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
-        framing = structured.get("framing") or {}
-        topics = structured.get("topics") or {}
-        sentiment = structured.get("sentiment") or {}
-        seeds.append(
-            ArticleSeed(
-                id=a.id,
-                title=a.title,
-                source_id=a.source_id,
-                country_id=src.country_id if src else None,
-                published_at=a.published_at or a.first_seen_at,
-                china_relevance_level=a.china_relevance_level,
-                frame_primary=framing.get("primary"),
-                topic_primary=topics.get("primary"),
-                sentiment_label=sentiment.get("label"),
-            )
-        )
-    return seeds
-
-
-# Never auto-delete these during rebuild (manual / terminal states).
+# Never auto-delete or overwrite these during rebuild (manual / terminal states).
 _PRESERVE_EVENT_STATUSES = frozenset({"confirmed", "closed", "locked"})
-
-
-def _clear_proto_graph(session: Session) -> list[str]:
-    """Legacy wipe of rebuild-owned events. Prefer incremental fingerprint rebuild instead."""
-    # Preserve confirmed/closed/locked; only clear proto/active from legacy path.
-    proto_ids = list(
-        session.scalars(
-            select(Event.id).where(
-                Event.status.in_(["proto", "active"]),
-                Event.status.notin_(list(_PRESERVE_EVENT_STATUSES)),
-            )
-        ).all()
-    )
-    if not proto_ids:
-        return []
-    narr_ids = list(
-        session.scalars(
-            select(NarrativeCluster.id).where(NarrativeCluster.event_id.in_(proto_ids))
-        ).all()
-    )
-    if narr_ids:
-        session.execute(
-            delete(EventNarrativeEvidence).where(
-                EventNarrativeEvidence.narrative_cluster_id.in_(narr_ids)
-            )
-        )
-        session.execute(delete(NarrativeCluster).where(NarrativeCluster.id.in_(narr_ids)))
-    session.execute(delete(EventMetricSnapshot).where(EventMetricSnapshot.event_id.in_(proto_ids)))
-    session.execute(delete(EventArticle).where(EventArticle.event_id.in_(proto_ids)))
-    session.execute(delete(EventLocation).where(EventLocation.event_id.in_(proto_ids)))
-    session.execute(delete(EventParticipant).where(EventParticipant.event_id.in_(proto_ids)))
-    session.execute(delete(Event).where(Event.id.in_(proto_ids)))
-    session.flush()
-    return proto_ids
 
 
 def rebuild_proto_events(
@@ -192,14 +123,10 @@ def rebuild_proto_events(
     *,
     min_articles: int = 1,
     limit: int = 50,
-    legacy_title: bool = False,
     extract: bool = True,
     use_llm: bool = True,
 ) -> dict[str, Any]:
-    """Rebuild events. Default: fingerprint extract→match→rollup. `--legacy-title` uses Jaccard."""
-    if legacy_title:
-        return _rebuild_legacy_title(session, min_articles=min_articles, limit=limit)
-
+    """Rebuild events via fingerprint extract→match→rollup."""
     if extract:
         extract_stats = extract_for_articles(session, limit=500)
     else:
@@ -232,29 +159,6 @@ def rebuild_proto_events(
         "seed_articles": len({c.article_id for c in cards}),
         "candidates_written": extract_stats.get("candidates_written", 0),
         "path": "fingerprint_incremental",
-        "attitude_snapshots": attitude_n,
-    }
-
-
-def _rebuild_legacy_title(
-    session: Session, *, min_articles: int = 1, limit: int = 50
-) -> dict[str, Any]:
-    seeds = _seeds_from_db(session)
-    clusters = [c for c in cluster_articles(seeds) if len(c.article_ids) >= min_articles][:limit]
-    _clear_proto_graph(session)
-    created = 0
-    event_ids: list[str] = []
-    for cl in clusters:
-        eid = _persist_cluster(session, cl)
-        event_ids.append(eid)
-        created += 1
-    session.flush()
-    rollup_event_metrics(session, event_ids=event_ids)
-    attitude_n = rollup_country_china_attitude(session, window="30d")
-    return {
-        "created": created,
-        "seed_articles": len(seeds),
-        "path": "legacy_title",
         "attitude_snapshots": attitude_n,
     }
 
@@ -390,73 +294,6 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tu
             EventArticle(id=str(uuid4()), event_id=event_id, article_id=aid, relation="covers")
         )
     return event_id, True
-
-
-def _persist_cluster(session: Session, cl: ProtoCluster) -> str:
-    event_id = str(uuid4())
-    topic = dominant(cl.topics)
-    frame = dominant(cl.frames)
-    # Physical location unknown for title-only clustering — do not invent EVENT_LOCATION coords
-    has_phys = False
-    event = Event(
-        id=event_id,
-        title=cl.title,
-        summary=f"Proto-event from {len(cl.article_ids)} article(s); "
-        f"reporting countries={sorted(cl.country_ids)}. "
-        f"No verified physical EVENT_LOCATION (rule cluster).",
-        event_type=topic,
-        status="proto",
-        importance_score=cl.importance_score,
-        window_start=cl.window_start,
-        window_end=cl.window_end,
-        has_physical_location=has_phys,
-        schema_version="event_v0.1",
-    )
-    session.add(event)
-
-    # Participant placeholders from reporting countries are NOT event locations.
-    # Optional: ANNOUNCEMENT_LOCATION omitted; PARTICIPANT_LOCATION only if we know actors.
-    # For proto: mark china as participant when topic is china-related (always in this pool)
-    session.add(
-        EventParticipant(
-            id=str(uuid4()),
-            event_id=event_id,
-            participant_id="china",
-            participant_name="China",
-            role="central_target",
-        )
-    )
-
-    for aid in cl.article_ids:
-        session.add(
-            EventArticle(id=str(uuid4()), event_id=event_id, article_id=aid, relation="covers")
-        )
-
-    # Narrative cluster from dominant frame (must later attach evidence)
-    if frame:
-        nid = str(uuid4())
-        session.add(
-            NarrativeCluster(
-                id=nid,
-                event_id=event_id,
-                label=frame,
-                frame_id=frame,
-                summary=f"Dominant primary frame among clustered articles: {frame}",
-            )
-        )
-        # Flush so Postgres FK sees narrative_clusters before evidence inserts
-        # (no ORM relationship → insert order is not inferred).
-        session.flush()
-        for aid in cl.article_ids[:5]:
-            session.add(
-                EventNarrativeEvidence(
-                    id=str(uuid4()),
-                    narrative_cluster_id=nid,
-                    article_id=aid,
-                    quote=None,
-                )
-            )
-    return event_id
 
 
 def _event_sort_time(e: Event) -> datetime:

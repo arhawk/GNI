@@ -1,4 +1,4 @@
-"""Streamlit dashboard (P1-E)."""
+"""Dashboard data helpers and page API payloads."""
 
 from gni.dashboard.data import DashboardFilters, compute_dashboard_metrics
 
