@@ -46,6 +46,60 @@ organizations:
   organization_type: government_department
   ownership_type: government
   government_control_level: high
+- id: org_us_npr
+  country_id: US
+  name: National Public Radio (NPR)
+  organization_type: public_broadcaster
+  ownership_type: non_profit
+  government_control_level: low
+- id: org_us_pbs
+  country_id: US
+  name: Public Broadcasting Service (PBS)
+  organization_type: public_broadcaster
+  ownership_type: non_profit
+  government_control_level: low
+- id: org_us_nbc
+  country_id: US
+  name: NBC News (NBCUniversal)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_cbs
+  country_id: US
+  name: CBS News (Paramount)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_abc
+  country_id: US
+  name: ABC News (Walt Disney)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_nyt
+  country_id: US
+  name: The New York Times Company
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_fox
+  country_id: US
+  name: Fox News Media
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_politico
+  country_id: US
+  name: Politico (Axel Springer)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
+- id: org_us_the_hill
+  country_id: US
+  name: The Hill (Nexstar Media Group)
+  organization_type: commercial_media
+  ownership_type: private
+  government_control_level: none
 - id: org_dw
   country_id: DE
   name: Deutsche Welle
@@ -143,16 +197,15 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.voanews.com/rssfeeds
   classification_confidence: high
-  reviewed_by: voa_rssfeeds_20261124
-  active_status: active
+  reviewed_by: us_pilot_probe_20261126
+  active_status: paused
   verification_status: verified
   editorial_focus: international_or_china
   feed_scope: CHINA_FOCUSED
   feed_or_api_url: https://www.voanews.com/api/zmjuqtl-vomx-tpey_jqq
   notes: >
-    Active US panel. Full URL from https://www.voanews.com/rssfeeds (China News / z/6715).
-    Truncated id zmjuqtl-vomx alone returns empty; suffix -tpey_jqq required.
-    Probe 2026-11-24: china≈19/20, intl_or_china≈0.95. Replaces Africa desk feed.
+    Paused 2026-11-26: HTTP 200 (n=20) but latest item stuck at 2025-03-15 (stale feed, 0 today).
+    Keep verified for monitoring recovery.
 - source_id: us_rfa_english
   name: Radio Free Asia (English RSS)
   country_id: US
@@ -199,8 +252,8 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.state.gov/rss-feed/press-releases/feed/
   classification_confidence: high
-  reviewed_by: connect_probe_20261124
-  active_status: active
+  reviewed_by: us_pilot_probe_20261126
+  active_status: paused
   verification_status: verified
   editorial_focus: international_or_china
   feed_scope: GOVERNMENT_RELEASES
@@ -208,8 +261,8 @@ sources:
   config:
     user_agent: Mozilla/5.0 (compatible; GNI-ResearchBot/0.1; +internal-research)
   notes: >
-    Active US panel (gov). Probe 2026-11-24: HTTP 200 with browser-compatible UA, n=10,
-    intl_or_china≈0.30. Prefer this path over empty /press-releases/feed/. Bare bot UA → 403.
+    Paused 2026-11-26: probe returned HTTP 407 (proxy/WAF block). Replaced in active gov_comms
+    slot by us_federal_register_state until access recovers.
 - source_id: us_voa_east_asia
   name: Voice of America — East Asia News (RSS)
   country_id: US
@@ -229,14 +282,14 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.voanews.com/rssfeeds
   classification_confidence: high
-  reviewed_by: connect_probe_20261124
-  active_status: active
+  reviewed_by: us_pilot_probe_20261126
+  active_status: paused
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://www.voanews.com/api/zobo_l-vomx-tpepvmv
   notes: >
-    Active US panel. Probe 2026-11-24: n=20, china≈14, intl_or_china≈0.75.
-    Complements VOA China desk; broader East Asia coverage.
+    Paused 2026-11-26: HTTP 200 (n=20) but latest item stuck at 2025-03-15 (stale feed, 0 today).
+    Same organization (org_usagm) as us_voa_english.
 - source_id: us_rfa_mandarin
   name: Radio Free Asia (Mandarin RSS)
   country_id: US
@@ -259,6 +312,7 @@ sources:
   active_status: inactive
   verification_status: verified
   editorial_focus: international_or_china
+  feed_scope: CHINA_FOCUSED
   feed_or_api_url: https://www.rfa.org/mandarin/rss
   notes: >
     Inactive backup (5th US slot spare). Probe 2026-11-24: HTTP 429 rate-limited from this network.
@@ -284,6 +338,7 @@ sources:
   reviewed_by: editorial_probe_20261124
   active_status: inactive
   verification_status: verified
+  feed_scope: GOVERNMENT_RELEASES
   feed_or_api_url: https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=10&ContentType=1&Site=945
   notes: 'Inactive. Probe 2026-11-24: intl_or_china≈0.0 — domestic DoD/ops mix; denylisted for active.
 
@@ -306,15 +361,275 @@ sources:
   compliance_status: allowed_internal
   evidence_url: https://www.federalregister.gov/
   classification_confidence: medium
-  reviewed_by: editorial_probe_20261124
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: international_or_china
+  feed_scope: GOVERNMENT_RELEASES
+  feed_or_api_url: https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bagencies%5D%5B%5D=state-department
+  notes: >
+    Active US gov_comms slot (2026-11-26): HTTP 200, n=26, article HTTP 200, includes State Dept
+    sanctions actions notices. Covers GOVERNMENT_RELEASES while us_state_press is paused (HTTP 407).
+- source_id: us_pbs_newshour
+  name: PBS NewsHour Headlines (RSS)
+  country_id: US
+  organization_id: org_us_pbs
+  canonical_url: https://www.pbs.org/newshour/
+  source_type: public_service
+  ownership_type: non_profit
+  funding_type: mixed
+  government_control_level: low
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.pbs.org/about/pbs-privacy-policy/terms-of-use/
+  compliance_status: allowed_internal
+  evidence_url: https://www.pbs.org/newshour/about/pbs-news-rss-feeds
+  classification_confidence: high
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.pbs.org/newshour/feeds/rss/headlines
+  notes: >
+    Active US public_service pilot (2026-11-26): HTTP 200, n=20, today=20, sample articles HTTP 200.
+- source_id: us_nbc_news
+  name: NBC News — Top News (RSS)
+  country_id: US
+  organization_id: org_us_nbc
+  canonical_url: https://www.nbcnews.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.nbcuniversal.com/terms
+  compliance_status: allowed_internal
+  evidence_url: https://www.nbcnews.com/
+  classification_confidence: medium
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://feeds.nbcnews.com/nbcnews/public/news
+  notes: >
+    Active US mainstream_independent pilot (2026-11-26): HTTP 200, n=25, today=12, sample articles HTTP 200.
+- source_id: us_cbs_news
+  name: CBS News — Latest (RSS)
+  country_id: US
+  organization_id: org_us_cbs
+  canonical_url: https://www.cbsnews.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.paramount.com/terms-of-use
+  compliance_status: allowed_internal
+  evidence_url: https://www.cbsnews.com/
+  classification_confidence: medium
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://www.cbsnews.com/latest/rss/main
+  notes: >
+    Active US mainstream_independent pilot (2026-11-26): HTTP 200, n=30, today=29, sample articles HTTP 200.
+- source_id: us_abc_news
+  name: ABC News — Top Stories (RSS)
+  country_id: US
+  organization_id: org_us_abc
+  canonical_url: https://abcnews.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://disneytermsofuse.com/
+  compliance_status: allowed_internal
+  evidence_url: https://abcnews.com/
+  classification_confidence: medium
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://abcnews.com/abcnews/topstories
+  notes: >
+    Active US mainstream_independent pilot (2026-11-26): HTTP 200, n=25, today=8, sample articles HTTP 200.
+- source_id: us_the_hill
+  name: The Hill — News (RSS)
+  country_id: US
+  organization_id: org_us_the_hill
+  canonical_url: https://thehill.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://thehill.com/terms-of-use/
+  compliance_status: allowed_internal
+  evidence_url: https://thehill.com/
+  classification_confidence: medium
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: TOPIC_FEED
+  feed_or_api_url: https://thehill.com/news/feed/
+  notes: >
+    Active US policy/politics pilot (2026-11-26): HTTP 200, n=15, today=15, sample articles HTTP 200.
+- source_id: us_npr_news
+  name: NPR News (RSS)
+  country_id: US
+  organization_id: org_us_npr
+  canonical_url: https://www.npr.org/
+  source_type: public_service
+  ownership_type: non_profit
+  funding_type: mixed
+  government_control_level: low
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.npr.org/about-npr/179876898/terms-of-use
+  compliance_status: allowed_internal
+  evidence_url: https://feeds.npr.org/1001/rss.xml
+  classification_confidence: high
+  reviewed_by: us_pilot_probe_20261126
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://feeds.npr.org/1001/rss.xml
+  notes: >
+    Inactive candidate (2026-11-26): Feed HTTP 200 (n=10, today=2), but article URLs timed out on fetch.
+- source_id: us_nyt_world
+  name: The New York Times — World (RSS)
+  country_id: US
+  organization_id: org_us_nyt
+  canonical_url: https://www.nytimes.com/section/world
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://help.nytimes.com/hc/en-us/articles/115014893428-Terms-of-service
+  compliance_status: restricted
+  evidence_url: https://www.nytimes.com/rss
+  classification_confidence: high
+  reviewed_by: us_pilot_probe_20261126
   active_status: inactive
   verification_status: verified
   editorial_focus: international_or_china
-  feed_or_api_url: https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bagencies%5D%5B%5D=state-department
-  notes: 'Inactive backup. Probe 2026-11-24: intl_or_china≈0.44 (State Dept notices); kept as verified
-    foreign-policy backup, not panel slot.
-
-    '
+  feed_scope: INTERNATIONAL_NEWS
+  feed_or_api_url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+  notes: >
+    Inactive candidate (2026-11-26): Feed HTTP 200 (n=58, today=17), but article URLs return HTTP 403/paywall.
+- source_id: us_nyt_us
+  name: The New York Times — US (RSS)
+  country_id: US
+  organization_id: org_us_nyt
+  canonical_url: https://www.nytimes.com/section/us
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://help.nytimes.com/hc/en-us/articles/115014893428-Terms-of-service
+  compliance_status: restricted
+  evidence_url: https://www.nytimes.com/rss
+  classification_confidence: high
+  reviewed_by: us_pilot_probe_20261126
+  active_status: inactive
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+  notes: >
+    Inactive candidate (2026-11-26): Feed HTTP 200 (n=30, today=18), but article URLs return HTTP 403/paywall.
+- source_id: us_fox_news
+  name: Fox News — Latest (RSS)
+  country_id: US
+  organization_id: org_us_fox
+  canonical_url: https://www.foxnews.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: medium
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.foxnews.com/terms-of-use
+  compliance_status: allowed_internal
+  evidence_url: https://www.foxnews.com/
+  classification_confidence: medium
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: GENERAL_NEWS
+  feed_or_api_url: https://moxie.foxnews.com/google-publisher/latest.xml
+  notes: >
+    Active US mainstream_independent pilot (2026-11-26): Feed HTTP 200 (n=25, today=25, article HTTP 200).
+- source_id: us_politico
+  name: Politico — Politics (RSS)
+  country_id: US
+  organization_id: org_us_politico
+  canonical_url: https://www.politico.com/
+  source_type: mainstream_independent
+  ownership_type: private
+  funding_type: commercial
+  government_control_level: none
+  editorial_independence: high
+  language: en
+  timezone: America/New_York
+  access_method: rss
+  adapter_type: rss_adapter
+  terms_url: https://www.politico.com/terms-of-service
+  compliance_status: allowed_internal
+  evidence_url: https://www.politico.com/
+  classification_confidence: medium
+  reviewed_by: us_pilot_probe_20261126
+  active_status: active
+  verification_status: verified
+  editorial_focus: mixed
+  feed_scope: TOPIC_FEED
+  feed_or_api_url: https://rss.politico.com/politics-news.xml
+  notes: >
+    Active US policy/politics pilot (2026-11-26): Feed HTTP 200 (n=30, latest 2026-11-25, article HTTP 200).
 - source_id: ru_tass_english
   name: TASS (English RSS)
   country_id: RU

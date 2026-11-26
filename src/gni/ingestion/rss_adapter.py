@@ -9,11 +9,22 @@ from typing import Any
 
 import feedparser
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from gni.ingestion.base import BaseAdapter
 
 DEFAULT_UA = "GNI-ResearchBot/0.1 (+internal-research; mailto:research@localhost)"
+_NON_RETRYABLE_STATUS = {400, 401, 403, 404, 407, 410}
+
+
+def _is_retryable_exc(exc: BaseException) -> bool:
+    """Retry network/timeout/429/5xx only; never loop on 401/403/404/407."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code if exc.response is not None else 0
+        if code in _NON_RETRYABLE_STATUS:
+            return False
+        return code == 429 or code >= 500
+    return isinstance(exc, (httpx.HTTPError, httpx.TimeoutException))
 
 
 def _struct_time_to_dt(value: struct_time | None) -> datetime | None:
@@ -69,7 +80,7 @@ class RssAdapter(BaseAdapter):
             reraise=True,
             stop=stop_after_attempt(self.max_attempts),
             wait=wait_exponential(multiplier=0.5, min=0.5, max=8),
-            retry=retry_if_exception_type((httpx.HTTPError, httpx.TimeoutException)),
+            retry=retry_if_exception(_is_retryable_exc),
         )
         def _get() -> str:
             with httpx.Client(
@@ -78,6 +89,14 @@ class RssAdapter(BaseAdapter):
                 headers=headers,
             ) as client:
                 response = client.get(feed_url)
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    msg = f"HTTP 429 Too Many Requests for {feed_url}"
+                    if retry_after:
+                        msg += f" (Retry-After: {retry_after})"
+                    raise httpx.HTTPStatusError(
+                        msg, request=response.request, response=response
+                    )
                 response.raise_for_status()
                 return response.text
 
