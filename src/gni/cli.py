@@ -207,9 +207,13 @@ def cmd_reports_daily(args: argparse.Namespace) -> int:
             session,
             day=args.date,
             polish=bool(getattr(args, "polish", False)),
+            analyze=bool(getattr(args, "analyze", False)),
+            analyze_tasks=getattr(args, "task", None) or None,
+            force_analyze=bool(getattr(args, "force", False)),
         )
     paths = write_daily_files(payload, out_dir=args.out_dir)
     sections = payload.get("sections") or {}
+    intel = payload.get("intelligence") or {}
     print(
         json.dumps(
             {
@@ -218,9 +222,93 @@ def cmd_reports_daily(args: argparse.Namespace) -> int:
                 "schema_version": payload.get("schema_version"),
                 "generator": payload.get("generator"),
                 "files": paths,
-                "missing_analysis": (sections.get("attention") or {}).get("missing_analysis"),
-                "events": len(sections.get("events") or []),
+                "missing_analysis": (sections.get("quality") or {}).get("missing_analysis"),
+                "events": len(sections.get("major_events") or []),
                 "polish": payload.get("polish"),
+                "intelligence_status": intel.get("status"),
+                "intelligence_meta": intel.get("meta"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_reports_weekly(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.reports.weekly import build_weekly_report
+
+    ensure_schema()
+    with session_scope() as session:
+        payload = build_weekly_report(
+            session,
+            end_day=args.end,
+            analyze=bool(getattr(args, "analyze", False)),
+            analyze_tasks=getattr(args, "task", None) or None,
+            force_analyze=bool(getattr(args, "force", False)),
+        )
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"weekly_report_{payload.get('period')}.json"
+        out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    else:
+        out_path = None
+    intel = payload.get("intelligence") or {}
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "period": payload.get("period"),
+                "schema_version": payload.get("schema_version"),
+                "generator": payload.get("generator"),
+                "article_count": payload.get("article_count"),
+                "file": str(out_path) if out_path else None,
+                "intelligence_status": intel.get("status"),
+                "intelligence_meta": intel.get("meta"),
+                "validation_ok": (payload.get("validation") or {}).get("ok"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_reports_monthly(args: argparse.Namespace) -> int:
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.reports.monthly import build_monthly_report
+
+    ensure_schema()
+    with session_scope() as session:
+        payload = build_monthly_report(
+            session,
+            month=args.month,
+            analyze=bool(getattr(args, "analyze", False)),
+            analyze_tasks=getattr(args, "task", None) or None,
+            force_analyze=bool(getattr(args, "force", False)),
+        )
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"monthly_report_{payload.get('period')}.json"
+        out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    else:
+        out_path = None
+    intel = payload.get("intelligence") or {}
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "period": payload.get("period"),
+                "schema_version": payload.get("schema_version"),
+                "generator": payload.get("generator"),
+                "article_count": payload.get("article_count"),
+                "file": str(out_path) if out_path else None,
+                "intelligence_status": intel.get("status"),
+                "intelligence_meta": intel.get("meta"),
+                "validation_ok": (payload.get("validation") or {}).get("ok"),
             },
             ensure_ascii=False,
             indent=2,
@@ -514,10 +602,10 @@ def main(argv: list[str] | None = None) -> None:
     p_eext.add_argument("--limit", type=int, default=500, help="Max articles to extract")
     p_eext.set_defaults(func=cmd_events_extract)
 
-    p_reports = sub.add_parser("reports", help="Daily / weekly report generation")
+    p_reports = sub.add_parser("reports", help="Daily / weekly / monthly report generation")
     reports_sub = p_reports.add_subparsers(dest="reports_command", required=True)
     p_rdaily = reports_sub.add_parser(
-        "daily", help="Build 7-section daily report JSON+Markdown (daily_report_schema_v1)"
+        "daily", help="Build daily report JSON+Markdown (daily_report_schema_v4)"
     )
     p_rdaily.add_argument("--date", help="YYYY-MM-DD (Asia/Shanghai); default today")
     p_rdaily.add_argument(
@@ -530,7 +618,38 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Optional LLM polish for narrative one-liners only (never changes numbers)",
     )
+    p_rdaily.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Run LLM Intelligence Narrative Layer (with per-task DB caching)",
+    )
+    p_rdaily.add_argument(
+        "--task",
+        action="append",
+        help="Run or retry only specific narrative task(s) (repeatable)",
+    )
+    p_rdaily.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass task cache and regenerate LLM narrative tasks",
+    )
     p_rdaily.set_defaults(func=cmd_reports_daily)
+
+    p_rweekly = reports_sub.add_parser("weekly", help="Build weekly report with optional LLM analysis")
+    p_rweekly.add_argument("--end", help="Week end date YYYY-MM-DD (report TZ)")
+    p_rweekly.add_argument("--out-dir", default=None, help="Optional output directory for JSON")
+    p_rweekly.add_argument("--analyze", action="store_true", help="Run LLM Intelligence Narrative Layer")
+    p_rweekly.add_argument("--task", action="append", help="Run/retry specific narrative task(s)")
+    p_rweekly.add_argument("--force", action="store_true", help="Bypass task cache")
+    p_rweekly.set_defaults(func=cmd_reports_weekly)
+
+    p_rmonthly = reports_sub.add_parser("monthly", help="Build monthly report with optional LLM analysis")
+    p_rmonthly.add_argument("--month", help="YYYY-MM (report TZ)")
+    p_rmonthly.add_argument("--out-dir", default=None, help="Optional output directory for JSON")
+    p_rmonthly.add_argument("--analyze", action="store_true", help="Run LLM Intelligence Narrative Layer")
+    p_rmonthly.add_argument("--task", action="append", help="Run/retry specific narrative task(s)")
+    p_rmonthly.add_argument("--force", action="store_true", help="Bypass task cache")
+    p_rmonthly.set_defaults(func=cmd_reports_monthly)
 
     p_alerts = sub.add_parser("alerts", help="Persisted A/B alert center")
     alerts_sub = p_alerts.add_subparsers(dest="alerts_command", required=True)

@@ -198,6 +198,7 @@ export type DailyReport = {
     country_ids: string[]
   }
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
+  intelligence?: ReportIntelligenceBlock
   narratives?: {
     executive?: string
     risk?: string
@@ -543,9 +544,174 @@ export type PeriodReport = {
   period_end?: string
   generated_at: string
   disclaimer: string
+  generator?: string
   article_count?: number
   sections: Record<string, unknown>
   narratives?: Record<string, string>
+  intelligence?: ReportIntelligenceBlock
+  validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
+}
+
+export type EvidenceRef = {
+  type: 'metric' | 'article' | 'event' | 'alert' | string
+  ref_id: string
+  label?: string
+  url?: string | null
+}
+
+export type NarrativeFinding = {
+  title: string
+  conclusion: string
+  classification: 'Fact' | 'Inference' | 'Hypothesis' | string
+  evidence_refs: EvidenceRef[]
+  reasoning?: string
+  confidence: 'high' | 'medium' | 'low' | string
+  limitations?: string[]
+  needs_review?: boolean
+  validation_notes?: string[]
+}
+
+export type EventInterpretation = {
+  event_id: string
+  title: string
+  background?: string
+  what_happened?: string
+  event_actual_changes?: string
+  coverage_attention_changes?: string
+  country_followup_timing?: string
+  country_differences?: string
+  media_viewpoints?: string[]
+  current_status?: string
+  why_it_matters?: string
+  what_to_monitor?: string[]
+  evidence_refs?: EvidenceRef[]
+  confidence?: string
+  limitations?: string[]
+  needs_review?: boolean
+}
+
+export type TopicTrendInterpretation = {
+  topic_id: string
+  topic_label?: string
+  attention_change?: string
+  stance_change?: string
+  topic_structure_change?: string
+  drivers?: string[]
+  persistence?: 'short_term' | 'ongoing' | 'insufficient_history' | string
+  evidence_refs?: EvidenceRef[]
+  confidence?: string
+  limitations?: string[]
+  needs_review?: boolean
+}
+
+export type CountryFrameEntry = {
+  country_id: string
+  main_frame?: string
+  unique_angle?: string
+  sample_note?: string
+  evidence_refs?: EvidenceRef[]
+}
+
+export type CrossCountryInterpretation = {
+  subject_type?: string
+  subject_id?: string
+  subject_label?: string
+  common_focus?: string
+  country_frames?: CountryFrameEntry[]
+  major_differences?: string
+  emerging_or_shifting?: string
+  insufficient_sample_countries?: string[]
+  evidence_refs?: EvidenceRef[]
+  confidence?: string
+  needs_review?: boolean
+}
+
+export type StanceInterpretationItem = {
+  scope_type?: string
+  scope_id?: string
+  scope_label?: string
+  rate_vs_count_note?: string
+  drivers?: string[]
+  coverage_limitation?: string
+  evidence_refs?: EvidenceRef[]
+  confidence?: string
+  needs_review?: boolean
+}
+
+export type OutlookSignalItem = {
+  signal: string
+  evidence_refs?: EvidenceRef[]
+  reasoning?: string
+  confidence?: string
+  what_to_monitor?: string[]
+  potential_trigger?: string
+  uncertainty?: string
+  needs_review?: boolean
+}
+
+export type NarrativeTaskOutput = {
+  task_type: string
+  report_type: string
+  status: string
+  summary?: string
+  findings?: NarrativeFinding[]
+  important_changes?: string[]
+  main_drivers?: string[]
+  event_interpretations?: EventInterpretation[]
+  topic_trends?: TopicTrendInterpretation[]
+  cross_country?: CrossCountryInterpretation[]
+  stance_analyses?: StanceInterpretationItem[]
+  outlook_signals?: OutlookSignalItem[]
+  uncertainties?: string[]
+  follow_up_questions?: string[]
+  meta?: Record<string, unknown>
+}
+
+export type ReportIntelligenceBlock = {
+  status: 'rule_only' | 'completed' | 'partial' | 'needs_review' | 'failed' | string
+  report_type: string
+  period: string
+  evidence_hash?: string
+  stale?: boolean
+  fallback_reason?: string
+  tasks: Record<string, NarrativeTaskOutput>
+  task_statuses: Record<
+    string,
+    {
+      title_zh?: string
+      prompt_version?: string
+      model_version?: string | null
+      status: string
+      stale?: boolean
+      total_tokens?: number | null
+      latency_ms?: number | null
+      error_message?: string | null
+      validation?: Record<string, unknown> | null
+      updated_at?: string | null
+    }
+  >
+  meta: {
+    completed_tasks: number
+    failed_tasks: number
+    needs_review_tasks: number
+    total_tasks: number
+    model_versions: string[]
+    prompt_versions: Record<string, string>
+    total_tokens: number
+    total_latency_ms: number
+    estimated_cost_usd: number
+  }
+}
+
+export function analyzeReport<T = DailyReport | PeriodReport>(
+  reportType: 'daily' | 'weekly' | 'monthly',
+  params?: { period?: string; tasks?: string[]; force?: boolean },
+) {
+  return post<T>(`/api/reports/${reportType}/analyze`, {
+    period: params?.period ?? null,
+    tasks: params?.tasks ?? null,
+    force: Boolean(params?.force),
+  })
 }
 
 export function fetchWeeklyReport(end?: string) {

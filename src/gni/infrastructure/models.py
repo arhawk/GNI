@@ -707,3 +707,42 @@ class StatSnapshot(Base):
     analysis_version: Mapped[str] = mapped_column(String(64), nullable=False)
     article_ids: Mapped[list[str] | None] = mapped_column(PortableJSON)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReportNarrativeTask(Base):
+    """Cached per-task LLM intelligence analysis output with audit & validation metadata."""
+
+    __tablename__ = "report_narrative_tasks"
+    __table_args__ = (
+        UniqueConstraint(
+            "report_type",
+            "period",
+            "task_type",
+            "prompt_version",
+            name="uq_report_narrative_task_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    report_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # daily|weekly|monthly
+    period: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str | None] = mapped_column(String(128))
+    provider: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(Float)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    raw_output: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    validated_output: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    validation_result: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+

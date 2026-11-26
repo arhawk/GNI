@@ -1,0 +1,278 @@
+.gni-intel-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.9rem;
+  margin: 0.75rem 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elev) 88%, var(--accent) 6%);
+}
+
+.gni-intel-bar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gni-intel-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.gni-btn-primary {
+  appearance: none;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  padding: 0.35rem 0.78rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gni-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.gni-btn-secondary {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text);
+  padding: 0.35rem 0.72rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.gni-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.gni-intel-tasks-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.gni-task-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--muted);
+}
+
+.gni-task-pill.ok {
+  border-color: color-mix(in srgb, #3fb950 55%, var(--line));
+  color: #3fb950;
+}
+
+.gni-task-pill.warn {
+  border-color: color-mix(in srgb, #d29922 55%, var(--line));
+  color: #d29922;
+}
+
+.gni-task-pill.err {
+  border-color: color-mix(in srgb, #f85149 55%, var(--line));
+  color: #f85149;
+}
+
+.gni-intel-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 0.9rem 1rem;
+  margin: 0.75rem 0 1.15rem;
+}
+
+.gni-intel-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.gni-intel-panel-head h3,
+.gni-intel-panel-head h4 {
+  margin: 0;
+}
+
+.gni-intel-summary {
+  font-size: 0.94rem;
+  line-height: 1.62;
+  margin: 0 0 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+}
+
+.gni-findings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 0.7rem;
+  margin: 0.65rem 0;
+}
+
+.gni-finding-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.gni-finding-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.gni-cls-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.gni-cls-fact {
+  background: color-mix(in srgb, #3fb950 20%, transparent);
+  color: #3fb950;
+  border: 1px solid color-mix(in srgb, #3fb950 45%, transparent);
+}
+
+.gni-cls-inference {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.gni-cls-hypothesis {
+  background: color-mix(in srgb, #d29922 20%, transparent);
+  color: #d29922;
+  border: 1px solid color-mix(in srgb, #d29922 45%, transparent);
+}
+
+.gni-ev-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.gni-ev-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.14rem 0.48rem;
+  border-radius: 5px;
+  font-size: 0.73rem;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.gni-ev-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.gni-ev-chip-kind {
+  font-size: 0.66rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.gni-event-interp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.gni-event-interp-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  padding: 0.85rem 1rem;
+}
+
+.gni-event-interp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.65rem;
+  margin: 0.6rem 0;
+}
+
+.gni-kv-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.gni-kv-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.gni-two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.7rem;
+  margin: 0.5rem 0;
+}
+
+.gni-shell-step {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0.6rem 0 0.3rem;
+}
+
+.gni-outlook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.6rem;
+}
+
+.gni-outlook-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid #d29922;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  padding: 0.75rem 0.85rem;
+  font-size: 0.83rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+}

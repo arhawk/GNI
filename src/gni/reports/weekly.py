@@ -1,4 +1,4 @@
-"""Weekly Intelligence Report — rule assembly schema v1 (SPEC-aligned required chapters)."""
+"""Weekly Intelligence Report — rule assembly schema v1 + V1.0 stats + LLM Intelligence Layer."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gni.alerts.service import build_alerts_payload
-from gni.analysis.stance_util import primary_stance_label
+from gni.analysis.stance_util import extract_v1_china_stance, primary_stance_label
 from gni.core.config import get_settings
 from gni.events.service import list_events
-from gni.infrastructure.models import Article, ReportSnapshot, Source
+from gni.infrastructure.models import Article, Event, EventArticle, ReportSnapshot, Source
 from gni.metrics.definitions import (
     CHINA_INCLUDE_LEVELS,
     METHODOLOGY_VERSION,
@@ -23,6 +23,7 @@ from gni.metrics.definitions import (
     TAXONOMY_V1_VERSION,
 )
 from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
+from gni.reports.validate import validate_weekly_report
 
 SCHEMA_VERSION = "weekly_report_schema_v1"
 DISCLAIMER = (
@@ -84,11 +85,19 @@ def _source_bucket(src: Source | None) -> str:
     return "other"
 
 
+def _fmt_pct(rate: float | None) -> float | None:
+    return round(float(rate) * 100.0, 1) if isinstance(rate, (int, float)) else None
+
+
 def build_weekly_report(
     session: Session,
     *,
     end_day: date | str | None = None,
     persist_snapshot: bool = True,
+    analyze: bool = False,
+    analyze_tasks: list[str] | None = None,
+    force_analyze: bool = False,
+    llm_client: Any = None,
 ) -> dict[str, Any]:
     if isinstance(end_day, str):
         end_day = date.fromisoformat(end_day)
@@ -96,6 +105,7 @@ def build_weekly_report(
 
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
     articles = list(session.scalars(select(Article)).all())
+    articles_by_id = {a.id: a for a in articles}
     analyses = _latest_analyses(session, [a.id for a in articles])
 
     def china_in(start: datetime, end: datetime) -> list[Article]:
@@ -169,45 +179,125 @@ def build_weekly_report(
         )
 
     events = list_events(session, limit=80)
+    ev_ids_all = [e["id"] for e in events if e.get("id")]
+    db_events = {
+        ev.id: ev for ev in session.scalars(select(Event).where(Event.id.in_(ev_ids_all))).all()
+    } if ev_ids_all else {}
+    links_by_eid: dict[str, list[str]] = defaultdict(list)
+    if ev_ids_all:
+        for lk in session.scalars(select(EventArticle).where(EventArticle.event_id.in_(ev_ids_all))).all():
+            links_by_eid[lk.event_id].append(lk.article_id)
+
     major = []
     for e in events:
+        eid = e.get("id")
+        if not eid:
+            continue
+        ev_obj = db_events.get(eid)
+        linked_ids = links_by_eid.get(eid) or []
+        ev_articles = [articles_by_id[aid] for aid in linked_ids if aid in articles_by_id]
+        this_w_arts = [a for a in ev_articles if _in_window(a.published_at, win_start, win_end)]
+        prev_w_arts = [a for a in ev_articles if _in_window(a.published_at, prev_start, prev_end)]
+
         fs = e.get("first_seen_at") or e.get("window_start") or e.get("updated_at")
         try:
             edt = datetime.fromisoformat(str(fs).replace("Z", "+00:00")) if fs else None
         except ValueError:
             edt = None
-        if edt and not _in_window(edt, win_start - timedelta(days=14), win_end):
+        if not this_w_arts and edt and not _in_window(edt, win_start - timedelta(days=14), win_end):
             continue
+
+        countries_set: set[str] = set()
+        sources_set: set[str] = set()
+        first_by_country: dict[str, str] = {}
+        evidence_rows: list[dict[str, Any]] = []
+        for art in sorted(
+            ev_articles,
+            key=lambda a: (_aware(a.published_at) or datetime.min.replace(tzinfo=timezone.utc)),
+        ):
+            src = sources.get(art.source_id)
+            cid = src.country_id if src else None
+            if cid:
+                countries_set.add(cid)
+                if art.published_at and cid not in first_by_country:
+                    first_by_country[cid] = art.published_at.isoformat()
+            sources_set.add(art.source_id)
+            ana = analyses.get(art.id)
+            structured = (ana.structured_result if ana else None) or {}
+            sver = ana.schema_version if ana else None
+            evidence_rows.append(
+                {
+                    "article_id": art.id,
+                    "title": art.title,
+                    "country_id": cid,
+                    "source_id": art.source_id,
+                    "url": art.url,
+                    "published_at": art.published_at.isoformat() if art.published_at else None,
+                    "stance_label": extract_v1_china_stance(structured, schema_version=sver),
+                    "framing": (structured.get("framing") or {}).get("primary")
+                    if isinstance(structured.get("framing"), dict)
+                    else None,
+                }
+            )
+
         major.append(
             {
-                "id": e.get("id"),
+                "id": eid,
+                "event_id": eid,
                 "title": e.get("title"),
                 "status": e.get("status"),
                 "importance_score": e.get("importance_score"),
-                "article_count": e.get("article_count"),
-                "actor_key": e.get("actor_key"),
-                "action_key": e.get("action_key"),
+                "article_count": len(ev_articles) or e.get("article_count") or 0,
+                "this_week_articles": len(this_w_arts),
+                "prev_week_articles": len(prev_w_arts),
+                "actor_key": ev_obj.actor_key if ev_obj else e.get("actor_key"),
+                "action_key": ev_obj.action_key if ev_obj else e.get("action_key"),
+                "object_key": ev_obj.object_key if ev_obj else None,
+                "event_time": ev_obj.event_time.isoformat() if ev_obj and ev_obj.event_time else e.get("event_time"),
                 "first_seen_at": e.get("first_seen_at"),
-                "href": f"/events/{e.get('id')}",
+                "coverage": {
+                    "article_count": len(ev_articles) or e.get("article_count") or 0,
+                    "country_count": len(countries_set),
+                    "source_count": len(sources_set),
+                    "countries": sorted(countries_set),
+                },
+                "country_first_reported_at": first_by_country,
+                "evidence": evidence_rows[-10:][::-1],
+                "href": f"/events/{eid}",
             }
         )
-    major.sort(key=lambda x: -(x.get("importance_score") or 0))
+    major.sort(
+        key=lambda x: (
+            -(x.get("this_week_articles") or 0),
+            -(x.get("importance_score") or 0),
+            -(x.get("article_count") or 0),
+        )
+    )
     major = major[:12]
 
     evolution = [
         {
             "event_id": m["id"],
             "title": m["title"],
-            "event_change_note": "规则 v1：事件本体变化需人工/后续时间线；此处列本周相关事件卡。",
-            "coverage_focus_note": f"关联报道约 {m.get('article_count') or 0} 篇。",
+            "event_time": m.get("event_time"),
             "first_seen_at": m.get("first_seen_at"),
+            "this_week_articles": m.get("this_week_articles", 0),
+            "prev_week_articles": m.get("prev_week_articles", 0),
+            "countries": (m.get("coverage") or {}).get("countries") or [],
+            "country_first_reported_at": m.get("country_first_reported_at") or {},
+            "event_change_note": "事件本体变化需结合时间线与 LLM 事件演化分析；此处列确定性报道增量与国别跟进时间。",
+            "coverage_focus_note": (
+                f"本周关联报道 {m.get('this_week_articles', 0)} 篇"
+                f"（上周 {m.get('prev_week_articles', 0)} 篇，累计 {m.get('article_count') or 0} 篇，"
+                f"覆盖 {(m.get('coverage') or {}).get('country_count', 0)} 国）。"
+            ),
         }
-        for m in major[:5]
+        for m in major[:6]
     ]
 
     # Cross-country frames for top topics
     cross = []
-    for topic, _ in topic_this.most_common(3):
+    for topic, _ in topic_this.most_common(4):
         frames_by_c: dict[str, Counter[str]] = defaultdict(Counter)
         for a in this_week:
             structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
@@ -249,6 +339,31 @@ def build_weekly_report(
         session, period_start=prev_start, period_end=prev_end, persist=False
     )
 
+    # 4-week rolling deterministic V1.0 history (honest about missing weeks)
+    historical_v1_stats: list[dict[str, Any]] = []
+    for offset in range(3, -1, -1):
+        hs = win_start - timedelta(days=7 * offset)
+        he = win_end - timedelta(days=7 * offset)
+        if offset == 0:
+            g = (v1_this["by_scope"] or {}).get("global") or {}
+        elif offset == 1:
+            g = (v1_prev["by_scope"] or {}).get("global") or {}
+        else:
+            hsnap = run_v1_stat_snapshots(
+                session, period_start=hs, period_end=he, persist=False, include_zero_taxonomy=False
+            )
+            g = (hsnap["by_scope"] or {}).get("global") or {}
+        historical_v1_stats.append(
+            {
+                "label": f"{hs.date().isoformat()}~{(he - timedelta(days=1)).date().isoformat()}",
+                "article_count": int(g.get("article_count") or 0),
+                "positive_pct": _fmt_pct(g.get("positive_rate")),
+                "neutral_pct": _fmt_pct(g.get("neutral_rate")),
+                "negative_pct": _fmt_pct(g.get("negative_rate")),
+                "stance_coverage_pct": _fmt_pct(g.get("stance_coverage_rate")),
+            }
+        )
+
     payload: dict[str, Any] = {
         "report_type": "weekly",
         "schema_version": SCHEMA_VERSION,
@@ -266,6 +381,7 @@ def build_weekly_report(
         "sections": {
             "v1_stats": v1_this["by_scope"],
             "v1_stats_prev": v1_prev["by_scope"],
+            "historical_v1_stats": historical_v1_stats,
             "summary": {
                 "overview_text": overview,
                 "kpis": {
@@ -290,8 +406,9 @@ def build_weekly_report(
             "signals": signals,
             "quality": {
                 "window_days": 7,
+                "weeks_with_history": sum(1 for w in historical_v1_stats if w["article_count"] > 0),
                 "notes": [
-                    "规则组装 schema v1；无 Sankey/社媒曲线。",
+                    "规则确定性统计 + 可选 LLM 情报解读层；无社媒公众兴趣曲线。",
                     DISCLAIMER,
                 ],
             },
@@ -302,6 +419,34 @@ def build_weekly_report(
             "signals": f"本周情报信号 {len(signals)} 条。",
         },
     }
+
+    from gni.reports.narrative.runner import (
+        load_cached_intelligence,
+        run_report_intelligence,
+    )
+
+    if analyze:
+        payload["intelligence"] = run_report_intelligence(
+            session,
+            report_type="weekly",
+            period=payload["period"],
+            payload=payload,
+            tasks=analyze_tasks,
+            force=force_analyze,
+            llm_client=llm_client,
+        )
+    else:
+        payload["intelligence"] = load_cached_intelligence(
+            session,
+            report_type="weekly",
+            period=payload["period"],
+            payload=payload,
+        )
+
+    if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
+        payload["generator"] = "rule_weekly_v1+llm_intelligence"
+
+    payload["validation"] = validate_weekly_report(payload)
 
     if persist_snapshot:
         _upsert_snapshot(session, "weekly", payload["period"], SCHEMA_VERSION, payload)

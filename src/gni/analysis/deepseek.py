@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -22,11 +24,119 @@ PROMPT_VERSION = "deepseek_analyze_v1.0"
 _VALID_STANCE_LABELS = {"Positive", "Neutral", "Negative", "Unclassified"}
 
 
+@dataclass
+class LLMCallResult:
+    """Structured result from a single LLM JSON call (with usage & timing telemetry)."""
+
+    parsed: dict[str, Any]
+    raw_text: str
+    provider: str
+    model_version: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    latency_ms: int
+    estimated_cost_usd: float
+
+
+def estimate_token_cost_usd(*, prompt_tokens: int, completion_tokens: int) -> float:
+    """Rough DeepSeek chat cost estimate from actual token counts."""
+    return round((max(0, prompt_tokens) * 0.14 + max(0, completion_tokens) * 0.28) / 1_000_000, 6)
+
+
 class DeepSeekLLMProvider(BaseLLMProvider):
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         if not self.settings.llm_api_key:
             raise RuntimeError("GNI_LLM_API_KEY is required for DeepSeek provider")
+
+    def generate_json(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        model: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 2500,
+        timeout: float = 75.0,
+        max_retries: int = 2,
+    ) -> LLMCallResult:
+        """Generic OpenAI-compatible structured JSON chat call with retries & usage telemetry."""
+        chosen_model = model or self.settings.llm_model or "deepseek-chat"
+        url = self.settings.llm_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.settings.llm_api_key}",
+            "Content-Type": "application/json",
+        }
+        body: dict[str, Any] = {
+            "model": chosen_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        last_exc: Exception | None = None
+        cur_max_tokens = max_tokens
+        for attempt in range(max_retries + 1):
+            t0 = time.monotonic()
+            body["max_tokens"] = cur_max_tokens
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    resp = client.post(url, headers=headers, json=body)
+                    if resp.status_code in {429, 500, 502, 503, 504} and attempt < max_retries:
+                        time.sleep(min(4.0, 1.0 * (2**attempt)))
+                        continue
+                    resp.raise_for_status()
+                    data = resp.json()
+                latency_ms = int((time.monotonic() - t0) * 1000)
+                choice0 = data["choices"][0]
+                finish_reason = choice0.get("finish_reason")
+                raw_text = str(choice0["message"]["content"] or "")
+                parsed = _extract_json(raw_text)
+                if parsed is None:
+                    logger.warning(
+                        "LLM JSON parse failed (attempt=%d finish_reason=%s len=%d max_tokens=%d)",
+                        attempt + 1,
+                        finish_reason,
+                        len(raw_text),
+                        cur_max_tokens,
+                    )
+                    if finish_reason == "length":
+                        cur_max_tokens = min(8192, cur_max_tokens * 2)
+                    raise ValueError(
+                        f"LLM response was not valid JSON object (finish_reason={finish_reason})"
+                    )
+                usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+                p_tok = int(usage.get("prompt_tokens") or max(1, (len(system_prompt) + len(user_prompt)) // 4))
+                c_tok = int(usage.get("completion_tokens") or max(1, len(raw_text) // 4))
+                t_tok = int(usage.get("total_tokens") or (p_tok + c_tok))
+                model_ver = str(data.get("model") or chosen_model)
+                return LLMCallResult(
+                    parsed=parsed,
+                    raw_text=raw_text,
+                    provider="deepseek",
+                    model_version=model_ver,
+                    prompt_tokens=p_tok,
+                    completion_tokens=c_tok,
+                    total_tokens=t_tok,
+                    latency_ms=latency_ms,
+                    estimated_cost_usd=estimate_token_cost_usd(
+                        prompt_tokens=p_tok, completion_tokens=c_tok
+                    ),
+                )
+            except (httpx.TimeoutException, httpx.TransportError, ValueError) as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    time.sleep(min(4.0, 1.0 * (2**attempt)))
+                    continue
+                raise
+            except Exception as exc:
+                last_exc = exc
+                raise
+        raise RuntimeError(f"LLM generate_json failed: {last_exc}")
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
         model = kwargs.get("model") or self.settings.llm_model

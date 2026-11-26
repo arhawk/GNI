@@ -1,9 +1,9 @@
-"""Monthly Intelligence Report — rule assembly schema v1 (SPEC-aligned required chapters)."""
+"""Monthly Intelligence Report — article-level recomputed V1.0 stats + LLM Intelligence Layer."""
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 from calendar import monthrange
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -12,10 +12,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gni.alerts.service import build_alerts_payload
-from gni.analysis.stance_util import primary_stance_label
+from gni.analysis.stance_util import (
+    extract_v1_boards,
+    extract_v1_china_stance,
+    extract_v1_topics,
+    primary_stance_label,
+)
 from gni.core.config import get_settings
 from gni.events.service import list_events
-from gni.infrastructure.models import Article, Source
+from gni.infrastructure.models import Article, Event, EventArticle, Source
 from gni.metrics.definitions import (
     CHINA_INCLUDE_LEVELS,
     METHODOLOGY_VERSION,
@@ -23,12 +28,13 @@ from gni.metrics.definitions import (
     TAXONOMY_V1_VERSION,
 )
 from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
-from gni.reports.weekly import _in_window, _source_bucket, _upsert_snapshot
+from gni.reports.validate import validate_monthly_report
+from gni.reports.weekly import _aware, _fmt_pct, _in_window, _source_bucket, _upsert_snapshot
 
 SCHEMA_VERSION = "monthly_report_schema_v1"
 DISCLAIMER = (
     "全球对华监测月报 · 遵循 GNI 统计口径 V1.0（methodology_v1.0）："
-    "以唯一文章数（Article Count）为基础单位，按 published_at 与信源所属国家统计；"
+    "以唯一文章数（Article Count）为基础单位，按 published_at 与信源所属国家文章级重算；"
     "禁止外推为国家立场或社会民意。"
 )
 
@@ -68,10 +74,15 @@ def build_monthly_report(
     *,
     month: str | date | None = None,
     persist_snapshot: bool = True,
+    analyze: bool = False,
+    analyze_tasks: list[str] | None = None,
+    force_analyze: bool = False,
+    llm_client: Any = None,
 ) -> dict[str, Any]:
     period, win_start, win_end, prev_start, prev_end = _month_window(month)
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
     articles = list(session.scalars(select(Article)).all())
+    articles_by_id = {a.id: a for a in articles}
     analyses = _latest_analyses(session, [a.id for a in articles])
 
     def china_in(start: datetime, end: datetime) -> list[Article]:
@@ -90,21 +101,37 @@ def build_monthly_report(
 
     topic_this: Counter[str] = Counter()
     topic_last: Counter[str] = Counter()
+    frame_this: Counter[str] = Counter()
+    frame_last: Counter[str] = Counter()
     by_country: Counter[str] = Counter()
     by_bucket: Counter[str] = Counter()
     sent_by_country: dict[str, Counter[str]] = defaultdict(Counter)
     stance_by_country: dict[str, Counter[str]] = defaultdict(Counter)
+    country_frames: dict[str, Counter[str]] = defaultdict(Counter)
+    country_topics_v1: dict[str, Counter[str]] = defaultdict(Counter)
+    country_boards_v1: dict[str, Counter[str]] = defaultdict(Counter)
 
     for a in this_m:
         src = sources.get(a.source_id)
         cid = src.country_id if src else "??"
         by_country[cid] += 1
         by_bucket[_source_bucket(src)] += 1
-        structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
+        ana = analyses.get(a.id)
+        structured = (ana.structured_result if ana else None) or {}
+        sver = ana.schema_version if ana else None
         topics = structured.get("topics") or {}
+        framing = structured.get("framing") or {}
         primary_t = topics.get("primary") if isinstance(topics, dict) else None
+        primary_f = framing.get("primary") if isinstance(framing, dict) else None
         if isinstance(primary_t, str):
             topic_this[primary_t] += 1
+        if isinstance(primary_f, str):
+            frame_this[primary_f] += 1
+            country_frames[cid][primary_f] += 1
+        for tid in extract_v1_topics(structured, schema_version=sver):
+            country_topics_v1[cid][tid] += 1
+        for bid in extract_v1_boards(structured, schema_version=sver):
+            country_boards_v1[cid][bid] += 1
         if src and src.feed_scope != "GOVERNMENT_RELEASES":
             sentiment = structured.get("sentiment") or {}
             lab = sentiment.get("label") if isinstance(sentiment, dict) else None
@@ -117,29 +144,108 @@ def build_monthly_report(
     for a in last_m:
         structured = (analyses[a.id].structured_result if a.id in analyses else None) or {}
         topics = structured.get("topics") or {}
+        framing = structured.get("framing") or {}
         primary_t = topics.get("primary") if isinstance(topics, dict) else None
+        primary_f = framing.get("primary") if isinstance(framing, dict) else None
         if isinstance(primary_t, str):
             topic_last[primary_t] += 1
+        if isinstance(primary_f, str):
+            frame_last[primary_f] += 1
 
     topic_mom = []
     for t in sorted(set(topic_this) | set(topic_last), key=lambda x: -topic_this.get(x, 0)):
         cur, prev = topic_this.get(t, 0), topic_last.get(t, 0)
         topic_mom.append({"topic": t, "this_month": cur, "last_month": prev, "delta": cur - prev})
 
-    events = list_events(session, limit=100)
+    # Month-window filtered events with full retrospective evidence
+    events = list_events(session, limit=120)
+    ev_ids_all = [e["id"] for e in events if e.get("id")]
+    db_events = {
+        ev.id: ev for ev in session.scalars(select(Event).where(Event.id.in_(ev_ids_all))).all()
+    } if ev_ids_all else {}
+    links_by_eid: dict[str, list[str]] = defaultdict(list)
+    if ev_ids_all:
+        for lk in session.scalars(select(EventArticle).where(EventArticle.event_id.in_(ev_ids_all))).all():
+            links_by_eid[lk.event_id].append(lk.article_id)
+
     major = []
     for e in events:
+        eid = e.get("id")
+        if not eid:
+            continue
+        ev_obj = db_events.get(eid)
+        linked_ids = links_by_eid.get(eid) or []
+        ev_articles = [articles_by_id[aid] for aid in linked_ids if aid in articles_by_id]
+        month_arts = [a for a in ev_articles if _in_window(a.published_at, win_start, win_end)]
+
+        ev_time = ev_obj.event_time if ev_obj else None
+        ev_created = ev_obj.created_at if ev_obj else None
+        touched = bool(month_arts) or _in_window(ev_time, win_start, win_end) or _in_window(ev_created, win_start, win_end)
+        if not touched:
+            continue
+
+        countries_set: set[str] = set()
+        sources_set: set[str] = set()
+        first_by_country: dict[str, str] = {}
+        evidence_rows: list[dict[str, Any]] = []
+        for art in sorted(
+            ev_articles,
+            key=lambda a: (_aware(a.published_at) or datetime.min.replace(tzinfo=timezone.utc)),
+        ):
+            src = sources.get(art.source_id)
+            cid = src.country_id if src else None
+            if cid:
+                countries_set.add(cid)
+                if art.published_at and cid not in first_by_country:
+                    first_by_country[cid] = art.published_at.isoformat()
+            sources_set.add(art.source_id)
+            ana = analyses.get(art.id)
+            structured = (ana.structured_result if ana else None) or {}
+            sver = ana.schema_version if ana else None
+            evidence_rows.append(
+                {
+                    "article_id": art.id,
+                    "title": art.title,
+                    "country_id": cid,
+                    "source_id": art.source_id,
+                    "url": art.url,
+                    "published_at": art.published_at.isoformat() if art.published_at else None,
+                    "stance_label": extract_v1_china_stance(structured, schema_version=sver),
+                }
+            )
+
         major.append(
             {
-                "id": e.get("id"),
+                "id": eid,
+                "event_id": eid,
                 "title": e.get("title"),
                 "status": e.get("status"),
                 "importance_score": e.get("importance_score"),
-                "article_count": e.get("article_count"),
-                "href": f"/events/{e.get('id')}",
+                "article_count": len(ev_articles) or e.get("article_count") or 0,
+                "this_month_articles": len(month_arts),
+                "actor_key": ev_obj.actor_key if ev_obj else e.get("actor_key"),
+                "action_key": ev_obj.action_key if ev_obj else e.get("action_key"),
+                "object_key": ev_obj.object_key if ev_obj else None,
+                "event_time": ev_time.isoformat() if ev_time else e.get("event_time"),
+                "first_seen_at": e.get("first_seen_at"),
+                "coverage": {
+                    "article_count": len(ev_articles) or e.get("article_count") or 0,
+                    "country_count": len(countries_set),
+                    "source_count": len(sources_set),
+                    "countries": sorted(countries_set),
+                },
+                "country_first_reported_at": first_by_country,
+                "evidence": evidence_rows[-10:][::-1],
+                "href": f"/events/{eid}",
             }
         )
-    major.sort(key=lambda x: -(x.get("importance_score") or 0))
+    major.sort(
+        key=lambda x: (
+            -(x.get("this_month_articles") or 0),
+            -(x.get("importance_score") or 0),
+            -(x.get("article_count") or 0),
+        )
+    )
     major = major[:15]
 
     try:
@@ -161,6 +267,111 @@ def build_monthly_report(
         session, period_start=prev_start, period_end=prev_end, persist=False
     )
 
+    # Article-level recomputed 6-month historical sequence (never merge weekly summaries)
+    tz = _tz()
+    cur_y, cur_m = win_start.year, win_start.month
+    month_tuples: list[tuple[int, int]] = []
+    yy, mm = cur_y, cur_m
+    for _ in range(6):
+        month_tuples.append((yy, mm))
+        if mm == 1:
+            yy, mm = yy - 1, 12
+        else:
+            mm -= 1
+    month_tuples.reverse()
+
+    historical_v1_stats: list[dict[str, Any]] = []
+    for my, mmo in month_tuples:
+        mlabel = f"{my:04d}-{mmo:02d}"
+        if my == cur_y and mmo == cur_m:
+            g = (v1_this["by_scope"] or {}).get("global") or {}
+        elif my == prev_start.year and mmo == prev_start.month:
+            g = (v1_prev["by_scope"] or {}).get("global") or {}
+        else:
+            last_d = monthrange(my, mmo)[1]
+            ms = datetime(my, mmo, 1, tzinfo=tz)
+            me = datetime(my, mmo, last_d, tzinfo=tz) + timedelta(days=1)
+            hsnap = run_v1_stat_snapshots(
+                session, period_start=ms, period_end=me, persist=False, include_zero_taxonomy=False
+            )
+            g = (hsnap["by_scope"] or {}).get("global") or {}
+        historical_v1_stats.append(
+            {
+                "month": mlabel,
+                "article_count": int(g.get("article_count") or 0),
+                "positive_pct": _fmt_pct(g.get("positive_rate")),
+                "neutral_pct": _fmt_pct(g.get("neutral_rate")),
+                "negative_pct": _fmt_pct(g.get("negative_rate")),
+                "stance_coverage_pct": _fmt_pct(g.get("stance_coverage_rate")),
+            }
+        )
+
+    # Deterministic country profiles (monitored media profiles, NOT official state positions)
+    prev_c_map = {
+        r.get("scope_id"): r
+        for r in ((v1_prev["by_scope"] or {}).get("countries") or [])
+        if isinstance(r, dict)
+    }
+    country_profiles: list[dict[str, Any]] = []
+    for c_row in (v1_this["by_scope"] or {}).get("countries") or []:
+        cid = str(c_row.get("scope_id") or "")
+        prev_c = prev_c_map.get(cid)
+        cur_n = int(c_row.get("article_count") or 0)
+        prev_n = int(prev_c.get("article_count") or 0) if isinstance(prev_c, dict) else 0
+        country_profiles.append(
+            {
+                "country_id": cid,
+                "article_count": cur_n,
+                "prev_month_count": prev_n,
+                "delta": cur_n - prev_n,
+                "positive_rate": c_row.get("positive_rate"),
+                "neutral_rate": c_row.get("neutral_rate"),
+                "negative_rate": c_row.get("negative_rate"),
+                "stance_coverage_rate": c_row.get("stance_coverage_rate"),
+                "sample_sufficient": cur_n >= 3,
+                "top_boards": [
+                    {"board_id": k, "count": v}
+                    for k, v in country_boards_v1.get(cid, Counter()).most_common(4)
+                ],
+                "top_topics": [
+                    {"topic_id": k, "count": v}
+                    for k, v in country_topics_v1.get(cid, Counter()).most_common(5)
+                ],
+                "top_frames": [
+                    {"frame": k, "count": v}
+                    for k, v in country_frames.get(cid, Counter()).most_common(4)
+                ],
+            }
+        )
+
+    # Deterministic narrative landscape (dominant / emerging / fading frames)
+    dominant_frames = [{"frame": k, "count": v} for k, v in frame_this.most_common(8)]
+    emerging_frames = [
+        {"frame": k, "this_month": frame_this[k], "last_month": frame_last.get(k, 0)}
+        for k in frame_this
+        if frame_this[k] > frame_last.get(k, 0)
+    ]
+    emerging_frames.sort(key=lambda x: -(x["this_month"] - x["last_month"]))
+    fading_frames = [
+        {"frame": k, "this_month": frame_this.get(k, 0), "last_month": frame_last[k]}
+        for k in frame_last
+        if frame_last[k] > frame_this.get(k, 0)
+    ]
+    fading_frames.sort(key=lambda x: -(x["last_month"] - x["this_month"]))
+    narrative_landscape = {
+        "dominant_frames": dominant_frames,
+        "emerging_frames": emerging_frames[:6],
+        "fading_frames": fading_frames[:6],
+        "by_country_frames": {
+            c: [{"frame": f, "count": n} for f, n in cnt.most_common(4)]
+            for c, cnt in country_frames.items()
+        },
+        "note": "仅统计框架出现次数，不代表叙事强度综合分。",
+    }
+
+    months_with_history = sum(1 for row in historical_v1_stats if row["article_count"] > 0)
+    missing_months = [row["month"] for row in historical_v1_stats if row["article_count"] == 0]
+
     payload: dict[str, Any] = {
         "report_type": "monthly",
         "schema_version": SCHEMA_VERSION,
@@ -177,6 +388,9 @@ def build_monthly_report(
         "sections": {
             "v1_stats": v1_this["by_scope"],
             "v1_stats_prev": v1_prev["by_scope"],
+            "historical_v1_stats": historical_v1_stats,
+            "country_profiles": country_profiles,
+            "narrative_landscape": narrative_landscape,
             "summary": {
                 "overview_text": overview,
                 "kpis": {
@@ -185,15 +399,17 @@ def build_monthly_report(
                     "delta": len(this_m) - len(last_m),
                     "reporting_countries": len(by_country),
                     "major_events": len(major),
+                    "months_with_history": months_with_history,
                 },
                 "source_buckets": dict(by_bucket),
-                "outlook": "规则 v1 不提供预测分数；持续关注环比上升主题与跨国框架差异。",
+                "outlook": "规则基线不提供预测分数；结构性展望见 LLM 战略信号与条件性展望模块。",
             },
             "major_events": major,
             "topic_trends": topic_mom[:20],
             "cross_country_narrative": {
                 "by_country_volume": dict(by_country),
-                "note": "同事件框架对比细节见事件页；月报汇总国家报道量。",
+                "by_country_frames": narrative_landscape["by_country_frames"],
+                "note": "国别媒体画像与框架对比基于当月文章级数据重算，非国家官方立场。",
             },
             "sentiment_stance": {
                 "by_country_sentiment": {c: dict(cnt) for c, cnt in sent_by_country.items()},
@@ -203,14 +419,50 @@ def build_monthly_report(
             "signals": signals,
             "quality": {
                 "window": period,
-                "notes": [DISCLAIMER, "Story 仍为 hash MVP，见 docs/STORY_MODEL.md。"],
+                "months_with_history": months_with_history,
+                "missing_months": missing_months,
+                "notes": [
+                    DISCLAIMER,
+                    (
+                        f"近6个月窗口内有数据月份：{months_with_history}/6"
+                        + (f"（缺失：{', '.join(missing_months)}，缺失月份不伪装成趋势）" if missing_months else "")
+                    ),
+                ],
             },
         },
         "narratives": {
             "executive": overview,
-            "outlook": "见 summary.outlook；禁止把样本写成全球舆论。",
+            "outlook": "见 summary.outlook 与 LLM 条件性展望；禁止把样本写成全球舆论。",
         },
     }
+
+    from gni.reports.narrative.runner import (
+        load_cached_intelligence,
+        run_report_intelligence,
+    )
+
+    if analyze:
+        payload["intelligence"] = run_report_intelligence(
+            session,
+            report_type="monthly",
+            period=period,
+            payload=payload,
+            tasks=analyze_tasks,
+            force=force_analyze,
+            llm_client=llm_client,
+        )
+    else:
+        payload["intelligence"] = load_cached_intelligence(
+            session,
+            report_type="monthly",
+            period=period,
+            payload=payload,
+        )
+
+    if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
+        payload["generator"] = "rule_monthly_v1+llm_intelligence"
+
+    payload["validation"] = validate_monthly_report(payload)
 
     if persist_snapshot:
         _upsert_snapshot(session, "monthly", period, SCHEMA_VERSION, payload)

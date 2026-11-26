@@ -163,6 +163,47 @@ def api_monthly_report(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+class ReportAnalyzeRequest(BaseModel):
+    period: str | None = Field(default=None, description="YYYY-MM-DD (daily/weekly end) or YYYY-MM (monthly)")
+    tasks: list[str] | None = Field(default=None, description="Optional subset of task_type names to run/retry")
+    force: bool = Field(default=False, description="Bypass cache and regenerate targeted tasks")
+
+
+@app.post("/api/reports/{report_type}/analyze")
+def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict:
+    """Explicitly trigger (or retry failed tasks for) the LLM Intelligence Narrative Layer."""
+    rt = report_type.strip().lower()
+    if rt not in {"daily", "weekly", "monthly"}:
+        raise HTTPException(status_code=400, detail=f"unsupported report_type: {report_type}")
+    try:
+        with session_scope() as session:
+            if rt == "daily":
+                return build_daily_report(
+                    session,
+                    day=body.period,
+                    analyze=True,
+                    analyze_tasks=body.tasks,
+                    force_analyze=body.force,
+                )
+            if rt == "weekly":
+                return build_weekly_report(
+                    session,
+                    end_day=body.period,
+                    analyze=True,
+                    analyze_tasks=body.tasks,
+                    force_analyze=body.force,
+                )
+            return build_monthly_report(
+                session,
+                month=body.period,
+                analyze=True,
+                analyze_tasks=body.tasks,
+                force_analyze=body.force,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/api/search")
 def api_search(
     q: str = Query(..., min_length=1, description="Search query"),

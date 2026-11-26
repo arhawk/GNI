@@ -329,6 +329,10 @@ def build_daily_report(
     day: date | str | None = None,
     country_scope: list[str] | None = None,
     polish: bool = False,
+    analyze: bool = False,
+    analyze_tasks: list[str] | None = None,
+    force_analyze: bool = False,
+    llm_client: Any = None,
 ) -> dict[str, Any]:
     countries = country_scope or list(MONITOR_DEFAULT)
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
@@ -1350,6 +1354,32 @@ def build_daily_report(
         },
     }
 
+    from gni.reports.narrative.runner import (
+        load_cached_intelligence,
+        run_report_intelligence,
+    )
+
+    if analyze:
+        payload["intelligence"] = run_report_intelligence(
+            session,
+            report_type="daily",
+            period=payload["period"],
+            payload=payload,
+            tasks=analyze_tasks,
+            force=force_analyze,
+            llm_client=llm_client,
+        )
+    else:
+        payload["intelligence"] = load_cached_intelligence(
+            session,
+            report_type="daily",
+            period=payload["period"],
+            payload=payload,
+        )
+
+    if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
+        payload["generator"] = "rule_brief_v4+llm_intelligence"
+
     payload["validation"] = validate_daily_report(payload)
 
     if polish:
@@ -1483,6 +1513,52 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
     lines.append(f"- 无样本国家: {quality.get('countries_without_sample')}")
     for note in quality.get("notes") or []:
         lines.append(f"- {note}")
+    intel = payload.get("intelligence") or {}
+    intel_tasks = intel.get("tasks") or {}
+    if intel_tasks:
+        lines += ["", "## Intelligence Narrative Analysis (LLM 解读层)", ""]
+        lines.append(
+            f"- 状态: `{intel.get('status')}` · 模型: `{', '.join((intel.get('meta') or {}).get('model_versions') or []) or '—'}`"
+        )
+        exec_t = intel_tasks.get("executive_analysis") or {}
+        if exec_t.get("summary"):
+            lines += ["", "### 综合研判（Executive Judgment）", "", exec_t["summary"], ""]
+        for f in exec_t.get("findings") or []:
+            refs = ", ".join(
+                f"{r.get('type')}:{r.get('ref_id')}" for r in (f.get("evidence_refs") or [])
+            )
+            lines.append(
+                f"- **[{f.get('classification')}] {f.get('title')}** ({f.get('confidence')}): "
+                f"{f.get('conclusion')} {f'(证据: `{refs}`)' if refs else ''}"
+            )
+        ev_t = intel_tasks.get("event_analysis") or {}
+        if ev_t.get("event_interpretations"):
+            lines += ["", "### 重点事件深度解读", ""]
+            for ei in ev_t["event_interpretations"]:
+                lines.append(f"#### {ei.get('title')} (`{ei.get('event_id')}`)")
+                if ei.get("what_happened"):
+                    lines.append(f"- 发生了什么: {ei['what_happened']}")
+                if ei.get("background"):
+                    lines.append(f"- 背景: {ei['background']}")
+                if ei.get("event_actual_changes") or ei.get("coverage_attention_changes"):
+                    lines.append(
+                        f"- 事件本体变化 vs 媒体关注变化: {ei.get('event_actual_changes') or '—'} / "
+                        f"{ei.get('coverage_attention_changes') or '—'}"
+                    )
+                if ei.get("why_it_matters"):
+                    lines.append(f"- 为什么值得关注: {ei['why_it_matters']}")
+                if ei.get("what_to_monitor"):
+                    lines.append(f"- 后续观察: {'；'.join(ei['what_to_monitor'])}")
+                lines.append("")
+        sig_t = intel_tasks.get("emerging_signals") or {}
+        if sig_t.get("outlook_signals"):
+            lines += ["", "### 异动解释与明日监测重点", ""]
+            for osig in sig_t["outlook_signals"]:
+                lines.append(
+                    f"- **{osig.get('signal')}** ({osig.get('confidence')}): "
+                    f"{osig.get('reasoning')} · 不确定性: {osig.get('uncertainty') or '待观察'}"
+                )
+
     val = payload.get("validation") or {}
     lines += ["", f"**validation.ok:** {val.get('ok')}", ""]
     return "\n".join(lines)
