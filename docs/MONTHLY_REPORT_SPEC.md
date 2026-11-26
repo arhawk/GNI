@@ -1,6 +1,7 @@
 # 每月研判规格（MONTHLY_REPORT_SPEC）
 
-**版本：** monthly_report_schema_v1（**规则组装已实现**；高级可视化后置）  
+**版本：** monthly_report_schema_v1（**规则组装已实现** + `methodology_v1.0`；高级可视化后置）  
+**统计口径：** 严格遵循 [STATISTICAL_METHODOLOGY_V1.md](STATISTICAL_METHODOLOGY_V1.md)（按 `published_at` 入窗、唯一 `Article Count`、`sections.v1_stats` / `v1_stats_prev` 输出四层级与对华立场覆盖率）。  
 **产品名：** China Media Monthly Strategic Review（MVP 五国监测样本）  
 **核心问题：** 一个月以来，被监测样本中对华报道格局发生了什么变化？  
 **依赖：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、日报/周报 facts、稳定长窗数据。  

@@ -16,13 +16,19 @@ from gni.analysis.stance_util import primary_stance_label
 from gni.core.config import get_settings
 from gni.events.service import list_events
 from gni.infrastructure.models import Article, ReportSnapshot, Source
-from gni.metrics.definitions import CHINA_INCLUDE_LEVELS, METRIC_DEFINITION_VERSION
-from gni.metrics.service import _latest_analyses
+from gni.metrics.definitions import (
+    CHINA_INCLUDE_LEVELS,
+    METHODOLOGY_VERSION,
+    METRIC_DEFINITION_VERSION,
+    TAXONOMY_V1_VERSION,
+)
+from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
 
 SCHEMA_VERSION = "weekly_report_schema_v1"
 DISCLAIMER = (
-    "全球对华监测周报 · 按当前接入国/源统计；"
-    "情感≠立场≠国家态度。Unique Story Count 为 hash MVP。"
+    "全球对华监测周报 · 遵循 GNI 统计口径 V1.0（methodology_v1.0）："
+    "以唯一文章数（Article Count）为基础单位，按 published_at 与信源所属国家统计；"
+    "对华立场三分类不含 Unclassified 分母并同步披露立场判定覆盖率。"
 )
 
 
@@ -99,8 +105,7 @@ def build_weekly_report(
                 continue
             if a.china_relevance_level not in CHINA_INCLUDE_LEVELS:
                 continue
-            ts = a.published_at or a.first_seen_at
-            if _in_window(ts, start, end):
+            if _in_window(a.published_at, start, end):
                 out.append(a)
         return out
 
@@ -237,9 +242,18 @@ def build_weekly_report(
         f"覆盖约 {len(by_country)} 国。主题与情感见分章；样本非全球舆论。"
     )
 
+    v1_this = run_v1_stat_snapshots(
+        session, period_start=win_start, period_end=win_end, persist=False
+    )
+    v1_prev = run_v1_stat_snapshots(
+        session, period_start=prev_start, period_end=prev_end, persist=False
+    )
+
     payload: dict[str, Any] = {
         "report_type": "weekly",
         "schema_version": SCHEMA_VERSION,
+        "methodology_version": METHODOLOGY_VERSION,
+        "taxonomy_version": TAXONOMY_V1_VERSION,
         "period": f"{(week_end - timedelta(days=6)).isoformat()}_{week_end.isoformat()}",
         "period_start": win_start.isoformat(),
         "period_end": win_end.isoformat(),
@@ -250,6 +264,8 @@ def build_weekly_report(
         "generator": "rule_weekly_v1",
         "article_count": len(this_week),
         "sections": {
+            "v1_stats": v1_this["by_scope"],
+            "v1_stats_prev": v1_prev["by_scope"],
             "summary": {
                 "overview_text": overview,
                 "kpis": {

@@ -681,3 +681,29 @@ class ReportSnapshot(Base):
     schema_version: Mapped[str | None] = mapped_column(String(64))
     payload: Mapped[dict[str, Any]] = mapped_column(PortableJSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StatSnapshot(Base):
+    """V1.0 traceable statistical snapshot (methodology_v1.0 Section 9)."""
+
+    __tablename__ = "stat_snapshots"
+
+    id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # GLOBAL|COUNTRY|BOARD|TOPIC
+    scope_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    article_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    positive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    neutral_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    negative_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unclassified_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    positive_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    neutral_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    negative_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stance_coverage_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    methodology_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    taxonomy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    analysis_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    article_ids: Mapped[list[str] | None] = mapped_column(PortableJSON)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

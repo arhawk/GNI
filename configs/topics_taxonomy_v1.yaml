@@ -1,0 +1,304 @@
+taxonomy_version: taxonomy_v1.0
+methodology_version: methodology_v1.0
+description: "GNI Phase-1 fixed 4 boards x 15 topics multi-label taxonomy (V1.0). Do not add boards or topics in Phase 1."
+
+boards:
+  - id: security_military
+    name_zh: 安全军事
+    name_en: Security & Military
+  - id: economy_tech
+    name_zh: 经贸科技
+    name_en: Economy & Technology
+  - id: politics_diplomacy
+    name_zh: 政治外交
+    name_en: Politics & Diplomacy
+  - id: society_opinion
+    name_zh: 社会舆论
+    name_en: Society & Public Opinion
+
+topics:
+  # 1. 安全军事 (3)
+  - id: south_china_sea
+    board_id: security_military
+    name_zh: 南海争端
+    name_en: South China Sea Dispute
+    keywords:
+      - south china sea
+      - spratly
+      - scarborough shoal
+      - second thomas shoal
+      - nine-dash line
+      - philippine coast guard
+      - china coast guard
+      - 南海
+      - 仁爱礁
+      - 黄岩岛
+      - 仙宾礁
+      - 南沙群岛
+      - 西沙群岛
+
+  - id: indo_pacific_military
+    board_id: security_military
+    name_zh: 印太军事博弈
+    name_en: Indo-Pacific Military Competition
+    keywords:
+      - indo-pacific
+      - aukus
+      - quad
+      - pla navy
+      - military exercise
+      - freedom of navigation
+      - military deterrence
+      - first island chain
+      - defense pact
+      - defence pact
+      - 印太
+      - 军事博弈
+      - 奥库斯
+      - 军演
+      - 第一岛链
+      - 航行自由
+
+  - id: taiwan_strait
+    board_id: security_military
+    name_zh: 台海局势
+    name_en: Taiwan Strait Situation
+    keywords:
+      - taiwan strait
+      - cross-strait
+      - taipei
+      - lai ching-te
+      - taiwanese defense
+      - taiwan arms
+      - unification with taiwan
+      - 台海
+      - 台湾海峡
+      - 两岸关系
+      - 对台军售
+      - 围台军演
+
+  # 2. 经贸科技 (5)
+  - id: tech_competition
+    board_id: economy_tech
+    name_zh: 科技竞争
+    name_en: Technology Competition
+    keywords:
+      - tech competition
+      - artificial intelligence
+      - generative ai
+      - quantum computing
+      - huawei
+      - 5g network
+      - deepseek
+      - tech rivalry
+      - space race
+      - 科技竞争
+      - 人工智能
+      - 量子计算
+      - 华为
+      - 科技封锁
+
+  - id: new_energy_overcapacity
+    board_id: economy_tech
+    name_zh: 新能源与产能过剩争议
+    name_en: New Energy & Overcapacity Dispute
+    keywords:
+      - overcapacity
+      - electric vehicle
+      - electric vehicles
+      - ev tariff
+      - solar panel
+      - solar panels
+      - lithium battery
+      - byd
+      - green subsidy
+      - clean energy subsidy
+      - 产能过剩
+      - 新能源汽车
+      - 电动汽车
+      - 光伏
+      - 锂电池
+      - 比亚迪
+
+  - id: tariffs_trade_war
+    board_id: economy_tech
+    name_zh: 关税与贸易战
+    name_en: Tariffs & Trade War
+    keywords:
+      - tariff
+      - tariffs
+      - trade war
+      - trade deficit
+      - section 301
+      - retaliatory duty
+      - anti-dumping
+      - import duty
+      - customs duty
+      - 关税
+      - 贸易战
+      - 反倾销
+      - 贸易摩擦
+      - 贸易逆差
+
+  - id: china_economy
+    board_id: economy_tech
+    name_zh: 中国经济形势
+    name_en: China Economic Outlook
+    keywords:
+      - china economy
+      - chinese economy
+      - china gdp
+      - deflation
+      - property crisis
+      - real estate crisis
+      - stimulus package
+      - youth unemployment
+      - renminbi
+      - yuan
+      - pboc
+      - foreign direct investment
+      - 中国经济
+      - 经济增长
+      - 通缩
+      - 房地产
+      - 刺激政策
+      - 人民币
+
+  - id: semiconductors_export_controls
+    board_id: economy_tech
+    name_zh: 半导体与出口管制
+    name_en: Semiconductors & Export Controls
+    keywords:
+      - semiconductor
+      - semiconductors
+      - chip export
+      - chip ban
+      - export control
+      - export controls
+      - entity list
+      - nvidia
+      - asml
+      - lithography
+      - smic
+      - 半导体
+      - 芯片
+      - 出口管制
+      - 实体清单
+      - 光刻机
+      - 中芯国际
+
+  # 3. 政治外交 (4)
+  - id: china_russia_ukraine
+    board_id: politics_diplomacy
+    name_zh: 中俄关系与乌克兰
+    name_en: China-Russia Relations & Ukraine
+    keywords:
+      - china-russia
+      - sino-russian
+      - no-limits partnership
+      - dual-use goods
+      - ukraine war
+      - putin and xi
+      - xi and putin
+      - moscow and beijing
+      - 中俄关系
+      - 乌克兰危机
+      - 俄乌冲突
+      - 军民两用
+
+  - id: us_china_relations
+    board_id: politics_diplomacy
+    name_zh: 中美关系
+    name_en: US-China Relations
+    keywords:
+      - us-china
+      - u.s.-china
+      - sino-us
+      - washington and beijing
+      - beijing and washington
+      - bilateral talks
+      - strategic competition
+      - state department
+      - 中美关系
+      - 中美会谈
+      - 战略竞争
+      - 华盛顿与北京
+
+  - id: belt_and_road
+    board_id: politics_diplomacy
+    name_zh: 一带一路
+    name_en: Belt and Road Initiative
+    keywords:
+      - belt and road
+      - bri project
+      - debt trap
+      - china-pakistan economic corridor
+      - cpec
+      - infrastructure loan
+      - port investment
+      - 一带一路
+      - 债务陷阱
+      - 中巴经济走廊
+
+  - id: global_south_influence
+    board_id: politics_diplomacy
+    name_zh: 全球影响力与全球南方
+    name_en: Global Influence & Global South
+    keywords:
+      - global south
+      - brics
+      - shanghai cooperation
+      - sco summit
+      - diplomatic influence
+      - multipolar world
+      - developing countries
+      - africa summit
+      - focac
+      - 全球南方
+      - 金砖国家
+      - 上合组织
+      - 全球影响力
+      - 多极化
+
+  # 4. 社会舆论 (3)
+  - id: xinjiang
+    board_id: society_opinion
+    name_zh: 涉疆议题
+    name_en: Xinjiang Issues
+    keywords:
+      - xinjiang
+      - uyghur
+      - uyghurs
+      - uighur
+      - forced labor
+      - uflpa
+      - 新疆
+      - 维吾尔
+      - 涉疆
+
+  - id: tibet
+    board_id: society_opinion
+    name_zh: 涉藏议题
+    name_en: Tibet Issues
+    keywords:
+      - tibet
+      - tibetan
+      - dalai lama
+      - lhasa
+      - 西藏
+      - 涉藏
+      - 达赖
+
+  - id: hong_kong
+    board_id: society_opinion
+    name_zh: 涉港议题
+    name_en: Hong Kong Issues
+    keywords:
+      - hong kong
+      - national security law
+      - article 23
+      - jimmy lai
+      - 香港
+      - 涉港
+      - 国安法
+      - 基本法23条

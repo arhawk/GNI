@@ -264,6 +264,39 @@ def cmd_metrics_run(args: argparse.Namespace) -> int:
     return 0 if status == "success" else 1
 
 
+def cmd_metrics_snapshot(args: argparse.Namespace) -> int:
+    from datetime import datetime, timedelta, timezone
+
+    from gni.infrastructure.db import ensure_schema, session_scope
+    from gni.metrics.service import run_v1_stat_snapshots
+
+    ensure_schema()
+    end = (
+        datetime.fromisoformat(args.end)
+        if args.end
+        else datetime.now(timezone.utc)
+    )
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    if args.start:
+        start = datetime.fromisoformat(args.start)
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+    else:
+        start = end - timedelta(days=args.days)
+
+    with session_scope() as session:
+        payload = run_v1_stat_snapshots(
+            session,
+            period_start=start,
+            period_end=end,
+            persist=not args.no_persist,
+        )
+    out = {k: v for k, v in payload.items() if k != "evidence_by_article"}
+    print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
+    return 0
+
+
 def cmd_analyze_run(args: argparse.Namespace) -> int:
     from gni.infrastructure.db import ensure_schema, session_scope
     from gni.analysis.service import run_analysis
@@ -450,6 +483,19 @@ def main(argv: list[str] | None = None) -> None:
     p_mrun.add_argument("--target", default="china", help="Target scope (default china)")
     p_mrun.add_argument("--timezone", default="UTC", help="Display timezone label (data filtered in UTC)")
     p_mrun.set_defaults(func=cmd_metrics_run)
+
+    p_msnap = metrics_sub.add_parser(
+        "snapshot", help="Compute and persist V1.0 traceable stat_snapshots (methodology_v1.0)"
+    )
+    p_msnap.add_argument("--days", type=int, default=7, help="Rolling window in days (default 7)")
+    p_msnap.add_argument("--start", help="ISO start datetime (UTC)")
+    p_msnap.add_argument("--end", help="ISO end datetime (UTC)")
+    p_msnap.add_argument(
+        "--no-persist",
+        action="store_true",
+        help="Compute without writing stat_snapshots rows",
+    )
+    p_msnap.set_defaults(func=cmd_metrics_snapshot)
 
     p_events = sub.add_parser("events", help="Event Intelligence / fingerprint commands")
     events_sub = p_events.add_subparsers(dest="events_command", required=True)

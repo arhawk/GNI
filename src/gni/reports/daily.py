@@ -16,10 +16,12 @@ from gni.events.service import list_events
 from gni.infrastructure.models import Article, Event, EventArticle, Source, SourceHealth
 from gni.metrics.definitions import (
     CHINA_INCLUDE_LEVELS,
+    METHODOLOGY_VERSION,
     METRIC_DEFINITION_VERSION,
     RELEVANCE_WEIGHT_VERSION,
+    TAXONOMY_V1_VERSION,
 )
-from gni.metrics.service import _latest_analyses
+from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
 from gni.reports.risk_tagging import (
     MEDIA_TYPE_ZH,
     china_signal_score,
@@ -92,7 +94,8 @@ def _aware(t: datetime | None) -> datetime | None:
 
 
 def _in_range(a: Article, start: datetime, end: datetime) -> bool:
-    t = _aware(a.published_at or a.first_seen_at)
+    """Strict V1.0 Section 8.1: article statistics use published_at only (never first_seen_at)."""
+    t = _aware(a.published_at)
     return bool(t and start <= t < end)
 
 
@@ -1180,9 +1183,18 @@ def build_daily_report(
         + DISCLAIMER
     )
 
+    v1_snap = run_v1_stat_snapshots(
+        session,
+        period_start=win_start,
+        period_end=win_end,
+        persist=False,
+    )
+
     payload: dict[str, Any] = {
         "report_type": "daily",
         "schema_version": SCHEMA_VERSION,
+        "methodology_version": METHODOLOGY_VERSION,
+        "taxonomy_version": TAXONOMY_V1_VERSION,
         "period": report_day.isoformat(),
         "period_start": win_start.isoformat(),
         "period_end": win_end.isoformat(),
@@ -1202,6 +1214,7 @@ def build_daily_report(
             "country_ids": list(countries),
         },
         "sections": {
+            "v1_stats": v1_snap["by_scope"],
             "summary": {
                 "kpis": {
                     "china_articles": china_n,
@@ -1379,6 +1392,33 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
     ]
     for ch in summary.get("top_changes") or []:
         lines.append(f"1. **{ch.get('title')}** — {ch.get('summary')}")
+
+    v1 = s.get("v1_stats") or {}
+    g = v1.get("global") or {}
+    if g:
+        def _pct(v: float | None) -> str:
+            return f"{v * 100:.1f}%" if isinstance(v, (int, float)) else "—"
+
+        lines += [
+            "",
+            "## V1.0 统计口径摘要（Article Count · published_at）",
+            "",
+            f"- 全球唯一涉华文章: **{g.get('article_count', 0)}** 篇 · "
+            f"正面 {_pct(g.get('positive_rate'))} ({g.get('positive_count', 0)}) / "
+            f"中性 {_pct(g.get('neutral_rate'))} ({g.get('neutral_count', 0)}) / "
+            f"负面 {_pct(g.get('negative_rate'))} ({g.get('negative_count', 0)}) · "
+            f"Unclassified {g.get('unclassified_count', 0)} · "
+            f"立场判定覆盖率 **{_pct(g.get('stance_coverage_rate'))}**",
+        ]
+        boards = [b for b in (v1.get("boards") or []) if b.get("article_count", 0) > 0]
+        if boards:
+            b_txt = "；".join(f"{b.get('label_zh') or b.get('scope_id')} {b.get('article_count')} 篇" for b in boards)
+            lines.append(f"- 四大板块（板块间允许重叠）: {b_txt}")
+        topics = [t for t in (v1.get("topics") or []) if t.get("article_count", 0) > 0][:8]
+        if topics:
+            t_txt = "；".join(f"{t.get('label_zh') or t.get('scope_id')} {t.get('article_count')} 篇" for t in topics)
+            lines.append(f"- 热门议题 Top: {t_txt}")
+
     lines += ["", "## 2. Major Events", ""]
     for i, ev in enumerate(s.get("major_events") or [], 1):
         lines.append(f"### 事件 {i:02d}：{ev.get('title')}")

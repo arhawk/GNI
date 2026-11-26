@@ -10,12 +10,32 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from gni.infrastructure.models import Article, ArticleAnalysis, MetricRun, Source, SourceHealth
+from gni.analysis.stance_util import (
+    extract_v1_china_stance,
+    extract_v1_stance_evidence,
+    extract_v1_topics,
+)
+from gni.infrastructure.models import (
+    Article,
+    ArticleAnalysis,
+    MetricRun,
+    Source,
+    SourceHealth,
+    StatSnapshot,
+)
 from gni.metrics.compute import ArticleMetricRow, SourceHealthRow, compute_metrics
 from gni.metrics.definitions import (
     DEDUPLICATION_METHOD,
+    METHODOLOGY_VERSION,
     METRIC_DEFINITION_VERSION,
     RELEVANCE_WEIGHT_VERSION,
+    TAXONOMY_V1_VERSION,
+    V1_ANALYSIS_VERSION,
+)
+from gni.metrics.v1_stats import (
+    V1ArticleInput,
+    compute_v1_stat_snapshots,
+    group_snapshots_by_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -219,4 +239,98 @@ def metric_run_to_dict(run: MetricRun) -> dict[str, Any]:
         "computed_at": run.computed_at.isoformat() if run.computed_at else None,
         "stats": run.stats,
         "results": run.results,
+    }
+
+
+def run_v1_stat_snapshots(
+    session: Session,
+    *,
+    period_start: datetime,
+    period_end: datetime,
+    persist: bool = True,
+    include_zero_taxonomy: bool = True,
+) -> dict[str, Any]:
+    """Compute (and optionally persist) V1.0 traceable stat snapshots across 4 scopes."""
+    sources = {s.id: s for s in session.scalars(select(Source)).all()}
+    articles = list(session.scalars(select(Article)).all())
+    analyses = _latest_analyses(session, [a.id for a in articles])
+
+    inputs: list[V1ArticleInput] = []
+    evidence_by_article: dict[str, list[dict[str, Any]]] = {}
+    for a in articles:
+        src = sources.get(a.source_id)
+        ana = analyses.get(a.id)
+        structured = (ana.structured_result if ana else None) or {}
+        schema_ver = ana.schema_version if ana else None
+        stance = extract_v1_china_stance(structured, schema_version=schema_ver)
+        topics = extract_v1_topics(structured, schema_version=schema_ver)
+        ev = extract_v1_stance_evidence(structured, schema_version=schema_ver)
+        if ev:
+            evidence_by_article[a.id] = ev
+        inputs.append(
+            V1ArticleInput(
+                article_id=a.id,
+                source_id=a.source_id,
+                source_country=src.country_id if src else None,
+                published_at=a.published_at,
+                canonical_url=a.canonical_url,
+                url=a.url,
+                content_hash=a.content_hash,
+                exclude_from_metrics=bool(a.exclude_from_metrics),
+                china_relevance_level=a.china_relevance_level,
+                topics_v1=topics,
+                stance_label=stance,
+                stance_evidence=ev,
+                analysis_schema_version=schema_ver,
+            )
+        )
+
+    generated_at = datetime.now(timezone.utc)
+    rows = compute_v1_stat_snapshots(
+        inputs,
+        period_start=period_start,
+        period_end=period_end,
+        generated_at=generated_at,
+        include_zero_taxonomy=include_zero_taxonomy,
+    )
+
+    if persist:
+        for r in rows:
+            session.add(
+                StatSnapshot(
+                    id=str(uuid4()),
+                    period_start=r.period_start,
+                    period_end=r.period_end,
+                    scope_type=r.scope_type,
+                    scope_id=r.scope_id,
+                    article_count=r.article_count,
+                    positive_count=r.positive_count,
+                    neutral_count=r.neutral_count,
+                    negative_count=r.negative_count,
+                    unclassified_count=r.unclassified_count,
+                    positive_rate=r.positive_rate,
+                    neutral_rate=r.neutral_rate,
+                    negative_rate=r.negative_rate,
+                    stance_coverage_rate=r.stance_coverage_rate,
+                    methodology_version=r.methodology_version,
+                    taxonomy_version=r.taxonomy_version,
+                    analysis_version=r.analysis_version,
+                    article_ids=r.article_ids,
+                    generated_at=r.generated_at,
+                )
+            )
+        session.flush()
+
+    return {
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "methodology_version": METHODOLOGY_VERSION,
+        "taxonomy_version": TAXONOMY_V1_VERSION,
+        "analysis_version": V1_ANALYSIS_VERSION,
+        "generated_at": generated_at.isoformat(),
+        "persisted": persist,
+        "snapshot_count": len(rows),
+        "by_scope": group_snapshots_by_scope(rows),
+        "snapshots": [r.to_dict() for r in rows],
+        "evidence_by_article": evidence_by_article,
     }

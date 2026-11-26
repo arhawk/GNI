@@ -7,11 +7,17 @@ from typing import Any
 
 from gni.analysis.l3_spans import ChinaSpan
 from gni.analysis.relevance import RELEVANCE_WEIGHT_VERSION, RelevanceAssessment
+from gni.metrics.taxonomy_v1 import (
+    TAXONOMY_V1_VERSION,
+    boards_for_topics,
+    load_taxonomy_v1,
+    normalize_topic_ids,
+)
 from gni.processing.title_l1 import _fold
 
-TAXONOMY_VERSION = "taxonomy_v0.4"
-SCHEMA_VERSION = "article_analysis_v0.2"
-PROMPT_VERSION = "heuristic_v0.1"
+TAXONOMY_VERSION = TAXONOMY_V1_VERSION
+SCHEMA_VERSION = "article_analysis_v1.0"
+PROMPT_VERSION = "heuristic_v1.0"
 MODEL_NAME = "heuristic-rules"
 
 TOPIC_KEYWORDS: list[tuple[str, list[str]]] = [
@@ -91,6 +97,82 @@ def _count_hits(text: str, words: set[str] | list[str]) -> int:
         elif re.search(rf"(?<![a-z0-9]){re.escape(wf)}(?![a-z0-9])", folded):
             n += 1
     return n
+
+
+def _pick_topics_v1(body_text: str) -> tuple[list[str], list[str]]:
+    """Multi-label V1.0 classification over body/spans (never title-only)."""
+    if not (body_text or "").strip():
+        return [], []
+    tax = load_taxonomy_v1()
+    scored: list[tuple[int, int, str]] = []
+    for idx, topic in enumerate(tax.topics):
+        hits = _count_hits(body_text, list(topic.keywords))
+        if hits > 0:
+            scored.append((-hits, idx, topic.id))
+    scored.sort()
+    topic_ids = normalize_topic_ids([tid for _, _, tid in scored])
+    return topic_ids, boards_for_topics(topic_ids)
+
+
+def _china_stance_v1(
+    body_text: str,
+    valid_spans: list[ChinaSpan],
+    level: str,
+    *,
+    model_version: str = MODEL_NAME,
+    prompt_version: str = PROMPT_VERSION,
+) -> dict[str, Any]:
+    """Article-level China-related stance (Positive/Neutral/Negative or Unclassified)."""
+    if level in {"none", "uncertain"} or not valid_spans or not (body_text or "").strip():
+        return {
+            "stance_label": "Unclassified",
+            "stance_confidence": 0.0,
+            "stance_evidence": [],
+            "analysis_status": "unclassified",
+            "model_version": model_version,
+            "prompt_version": prompt_version,
+        }
+
+    neg = _count_hits(body_text, NEG_WORDS)
+    pos = _count_hits(body_text, POS_WORDS)
+    evidence = [
+        {
+            "quote": s.text_original[:500],
+            "start_offset": s.char_start if s.char_start >= 0 else None,
+            "end_offset": s.char_end if s.char_end >= 0 else None,
+            "paragraph_index": s.paragraph_index,
+        }
+        for s in valid_spans[:3]
+    ]
+
+    # Mixed stance without clear dominant direction -> Unclassified (V1.0 §4.3)
+    if neg > 0 and pos > 0 and abs(neg - pos) <= 1:
+        return {
+            "stance_label": "Unclassified",
+            "stance_confidence": 0.35,
+            "stance_evidence": evidence,
+            "analysis_status": "unclassified",
+            "model_version": model_version,
+            "prompt_version": prompt_version,
+        }
+    if neg > pos:
+        label = "Negative"
+        conf = min(0.85, 0.50 + 0.08 * (neg - pos))
+    elif pos > neg:
+        label = "Positive"
+        conf = min(0.85, 0.50 + 0.08 * (pos - neg))
+    else:
+        label = "Neutral"
+        conf = 0.55
+
+    return {
+        "stance_label": label,
+        "stance_confidence": round(conf, 3),
+        "stance_evidence": evidence,
+        "analysis_status": "classified",
+        "model_version": model_version,
+        "prompt_version": prompt_version,
+    }
 
 
 def _pick_topic(blob: str) -> tuple[str | None, list[str]]:
@@ -206,6 +288,7 @@ def build_structured_analysis(
 ) -> dict[str, Any]:
     valid_spans = [s for s in spans if s.validation_status == "valid"]
     span_blob = "\n".join(s.text_original for s in valid_spans) or (content_clean or "")
+    body_blob = (content_clean or "").strip() or span_blob
     blob = f"{title or ''}\n{span_blob}"
 
     level = relevance.relevance_level
@@ -213,6 +296,9 @@ def build_structured_analysis(
     is_relevant = level in {"core", "substantial", "secondary", "incidental"}
 
     if level in {"none", "uncertain"} or not valid_spans:
+        topics_v1: list[str] = []
+        boards_v1: list[str] = []
+        china_stance = _china_stance_v1(span_blob, valid_spans, level)
         primary_topic, secondary_topics = ("other_unknown", [])
         sent = {
             "label": None,
@@ -245,8 +331,14 @@ def build_structured_analysis(
         confidence = {"overall": 0.35 if level != "none" else 0.7}
         evidence: list[dict[str, Any]] = []
     else:
-        primary_topic, secondary_topics = _pick_topic(blob)
-        sent = _sentiment(blob)
+        # V1.0 §2.3: topic classification must be based on article body/spans, never title-only.
+        topics_v1, boards_v1 = _pick_topics_v1(body_blob)
+        china_stance = _china_stance_v1(span_blob, valid_spans, level)
+        if topics_v1:
+            primary_topic, secondary_topics = topics_v1[0], topics_v1[1:]
+        else:
+            primary_topic, secondary_topics = _pick_topic(body_blob)
+        sent = _sentiment(span_blob)
         sent["basis_segment_ids"] = [f"span_{i}" for i in range(len(valid_spans[:5]))]
         stance_label = _stance_from_sentiment(sent.get("label"))
         stances = [
@@ -349,6 +441,9 @@ def build_structured_analysis(
             "secondary": secondary_topics,
             "prominence": "core" if level == "core" else ("secondary_mention" if is_relevant else "unknown"),
         },
+        "topics_v1": topics_v1,
+        "boards_v1": boards_v1,
+        "china_stance": china_stance,
         "sentiment": sent,
         "stances": stances,
         "framing": {

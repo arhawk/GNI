@@ -35,8 +35,16 @@ def test_structured_result_required_keys_and_stance_target():
         relevance=rel,
     )
     assert result["schema_version"] == SCHEMA_VERSION
-    assert result["taxonomy_version"] == "taxonomy_v0.4"
+    assert result["taxonomy_version"] == "taxonomy_v1.0"
     assert result["relevance_weight_version"] == "provisional_v0.3"
+    assert "semiconductors_export_controls" in result["topics_v1"]
+    assert "economy_tech" in result["boards_v1"]
+    assert result["china_stance"]["stance_label"] in {
+        "Positive",
+        "Neutral",
+        "Negative",
+        "Unclassified",
+    }
     for key in (
         "china_relevance",
         "topics",

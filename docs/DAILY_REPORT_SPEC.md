@@ -1,6 +1,7 @@
 # 每日情报规格（DAILY_REPORT_SPEC）
 
-**版本：** daily_report_schema_v4（Ops/Risk + 研判门禁）  
+**版本：** daily_report_schema_v4（Ops/Risk + 研判门禁 + `methodology_v1.0`）  
+**统计口径：** 严格遵循 [STATISTICAL_METHODOLOGY_V1.md](STATISTICAL_METHODOLOGY_V1.md)（按 `published_at` 入窗、唯一 `Article Count`、信源国归属、`sections.v1_stats` 输出四层级 `GLOBAL/COUNTRY/BOARD/TOPIC` 与对华立场三分类 + 覆盖率）。  
 **产品名：** Daily Intelligence Brief（每日情报）  
 **核心问题：** 今天有没有高风险？异动在哪？明日跟什么？采集是否异常？  
 **阅读时长：** 3–5 分钟  

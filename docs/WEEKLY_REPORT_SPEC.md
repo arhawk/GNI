@@ -1,6 +1,7 @@
 # 每周分析规格（WEEKLY_REPORT_SPEC）
 
-**版本：** weekly_report_schema_v1（**规则组装已实现**；高级可视化后置）  
+**版本：** weekly_report_schema_v1（**规则组装已实现** + `methodology_v1.0`；高级可视化后置）  
+**统计口径：** 严格遵循 [STATISTICAL_METHODOLOGY_V1.md](STATISTICAL_METHODOLOGY_V1.md)（按 `published_at` 入窗、唯一 `Article Count`、`sections.v1_stats` / `v1_stats_prev` 输出四层级与对华立场覆盖率）。  
 **产品名：** Weekly Intelligence Report  
 **核心问题：** 这一周发生了什么变化？这些变化意味着什么？  
 **依赖：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、日报 facts 管线、更长窗口指标与事件演化。  

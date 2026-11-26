@@ -16,13 +16,19 @@ from gni.analysis.stance_util import primary_stance_label
 from gni.core.config import get_settings
 from gni.events.service import list_events
 from gni.infrastructure.models import Article, Source
-from gni.metrics.definitions import CHINA_INCLUDE_LEVELS, METRIC_DEFINITION_VERSION
-from gni.metrics.service import _latest_analyses
+from gni.metrics.definitions import (
+    CHINA_INCLUDE_LEVELS,
+    METHODOLOGY_VERSION,
+    METRIC_DEFINITION_VERSION,
+    TAXONOMY_V1_VERSION,
+)
+from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
 from gni.reports.weekly import _in_window, _source_bucket, _upsert_snapshot
 
 SCHEMA_VERSION = "monthly_report_schema_v1"
 DISCLAIMER = (
-    "全球对华监测月报 · 按当前接入国/源统计报道结构与变化；"
+    "全球对华监测月报 · 遵循 GNI 统计口径 V1.0（methodology_v1.0）："
+    "以唯一文章数（Article Count）为基础单位，按 published_at 与信源所属国家统计；"
     "禁止外推为国家立场或社会民意。"
 )
 
@@ -75,8 +81,7 @@ def build_monthly_report(
                 continue
             if a.china_relevance_level not in CHINA_INCLUDE_LEVELS:
                 continue
-            ts = a.published_at or a.first_seen_at
-            if _in_window(ts, start, end):
+            if _in_window(a.published_at, start, end):
                 out.append(a)
         return out
 
@@ -149,9 +154,18 @@ def build_monthly_report(
         f"格局判断基于当前接入覆盖，随接入扩展而更新。"
     )
 
+    v1_this = run_v1_stat_snapshots(
+        session, period_start=win_start, period_end=win_end, persist=False
+    )
+    v1_prev = run_v1_stat_snapshots(
+        session, period_start=prev_start, period_end=prev_end, persist=False
+    )
+
     payload: dict[str, Any] = {
         "report_type": "monthly",
         "schema_version": SCHEMA_VERSION,
+        "methodology_version": METHODOLOGY_VERSION,
+        "taxonomy_version": TAXONOMY_V1_VERSION,
         "period": period,
         "period_start": win_start.isoformat(),
         "period_end": win_end.isoformat(),
@@ -161,6 +175,8 @@ def build_monthly_report(
         "generator": "rule_monthly_v1",
         "article_count": len(this_m),
         "sections": {
+            "v1_stats": v1_this["by_scope"],
+            "v1_stats_prev": v1_prev["by_scope"],
             "summary": {
                 "overview_text": overview,
                 "kpis": {

@@ -40,6 +40,15 @@ def validate_daily_report(payload: dict[str, Any]) -> dict[str, Any]:
         present = key in sections
         ok(f"section_{key}", present, "" if present else "missing section")
 
+    if payload.get("methodology_version") == "methodology_v1.0":
+        v1 = sections.get("v1_stats")
+        ok(
+            "v1_stats_structure",
+            isinstance(v1, dict)
+            and all(k in v1 for k in ("global", "countries", "boards", "topics")),
+            "missing v1_stats scope keys",
+        )
+
     summary = sections.get("summary") or {}
     kpis = summary.get("kpis") or {}
     ok("kpi_china_articles", isinstance(kpis.get("china_articles"), int))
@@ -71,8 +80,8 @@ def validate_daily_report(payload: dict[str, Any]) -> dict[str, Any]:
                 break
     ok("event_facts_bound", fact_ok, "event or evidence missing id")
 
-    # No composite score field
-    blob = str(payload)
+    # No composite score field (exclude self-referential validation block for idempotency)
+    blob = str({k: v for k, v in payload.items() if k != "validation"})
     ok("no_composite_score_field", "china_sentiment_score" not in blob and "composite_score" not in blob)
 
     narr = payload.get("narratives") or {}

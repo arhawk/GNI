@@ -1,5 +1,7 @@
 # 主题与目标对象 Taxonomy
 
+> **当前第一阶段权威分类体系：** 请以 [STATISTICAL_METHODOLOGY_V1.md](STATISTICAL_METHODOLOGY_V1.md) 与 [configs/topics_taxonomy_v1.yaml](../configs/topics_taxonomy_v1.yaml)（`taxonomy_v1.0`：固定四大板块 × 15 个议题 + 对华立场三分类 `Positive`/`Neutral`/`Negative` 与分析状态 `Unclassified`）为准。本文档以下 `taxonomy_v0.4` 内容仅作历史版本参考。
+
 **版本：** taxonomy_v0.4  
 **状态：** Phase 0/1 草案；变更须升版本并记录生效时间  
 **原则：** Topic 与 Stance Target 分离；Frame 以 V4 候选词表为准；旧 `taxonomy_v0.1` Frame 仅兼容历史分析  

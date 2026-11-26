@@ -14,10 +14,12 @@ from gni.analysis.l3_spans import ChinaSpan
 from gni.analysis.provider import BaseLLMProvider
 from gni.analysis.relevance import RELEVANCE_WEIGHT_VERSION, RelevanceAssessment
 from gni.core.config import Settings, get_settings
+from gni.metrics.taxonomy_v1 import boards_for_topics, normalize_topic_ids, taxonomy_prompt_block
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "deepseek_analyze_v0.1"
+PROMPT_VERSION = "deepseek_analyze_v1.0"
+_VALID_STANCE_LABELS = {"Positive", "Neutral", "Negative", "Unclassified"}
 
 
 class DeepSeekLLMProvider(BaseLLMProvider):
@@ -61,20 +63,58 @@ class DeepSeekLLMProvider(BaseLLMProvider):
 
     def analyze(self, article: dict[str, Any], *, schema: dict[str, Any], prompt_version: str) -> dict[str, Any]:
         prompt = (
-            f"schema_version={SCHEMA_VERSION} taxonomy={TAXONOMY_VERSION}\n"
-            f"Analyze China-related content. Return JSON only.\n"
+            f"schema_version={SCHEMA_VERSION} taxonomy={TAXONOMY_VERSION} prompt_version={prompt_version}\n"
+            f"Analyze China-related content and return ONLY valid JSON.\n"
+            f"Rules (GNI Statistical Methodology V1.0):\n"
+            f"1. Multi-label topics_v1 MUST be based on article body/spans (never title-only). "
+            f"An article may match 0, 1, or multiple topics across boards.\n"
+            f"2. Evaluate china_stance toward Mainland China (NOT general emotion, NOT quoted interviewee alone). "
+            f"stance_label MUST be one of: Positive, Neutral, Negative, Unclassified.\n"
+            f"3. If mixed positive and negative without a clear dominant stance, or insufficient evidence, "
+            f"set stance_label='Unclassified' and analysis_status='unclassified'.\n"
+            f"4. Include stance_evidence as a list of objects with 'quote' copied verbatim from the text.\n"
+            f"Required JSON keys: topics_v1 (list of topic IDs), china_stance "
+            f"({{stance_label, stance_confidence, stance_evidence, analysis_status}}), "
+            f"sentiment, stances, framing, summary.\n"
+            f"{taxonomy_prompt_block()}\n"
             f"Title: {article.get('title')}\n"
             f"Language: {article.get('language')}\n"
             f"Relevance hint: {article.get('relevance')}\n"
-            f"Spans:\n{article.get('spans_text')}\n"
+            f"Spans/Body:\n{article.get('spans_text')}\n"
         )
         raw = self.generate(prompt, max_tokens=min(self.settings.per_article_token_limit, 4000))
         parsed = _extract_json(raw)
         if parsed is None:
             raise ValueError("DeepSeek response was not valid JSON")
-        parsed.setdefault("schema_version", SCHEMA_VERSION)
-        parsed.setdefault("taxonomy_version", TAXONOMY_VERSION)
+        parsed["schema_version"] = SCHEMA_VERSION
+        parsed["taxonomy_version"] = TAXONOMY_VERSION
         parsed.setdefault("relevance_weight_version", RELEVANCE_WEIGHT_VERSION)
+
+        # Validate V1.0 multi-label topics & derive boards
+        raw_topics = parsed.get("topics_v1")
+        if not isinstance(raw_topics, list):
+            raw_topics = []
+        valid_topics = normalize_topic_ids(raw_topics)
+        parsed["topics_v1"] = valid_topics
+        parsed["boards_v1"] = boards_for_topics(valid_topics)
+
+        # Validate V1.0 china_stance
+        raw_cs = parsed.get("china_stance") if isinstance(parsed.get("china_stance"), dict) else {}
+        raw_label = str(raw_cs.get("stance_label") or "").strip()
+        label = raw_label if raw_label in _VALID_STANCE_LABELS else "Unclassified"
+        ev = raw_cs.get("stance_evidence") if isinstance(raw_cs.get("stance_evidence"), list) else []
+        try:
+            conf = float(raw_cs.get("stance_confidence", 0.0))
+        except (TypeError, ValueError):
+            conf = 0.0
+        parsed["china_stance"] = {
+            "stance_label": label,
+            "stance_confidence": max(0.0, min(1.0, conf)),
+            "stance_evidence": ev,
+            "analysis_status": "classified" if label in {"Positive", "Neutral", "Negative"} else "unclassified",
+            "model_version": self.settings.llm_model,
+            "prompt_version": prompt_version,
+        }
         return parsed
 
 
@@ -152,6 +192,9 @@ def analyze_with_fallback(
                 "language",
                 "china_relevance",
                 "topics",
+                "topics_v1",
+                "boards_v1",
+                "china_stance",
                 "sentiment",
                 "stances",
                 "framing",
