@@ -1377,7 +1377,14 @@ def build_daily_report(
     if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
         payload["generator"] = "rule_brief_v4+llm_intelligence"
 
+    from gni.reports.package_composer import extract_report_visualizations
+    from gni.reports.quality_gate import evaluate_report_quality_gate
+    from gni.reports.window import resolve_daily_window
+
+    payload["window_spec"] = resolve_daily_window(report_day).to_dict()
+    payload["visualizations"] = extract_report_visualizations(payload)
     payload["validation"] = validate_daily_report(payload)
+    payload["quality_gate"] = evaluate_report_quality_gate(payload)
 
     if polish:
         has_intel = (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0

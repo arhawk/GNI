@@ -264,6 +264,21 @@ def _overall_confidence(output: NarrativeTaskOutput, coverage: dict[str, Any]) -
     return "low"
 
 
+_REPORT_CONTEXT_PREFIX: dict[str, str] = {
+    "daily": "【周期定位：每日情报 Daily】聚焦当日监测事实、即时异动与次日观察，简洁克制。",
+    "weekly": "【周期定位：每周分析 Weekly】聚焦本周相对上周的变化归因、事件演化、议题/立场变化与跨国比较，绝不拼接日报。",
+    "monthly": "【周期定位：每月研判 Monthly】聚焦长期格局、结构性变化、国别媒体画像、叙事演变与中期条件性展望，严禁将短期冲击写成长期趋势。",
+}
+
+
+def effective_prompt_version(spec: AssessmentTaskSpec, report_type: str) -> str:
+    """Return report-scoped prompt_version (preserves legacy daily v2.0 key for backward compatibility)."""
+    rt = (report_type or "daily").strip().lower()
+    if rt == "daily":
+        return spec.prompt_version
+    return f"{rt}:{spec.prompt_version}"
+
+
 def to_unified_assessment_result(
     *,
     task_type: str,
@@ -273,6 +288,9 @@ def to_unified_assessment_result(
     status: str,
     model_version: str,
     prompt_version: str,
+    report_type: str | None = None,
+    period: str | None = None,
+    evidence_hash: str | None = None,
 ) -> AssessmentResultContract:
     """Project validated NarrativeTaskOutput into canonical AssessmentResultContract."""
     observations: list[dict[str, Any]] = []
@@ -357,8 +375,13 @@ def to_unified_assessment_result(
         details["main_drivers"] = list(validated.main_drivers)
 
     valid_status = status if status in {"completed", "needs_review", "insufficient_data", "degraded", "failed"} else "needs_review"
+    now_iso = datetime.now(timezone.utc).isoformat()
     return AssessmentResultContract(
         task_type=task_type,
+        task_version=prompt_version,
+        report_type=report_type,
+        period=period,
+        evidence_hash=evidence_hash,
         executive_summary=validated.summary,
         key_findings=key_findings,
         observations=observations,
@@ -373,12 +396,19 @@ def to_unified_assessment_result(
         details=details,
         status=valid_status,  # type: ignore[arg-type]
         validation_result=validation_result,
+        generated_at=now_iso,
+        model_version=model_version,
+        prompt_version=prompt_version,
+        schema_version=ASSESSMENT_SCHEMA_VERSION,
         metadata={
             "schema_version": ASSESSMENT_SCHEMA_VERSION,
             "evidence_package_id": evidence_package.package_id,
             "prompt_version": prompt_version,
             "model_version": model_version,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": now_iso,
+            "report_type": report_type,
+            "period": period,
+            "evidence_hash": evidence_hash,
         },
     )
 
@@ -501,12 +531,13 @@ def _persist_assessment_task(
     cost_usd: float = 0.0,
     error_message: str | None = None,
 ) -> ReportNarrativeTask:
+    pv = effective_prompt_version(spec, report_type)
     existing = session.scalar(
         select(ReportNarrativeTask).where(
             ReportNarrativeTask.report_type == report_type,
             ReportNarrativeTask.period == period,
             ReportNarrativeTask.task_type == spec.task_type,
-            ReportNarrativeTask.prompt_version == spec.prompt_version,
+            ReportNarrativeTask.prompt_version == pv,
         )
     )
     now = datetime.now(timezone.utc)
@@ -516,7 +547,7 @@ def _persist_assessment_task(
             report_type=report_type,
             period=period,
             task_type=spec.task_type,
-            prompt_version=spec.prompt_version,
+            prompt_version=pv,
             created_at=now,
         )
         session.add(existing)
@@ -560,23 +591,53 @@ def run_assessment_task(
         bundle=bundle,
     )
 
-    # 1. Cache lookup in ReportNarrativeTask
+    pv = effective_prompt_version(spec, report_type)
+    cfg = settings or get_settings()
+    target_model = cfg.llm_model
+    # 1. Strict cache lookup in ReportNarrativeTask (version-aware)
+    cache_invalidation_reason: str | None = None
     if not force:
         cached = session.scalar(
             select(ReportNarrativeTask).where(
                 ReportNarrativeTask.report_type == report_type,
                 ReportNarrativeTask.period == period,
                 ReportNarrativeTask.task_type == spec.task_type,
-                ReportNarrativeTask.prompt_version == spec.prompt_version,
+                ReportNarrativeTask.prompt_version == pv,
                 ReportNarrativeTask.evidence_hash == ev_bundle.evidence_hash,
                 ReportNarrativeTask.status.in_(["completed", "needs_review", "insufficient_data"]),
             )
         )
         if cached and isinstance(cached.validated_output, dict):
-            try:
-                return AssessmentResultContract.model_validate(cached.validated_output)
-            except Exception:
-                pass
+            val_out = cached.validated_output
+            cached_meta = val_out.get("metadata") or {}
+            cached_req_model = str(
+                cached_meta.get("requested_model")
+                or cached.model_version
+                or val_out.get("model_version")
+                or ""
+            ).strip()
+            cached_schema = str(val_out.get("schema_version") or ASSESSMENT_SCHEMA_VERSION)
+            cached_meth = str(val_out.get("methodology_version") or "methodology_v1.0")
+            cached_tax = str(val_out.get("taxonomy_version") or "taxonomy_v1.0")
+            cache_valid = True
+            if cached_req_model and target_model and cached_req_model != target_model:
+                cache_invalidation_reason = f"model_version_changed:{cached_req_model}->{target_model}"
+                cache_valid = False
+            elif cached_schema != ASSESSMENT_SCHEMA_VERSION:
+                cache_invalidation_reason = f"schema_version_changed:{cached_schema}->{ASSESSMENT_SCHEMA_VERSION}"
+                cache_valid = False
+            elif cached_meth != "methodology_v1.0" or cached_tax != "taxonomy_v1.0":
+                cache_invalidation_reason = "methodology_or_taxonomy_changed"
+                cache_valid = False
+            if cache_valid:
+                try:
+                    hit = AssessmentResultContract.model_validate(val_out)
+                    hit.metadata["cache_hit"] = True
+                    return hit
+                except Exception:
+                    cache_invalidation_reason = "cached_schema_corrupt"
+    else:
+        cache_invalidation_reason = "force_refresh"
 
     # 2. Insufficient data short-circuit (zero articles -> never hallucinate)
     if pkg.coverage.get("is_insufficient_data"):
@@ -626,9 +687,11 @@ def run_assessment_task(
 
     # 4. Call LLM + Schema Validation + 3-Layer Fact/Evidence/Reasoning Validator
     user_prompt = _build_assessment_user_prompt(spec, pkg)
+    ctx_prefix = _REPORT_CONTEXT_PREFIX.get((report_type or "daily").strip().lower(), "")
+    sys_prompt = f"{spec.system_prompt}\n\n{ctx_prefix}".strip() if ctx_prefix else spec.system_prompt
     try:
         call = llm_client.generate_json(
-            system_prompt=spec.system_prompt,
+            system_prompt=sys_prompt,
             user_prompt=user_prompt,
             model=cfg.llm_model,
             temperature=0.2,
@@ -651,8 +714,15 @@ def run_assessment_task(
             validation_result=val_report,
             status=status,
             model_version=call.model_version or cfg.llm_model,
-            prompt_version=spec.prompt_version,
+            prompt_version=pv,
+            report_type=report_type,
+            period=period,
+            evidence_hash=ev_bundle.evidence_hash,
         )
+        res.metadata["requested_model"] = target_model
+        res.metadata["cache_hit"] = False
+        if cache_invalidation_reason:
+            res.metadata["cache_invalidation_reason"] = cache_invalidation_reason
         _persist_assessment_task(
             session,
             report_type=report_type,

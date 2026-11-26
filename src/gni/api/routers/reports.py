@@ -129,6 +129,53 @@ def api_weekly_report(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.get("/api/reports/weekly/package")
+def api_weekly_report_package(
+    end: str | None = Query(None, description="Week end YYYY-MM-DD (report TZ)"),
+    format: str = Query("json", description="'json' or 'markdown'"),
+) -> Any:
+    try:
+        from gni.reports.package_composer import render_report_package_markdown
+
+        with session_scope() as session:
+            payload = build_weekly_report(session, end_day=end)
+            pkg = payload.get("report_package") or {}
+            if format.strip().lower() == "markdown":
+                return PlainTextResponse(render_report_package_markdown(pkg), media_type="text/markdown; charset=utf-8")
+            return {
+                "report_package": pkg,
+                "period": payload.get("period"),
+                "schema_version": payload.get("schema_version"),
+                "quality_gate": payload.get("quality_gate"),
+            }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/api/reports/monthly/package")
+def api_monthly_report_package(
+    month: str | None = Query(None, description="YYYY-MM (report TZ)"),
+    end: str | None = Query(None, description="Optional trailing 30-day end YYYY-MM-DD"),
+    format: str = Query("json", description="'json' or 'markdown'"),
+) -> Any:
+    try:
+        from gni.reports.package_composer import render_report_package_markdown
+
+        with session_scope() as session:
+            payload = build_monthly_report(session, month=month, end_day=end)
+            pkg = payload.get("report_package") or {}
+            if format.strip().lower() == "markdown":
+                return PlainTextResponse(render_report_package_markdown(pkg), media_type="text/markdown; charset=utf-8")
+            return {
+                "report_package": pkg,
+                "period": payload.get("period"),
+                "schema_version": payload.get("schema_version"),
+                "quality_gate": payload.get("quality_gate"),
+            }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.get("/api/reports/calendar")
 def api_reports_calendar(
     month: str | None = Query(None, description="YYYY-MM in report timezone (default current month)"),
@@ -212,8 +259,8 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str
         raise HTTPException(status_code=400, detail=f"unsupported report_type: {report_type}")
     try:
         with session_scope() as session:
+            use_v2 = body.engine.strip().lower() in {"v2", "canonical", "orchestrator"}
             if rt == "daily":
-                use_v2 = body.engine.strip().lower() == "v2"
                 payload = build_daily_report(
                     session,
                     day=body.period,
@@ -233,6 +280,7 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str
                     analyze=True,
                     analyze_tasks=body.tasks,
                     force_analyze=body.force,
+                    use_orchestrator=use_v2,
                 )
             p = (body.period or "").strip()
             use_end_day = p if len(p) == 10 else None
@@ -244,6 +292,7 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str
                 analyze=True,
                 analyze_tasks=body.tasks,
                 force_analyze=body.force,
+                use_orchestrator=use_v2,
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

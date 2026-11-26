@@ -99,8 +99,16 @@ def build_monthly_report(
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
+    use_orchestrator: bool = False,
+    orchestrator_profile: str = "full",
+    now: datetime | None = None,
 ) -> dict[str, Any]:
-    period, win_start, win_end, prev_start, prev_end = _month_window(month=month, end_day=end_day)
+    from gni.reports.window import resolve_monthly_window
+
+    win_spec = resolve_monthly_window(month=month, end_day=end_day, now=now)
+    period = win_spec.period
+    win_start, win_end = win_spec.start, win_spec.end
+    prev_start, prev_end = win_spec.effective_prev_start, win_spec.effective_prev_end
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
     articles = list(session.scalars(select(Article)).all())
     articles_by_id = {a.id: a for a in articles}
@@ -462,12 +470,22 @@ def build_monthly_report(
         },
     }
 
-    from gni.reports.narrative.runner import (
-        load_cached_intelligence,
-        run_report_intelligence,
-    )
+    from gni.reports.narrative.runner import run_report_intelligence
+    from gni.reports.orchestrator import ReportOrchestrator
 
-    if analyze:
+    orch = ReportOrchestrator()
+    if use_orchestrator and analyze:
+        orch_res = orch.run(
+            session,
+            report_type="monthly",
+            payload=payload,
+            profile=orchestrator_profile,
+            tasks=analyze_tasks,
+            force=force_analyze,
+            llm_client=llm_client,
+        )
+        payload["intelligence"] = orch_res.intelligence
+    elif analyze:
         payload["intelligence"] = run_report_intelligence(
             session,
             report_type="monthly",
@@ -478,17 +496,30 @@ def build_monthly_report(
             llm_client=llm_client,
         )
     else:
-        payload["intelligence"] = load_cached_intelligence(
+        payload["intelligence"] = orch.load_cached_intelligence(
             session,
             report_type="monthly",
-            period=period,
             payload=payload,
         )
 
     if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
         payload["generator"] = "rule_monthly_v1+llm_intelligence"
 
+    from gni.reports.package_composer import build_unified_report_package, extract_report_visualizations
+    from gni.reports.quality_gate import evaluate_report_quality_gate
+
+    payload["window_spec"] = win_spec.to_dict()
+    if win_spec.is_partial_period:
+        payload["sections"]["quality"]["notes"].insert(0, win_spec.comparison_note)
+        for row in payload["sections"].get("historical_v1_stats") or []:
+            if row.get("month") == period:
+                row["is_partial"] = True
+    payload["visualizations"] = extract_report_visualizations(payload)
     payload["validation"] = validate_monthly_report(payload)
+    payload["quality_gate"] = evaluate_report_quality_gate(payload)
+    payload["report_package"] = build_unified_report_package(
+        session, report_type="monthly", payload=payload
+    ).model_dump(mode="json")
 
     if persist_snapshot:
         _upsert_snapshot(session, "monthly", period, SCHEMA_VERSION, payload)

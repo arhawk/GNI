@@ -176,6 +176,104 @@ export type V1StatsByScope = {
   topics: V1StatRow[]
 }
 
+export type ReportWindowSpec = {
+  report_type: string
+  period: string
+  window_mode: 'calendar_day' | 'rolling_7d' | 'calendar_month' | 'rolling_30d' | string
+  timezone: string
+  period_start: string
+  period_end: string
+  prev_period_start: string
+  prev_period_end: string
+  effective_prev_start: string
+  effective_prev_end: string
+  is_partial_period: boolean
+  elapsed_days: number
+  total_days: number
+  comparison_note: string
+}
+
+export type ReportQualityGateIssue = {
+  code: string
+  message: string
+}
+
+export type ReportQualityGate = {
+  gate_version: string
+  status: 'passed' | 'passed_with_warnings' | 'blocked'
+  blocking_issues: ReportQualityGateIssue[]
+  warnings: ReportQualityGateIssue[]
+  metrics?: {
+    article_count?: number
+    stance_coverage_rate?: number | null
+    is_partial_period?: boolean
+  }
+  checked_at?: string
+}
+
+export type ReportVisualizations = {
+  trend_line?: {
+    type: string
+    title: string
+    caption?: string
+    series: Array<{ label: string; article_count: number; is_partial?: boolean }>
+  }
+  country_bar?: {
+    type: string
+    title: string
+    caption?: string
+    items: Array<{
+      country_code: string
+      country_name: string
+      article_count: number
+      positive_count: number
+      neutral_count: number
+      negative_count: number
+      unclassified_count: number
+      stance_coverage_rate?: number | null
+    }>
+  }
+  topic_delta?: {
+    type: string
+    title: string
+    caption?: string
+    items: Array<{
+      topic: string
+      article_count: number
+      prev_article_count: number
+      delta: number
+    }>
+  }
+  stance_stacked?: {
+    type: string
+    title: string
+    caption?: string
+    data: {
+      article_count: number
+      positive_count: number
+      neutral_count: number
+      negative_count: number
+      unclassified_count: number
+      positive_rate?: number | null
+      neutral_rate?: number | null
+      negative_rate?: number | null
+      stance_coverage_rate?: number | null
+    }
+  }
+  event_timeline?: {
+    type: string
+    title: string
+    caption?: string
+    items: Array<{
+      event_id: string
+      title: string
+      event_time?: string | null
+      article_count: number
+      countries?: string[]
+    }>
+  }
+}
+
 export type DailyReport = {
   report_type: string
   schema_version?: string
@@ -198,6 +296,9 @@ export type DailyReport = {
     country_ids: string[]
   }
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
+  window_spec?: ReportWindowSpec
+  quality_gate?: ReportQualityGate
+  visualizations?: ReportVisualizations
   report_package?: import('./apiV2').ReportPackage
   intelligence?: ReportIntelligenceBlock
   narratives?: {
@@ -551,6 +652,10 @@ export type PeriodReport = {
   narratives?: Record<string, string>
   intelligence?: ReportIntelligenceBlock
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
+  window_spec?: ReportWindowSpec
+  quality_gate?: ReportQualityGate
+  visualizations?: ReportVisualizations
+  report_package?: import('./apiV2').ReportPackage
 }
 
 export type EvidenceRef = {
@@ -710,7 +815,7 @@ export function analyzeReport<T = DailyReport | PeriodReport>(
     period?: string
     tasks?: string[]
     force?: boolean
-    engine?: 'legacy' | 'v2'
+    engine?: 'legacy' | 'v2' | 'canonical' | 'orchestrator'
     save_snapshot?: boolean
   },
 ) {

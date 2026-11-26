@@ -1457,3 +1457,118 @@ def build_task_evidence_package(
         limitations=limitations,
     )
     return pkg, ev_bundle
+
+
+def curate_finding_evidence(
+    articles: list[dict[str, Any]],
+    *,
+    max_refs: int = 3,
+    max_per_source: int = 1,
+    max_per_event: int = 1,
+    include_counter: bool = True,
+) -> dict[str, list[dict[str, Any]]]:
+    """Deterministically curate 2-3 diverse representative articles + counter-evidence for a finding.
+
+    Enforces:
+    - Exact article_id & normalized title/URL deduplication.
+    - Country & source diversity (prevents single outlet or single event monopoly).
+    - Optional counter-evidence with contrasting China stance.
+    """
+    seen_ids: set[str] = set()
+    seen_titles: set[str] = set()
+    source_counts: Counter[str] = Counter()
+    event_counts: Counter[str] = Counter()
+    country_seen: set[str] = set()
+
+    def _norm_title(t: str) -> str:
+        return re.sub(r"\s+", " ", (t or "").strip().lower())[:120]
+
+    def _to_ref(a: dict[str, Any], role: str) -> dict[str, Any]:
+        return {
+            "article_id": str(a.get("article_id") or a.get("id") or ""),
+            "title": str(a.get("title") or "").strip()[:180],
+            "source_name": str(a.get("source_name") or a.get("source") or "Unknown"),
+            "country_code": str(a.get("country_code") or a.get("source_country") or ""),
+            "china_stance": str(a.get("china_stance") or a.get("stance_label") or "Unclassified"),
+            "published_at": a.get("published_at"),
+            "url": str(a.get("url") or ""),
+            "excerpt": str(a.get("excerpt") or a.get("summary") or a.get("key_quote") or "")[:240],
+            "role": role,
+        }
+
+    # First pass: prefer unseen country + unseen source + unseen event
+    selected: list[dict[str, Any]] = []
+    remaining: list[dict[str, Any]] = []
+    for a in articles:
+        if not isinstance(a, dict):
+            continue
+        aid = str(a.get("article_id") or a.get("id") or "")
+        title_key = _norm_title(str(a.get("title") or ""))
+        if (aid and aid in seen_ids) or (title_key and title_key in seen_titles):
+            continue
+        src = str(a.get("source_name") or a.get("source") or "")
+        ev_id = str(a.get("event_id") or "")
+        cc = str(a.get("country_code") or a.get("source_country") or "")
+        if len(selected) < max_refs:
+            if (src and source_counts[src] >= max_per_source) or (ev_id and event_counts[ev_id] >= max_per_event):
+                remaining.append(a)
+                continue
+            if cc and cc in country_seen and len(articles) > max_refs:
+                remaining.append(a)
+                continue
+            selected.append(_to_ref(a, "supporting"))
+            if aid:
+                seen_ids.add(aid)
+            if title_key:
+                seen_titles.add(title_key)
+            if src:
+                source_counts[src] += 1
+            if ev_id:
+                event_counts[ev_id] += 1
+            if cc:
+                country_seen.add(cc)
+        else:
+            remaining.append(a)
+
+    # Backfill if strict country diversity left fewer than max_refs
+    for a in remaining:
+        if len(selected) >= max_refs:
+            break
+        aid = str(a.get("article_id") or a.get("id") or "")
+        title_key = _norm_title(str(a.get("title") or ""))
+        if (aid and aid in seen_ids) or (title_key and title_key in seen_titles):
+            continue
+        src = str(a.get("source_name") or a.get("source") or "")
+        if src and source_counts[src] >= max_per_source + 1:
+            continue
+        selected.append(_to_ref(a, "supporting"))
+        if aid:
+            seen_ids.add(aid)
+        if title_key:
+            seen_titles.add(title_key)
+        if src:
+            source_counts[src] += 1
+
+    # Select up to 2 counter-evidence items with contrasting stance
+    counter: list[dict[str, Any]] = []
+    if include_counter and selected:
+        stance_tally = Counter(
+            s["china_stance"] for s in selected if s["china_stance"] in {"Positive", "Neutral", "Negative"}
+        )
+        dominant = stance_tally.most_common(1)[0][0] if stance_tally else None
+        for a in articles:
+            if len(counter) >= 2:
+                break
+            if not isinstance(a, dict):
+                continue
+            aid = str(a.get("article_id") or a.get("id") or "")
+            if aid and aid in seen_ids:
+                continue
+            st = str(a.get("china_stance") or a.get("stance_label") or "Unclassified")
+            if st in {"Positive", "Neutral", "Negative"} and dominant and st != dominant:
+                counter.append(_to_ref(a, "counter"))
+                if aid:
+                    seen_ids.add(aid)
+
+    return {"evidence_refs": selected, "counter_evidence": counter}
+

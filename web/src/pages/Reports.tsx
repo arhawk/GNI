@@ -24,6 +24,11 @@ import {
   StanceMatrixTable,
   TrendDeltaTable,
 } from '../components/tables'
+import {
+  DailyReportViewChrome,
+  MonthlyReportViewChrome,
+  WeeklyReportViewChrome,
+} from '../components/reports/ReportViewChrome'
 
 type Tab = 'daily' | 'weekly' | 'monthly'
 
@@ -140,6 +145,7 @@ export function ReportsPage() {
         period: selectedDate,
         force: opts.force,
         tasks: opts.tasks,
+        engine: 'orchestrator',
       })
       if (reportType === 'daily') {
         setData(updated as DailyReport)
@@ -225,28 +231,47 @@ export function ReportsPage() {
       {error && <p className="error">加载失败: {error}</p>}
       {tab === 'daily' && !error && !data && <p className="muted">加载 Daily Brief…</p>}
       {tab === 'daily' && data && (
-        <DailyBrief
-          data={data}
-          analyzing={analyzing}
-          analyzeError={analyzeError}
-          onGenerate={(force) => triggerAnalyze('daily', { force })}
-          onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
-          showCoverageDetail={showCoverageDetail}
-          setShowCoverageDetail={setShowCoverageDetail}
-        />
+        <>
+          <DailyReportViewChrome data={data} selectedDate={selectedDate} />
+          <DailyBrief
+            data={data}
+            analyzing={analyzing}
+            analyzeError={analyzeError}
+            onGenerate={(force) => triggerAnalyze('daily', { force })}
+            onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
+            showCoverageDetail={showCoverageDetail}
+            setShowCoverageDetail={setShowCoverageDetail}
+          />
+        </>
       )}
       {(tab === 'weekly' || tab === 'monthly') && !error && !period && (
         <p className="muted">加载{tab === 'weekly' ? '周报' : '月报'}…</p>
       )}
-      {(tab === 'weekly' || tab === 'monthly') && period && (
-        <PeriodBrief
-          data={period}
-          tab={tab}
-          analyzing={analyzing}
-          analyzeError={analyzeError}
-          onGenerate={(force) => triggerAnalyze(tab, { force })}
-          onRetryFailed={(tasks) => triggerAnalyze(tab, { tasks, force: true })}
-        />
+      {tab === 'weekly' && period && (
+        <>
+          <WeeklyReportViewChrome data={period} selectedDate={selectedDate} />
+          <PeriodBrief
+            data={period}
+            tab="weekly"
+            analyzing={analyzing}
+            analyzeError={analyzeError}
+            onGenerate={(force) => triggerAnalyze('weekly', { force })}
+            onRetryFailed={(tasks) => triggerAnalyze('weekly', { tasks, force: true })}
+          />
+        </>
+      )}
+      {tab === 'monthly' && period && (
+        <>
+          <MonthlyReportViewChrome data={period} selectedDate={selectedDate} />
+          <PeriodBrief
+            data={period}
+            tab="monthly"
+            analyzing={analyzing}
+            analyzeError={analyzeError}
+            onGenerate={(force) => triggerAnalyze('monthly', { force })}
+            onRetryFailed={(tasks) => triggerAnalyze('monthly', { tasks, force: true })}
+          />
+        </>
       )}
     </div>
   )

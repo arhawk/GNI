@@ -11,9 +11,10 @@
 |------|------|------|
 | P1-A～P1-E | 采集、处理、分析、指标、Dashboard | **已完成** |
 | P1-F1 | Proto Event / Event Fingerprint | **原型已实现**；三时间、稳定 ID、增量 rebuild、无词典不造假 Actor |
-| P1-F2 | Daily Report（Daily Brief） | **v4 研判门禁已实现**（schema 硬门禁、judgment/confidence、china_signal_score、tone n≥3、orphan 标题） |
+| P1-F2 | Daily Report（Daily Brief） | **已实现**（统一 Canonical Orchestrator + 6 章 ReportPackage + 质量门禁 + 确定性图表 + Markdown 导出） |
 | P1-F3 | 持久化 Alerts 生命周期 | **已实现**（dedupe upsert + ack/resolve/close + 日报窗口） |
-| P1-F4 | Weekly / Monthly Reports | **schema v1 规则组装已实现**（报告中心真页） |
+| P1-F4 | Weekly / Monthly Reports | **已实现**（统一 Orchestrator + 8 章 ReportPackage + 滚动 7 天/自然月与月中 MTD 公平环比 + 三态质量门禁 + 前端独立视图与 SVG 图表） |
+| Report Legacy 路径 | `DailyReportPackageView.tsx` 与旧版单通道 `engine="legacy"` | **已废弃 / 兼容过渡**（`DailyReportPackageView.tsx` 已删除；API 保留 `legacy` 参数兼容，前端默认切至 `orchestrator`） |
 | Search | Meilisearch → PG hydrate | **已实现**；宕机回退 `ilike` |
 | Story | 概念层 | **文档已定**（无独立表）；Unique Story Count = hash MVP |
 | Phase 2 | 完整跨语言事件聚合、叙事演化、Story 表 | **后续** |

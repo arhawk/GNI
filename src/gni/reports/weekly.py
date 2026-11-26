@@ -98,6 +98,8 @@ def build_weekly_report(
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
+    use_orchestrator: bool = False,
+    orchestrator_profile: str = "core",
 ) -> dict[str, Any]:
     if isinstance(end_day, str):
         end_day = date.fromisoformat(end_day)
@@ -425,12 +427,22 @@ def build_weekly_report(
         },
     }
 
-    from gni.reports.narrative.runner import (
-        load_cached_intelligence,
-        run_report_intelligence,
-    )
+    from gni.reports.narrative.runner import run_report_intelligence
+    from gni.reports.orchestrator import ReportOrchestrator
 
-    if analyze:
+    orch = ReportOrchestrator()
+    if use_orchestrator and analyze:
+        orch_res = orch.run(
+            session,
+            report_type="weekly",
+            payload=payload,
+            profile=orchestrator_profile,
+            tasks=analyze_tasks,
+            force=force_analyze,
+            llm_client=llm_client,
+        )
+        payload["intelligence"] = orch_res.intelligence
+    elif analyze:
         payload["intelligence"] = run_report_intelligence(
             session,
             report_type="weekly",
@@ -441,17 +453,26 @@ def build_weekly_report(
             llm_client=llm_client,
         )
     else:
-        payload["intelligence"] = load_cached_intelligence(
+        payload["intelligence"] = orch.load_cached_intelligence(
             session,
             report_type="weekly",
-            period=payload["period"],
             payload=payload,
         )
 
     if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
         payload["generator"] = "rule_weekly_v1+llm_intelligence"
 
+    from gni.reports.package_composer import build_unified_report_package, extract_report_visualizations
+    from gni.reports.quality_gate import evaluate_report_quality_gate
+    from gni.reports.window import resolve_weekly_window
+
+    payload["window_spec"] = resolve_weekly_window(week_end).to_dict()
+    payload["visualizations"] = extract_report_visualizations(payload)
     payload["validation"] = validate_weekly_report(payload)
+    payload["quality_gate"] = evaluate_report_quality_gate(payload)
+    payload["report_package"] = build_unified_report_package(
+        session, report_type="weekly", payload=payload
+    ).model_dump(mode="json")
 
     if persist_snapshot:
         _upsert_snapshot(session, "weekly", payload["period"], SCHEMA_VERSION, payload)

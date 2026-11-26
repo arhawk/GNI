@@ -467,6 +467,10 @@ class AssessmentResultContract(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     task_type: str
+    task_version: str = "v2.0"
+    report_type: str | None = None
+    period: str | None = None
+    evidence_hash: str | None = None
     executive_summary: str = ""
     key_findings: list[dict[str, Any]] = Field(default_factory=list)
     observations: list[dict[str, Any]] = Field(default_factory=list)
@@ -483,6 +487,12 @@ class AssessmentResultContract(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
     status: Literal["completed", "needs_review", "insufficient_data", "degraded", "failed"] = "completed"
     validation_result: dict[str, Any] = Field(default_factory=dict)
+    generated_at: str | None = None
+    model_version: str | None = None
+    prompt_version: str | None = None
+    schema_version: str = ASSESSMENT_SCHEMA_VERSION
+    methodology_version: str = "methodology_v1.0"
+    taxonomy_version: str = "taxonomy_v1.0"
     metadata: dict[str, Any] = Field(
         default_factory=lambda: {"schema_version": ASSESSMENT_SCHEMA_VERSION}
     )
