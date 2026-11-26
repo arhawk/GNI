@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   analyzeReport,
@@ -64,7 +64,9 @@ export function ReportsPage() {
   const [selectedDate, setSelectedDate] = useState<string>(initialDay)
   const [calendarMonth, setCalendarMonth] = useState<string>(initialDay.slice(0, 7))
   const [calendarDays, setCalendarDays] = useState<ReportCalendarDay[]>([])
-  const [calendarOpen, setCalendarOpen] = useState<boolean>(true)
+  const [calendarOpen, setCalendarOpen] = useState<boolean>(false)
+  const [calendarView, setCalendarView] = useState<'day' | 'month'>('day')
+  const calendarAnchorRef = useRef<HTMLDivElement | null>(null)
   const [data, setData] = useState<DailyReport | null>(null)
   const [period, setPeriod] = useState<PeriodReport | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +81,24 @@ export function ReportsPage() {
       .then((res) => setCalendarDays(res.days || []))
       .catch(() => setCalendarDays([]))
   }, [calendarMonth])
+
+  useEffect(() => {
+    if (!calendarOpen) return
+    function onDocClick(e: MouseEvent) {
+      if (calendarAnchorRef.current && !calendarAnchorRef.current.contains(e.target as Node)) {
+        setCalendarOpen(false)
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setCalendarOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [calendarOpen])
 
   useEffect(() => {
     setError(null)
@@ -161,31 +181,49 @@ export function ReportsPage() {
             每月研判
           </button>
         </div>
-        <div className="report-date-summary">
-          <span className="muted small">{windowHint}</span>
+        <div className="report-date-anchor" ref={calendarAnchorRef}>
+          <span className="muted small report-window-hint">{windowHint}</span>
           <button
             type="button"
-            className="report-cal-toggle"
-            onClick={() => setCalendarOpen((v) => !v)}
+            className="report-date-trigger"
+            aria-expanded={calendarOpen}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setCalendarOpen((v) => {
+                const next = !v
+                if (next) setCalendarView('day')
+                return next
+              })
+            }}
           >
-            {calendarOpen ? '收起日历' : '展开日历'}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span>{selectedDate}</span>
+            <span aria-hidden="true">{calendarOpen ? '▴' : '▾'}</span>
           </button>
+
+          {calendarOpen && (
+            <ReportCalendarPopover
+              month={calendarMonth}
+              days={calendarDays}
+              selectedDate={selectedDate}
+              view={calendarView}
+              onChangeView={setCalendarView}
+              onChangeMonth={setCalendarMonth}
+              onSelectDate={(d) => {
+                setSelectedDate(d)
+                const ym = d.slice(0, 7)
+                if (ym !== calendarMonth) setCalendarMonth(ym)
+                setCalendarOpen(false)
+              }}
+            />
+          )}
         </div>
       </div>
-
-      {calendarOpen && (
-        <ReportCalendar
-          month={calendarMonth}
-          days={calendarDays}
-          selectedDate={selectedDate}
-          onChangeMonth={setCalendarMonth}
-          onSelectDate={(d) => {
-            setSelectedDate(d)
-            const ym = d.slice(0, 7)
-            if (ym !== calendarMonth) setCalendarMonth(ym)
-          }}
-        />
-      )}
 
       {error && <p className="error">加载失败: {error}</p>}
       {tab === 'daily' && !error && !data && <p className="muted">加载 Daily Brief…</p>}
@@ -223,77 +261,118 @@ export function ReportsPage() {
 
 const WEEKDAYS_ZH = ['一', '二', '三', '四', '五', '六', '日']
 
-function ReportCalendar({
+function ReportCalendarPopover({
   month,
   days,
   selectedDate,
+  view,
+  onChangeView,
   onChangeMonth,
   onSelectDate,
 }: {
   month: string
   days: ReportCalendarDay[]
   selectedDate: string
+  view: 'day' | 'month'
+  onChangeView: (v: 'day' | 'month') => void
   onChangeMonth: (m: string) => void
   onSelectDate: (d: string) => void
 }) {
   const [y, m] = month.split('-').map(Number)
   const firstDow = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7
   const blanks = Array.from({ length: firstDow }, (_, i) => i)
-  const monthTotal = days.reduce((acc, d) => acc + (d.total_articles || 0), 0)
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const countByDate = new Map(days.map((d) => [d.date, d]))
+  const monthCells = Array.from({ length: daysInMonth }, (_, i) => {
+    const date = `${y}-${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`
+    const item = countByDate.get(date)
+    return {
+      date,
+      dayNum: i + 1,
+      total: item?.total_articles ?? 0,
+      china: item?.china_articles ?? 0,
+    }
+  })
 
   return (
-    <div className="report-calendar" aria-label="报告日期与每日新闻总量日历">
+    <div className="report-cal-popover" role="dialog" aria-label="选择报告日期">
       <div className="report-cal-head">
-        <div className="report-cal-nav">
-          <button
-            type="button"
-            className="report-cal-btn"
-            onClick={() => onChangeMonth(shiftMonth(month, -1))}
-            aria-label="上个月"
-          >
-            ◀
-          </button>
-          <strong className="report-cal-month">{month}</strong>
-          <button
-            type="button"
-            className="report-cal-btn"
-            onClick={() => onChangeMonth(shiftMonth(month, 1))}
-            aria-label="下个月"
-          >
-            ▶
-          </button>
-        </div>
-        <span className="muted small">
-          本月采集 {monthTotal.toLocaleString()} 篇 · 点击任意日期自动切换当日日报 / 近7日周报 / 近1个月月报
-        </span>
+        <button
+          type="button"
+          className="report-cal-btn"
+          onClick={() => onChangeMonth(shiftMonth(month, view === 'day' ? -1 : -12))}
+          aria-label={view === 'day' ? '上个月' : '上一年'}
+        >
+          ◀
+        </button>
+        <button
+          type="button"
+          className="report-cal-mode-btn"
+          onClick={() => onChangeView(view === 'day' ? 'month' : 'day')}
+          title="点击在日视图与月视图之间切换"
+        >
+          {view === 'day' ? `${y}年${String(m).padStart(2, '0')}月 ▾` : `${y}年 ▴`}
+        </button>
+        <button
+          type="button"
+          className="report-cal-btn"
+          onClick={() => onChangeMonth(shiftMonth(month, view === 'day' ? 1 : 12))}
+          aria-label={view === 'day' ? '下个月' : '下一年'}
+        >
+          ▶
+        </button>
       </div>
-      <div className="report-cal-grid">
-        {WEEKDAYS_ZH.map((w) => (
-          <div key={w} className="report-cal-dow">
-            {w}
+
+      {view === 'day' ? (
+        <>
+          <div className="report-cal-dow-row">
+            {WEEKDAYS_ZH.map((w) => (
+              <span key={w}>{w}</span>
+            ))}
           </div>
-        ))}
-        {blanks.map((b) => (
-          <div key={`b-${b}`} className="report-cal-blank" />
-        ))}
-        {days.map((item) => {
-          const dayNum = Number(item.date.slice(8, 10))
-          const isSelected = item.date === selectedDate
-          const hasNews = item.total_articles > 0
-          return (
-            <button
-              key={item.date}
-              type="button"
-              className={`report-cal-cell${isSelected ? ' selected' : ''}${hasNews ? ' has-news' : ''}`}
-              onClick={() => onSelectDate(item.date)}
-              title={`${item.date} · 总新闻 ${item.total_articles} 篇 · 涉华 ${item.china_articles} 篇`}
-            >
-              <span className="report-cal-day">{dayNum}</span>
-              <span className="report-cal-count">{item.total_articles > 0 ? item.total_articles : '·'}</span>
-            </button>
-          )
-        })}
-      </div>
+          <div className="report-cal-grid">
+            {blanks.map((b) => (
+              <div key={`b-${b}`} />
+            ))}
+            {monthCells.map((item) => {
+              const isSelected = item.date === selectedDate
+              const hasNews = item.total > 0
+              return (
+                <button
+                  key={item.date}
+                  type="button"
+                  className={`report-cal-cell${isSelected ? ' selected' : ''}${hasNews ? ' has-news' : ''}`}
+                  onClick={() => onSelectDate(item.date)}
+                  title={`${item.date} · 总新闻 ${item.total} 篇 · 涉华 ${item.china} 篇`}
+                >
+                  <span className="report-cal-day">{item.dayNum}</span>
+                  <span className="report-cal-count">{hasNews ? item.total : '·'}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="report-cal-month-grid">
+          {Array.from({ length: 12 }, (_, idx) => {
+            const mm = idx + 1
+            const isActive = mm === m
+            return (
+              <button
+                key={mm}
+                type="button"
+                className={`report-cal-month-cell${isActive ? ' active' : ''}`}
+                onClick={() => {
+                  onChangeMonth(`${y}-${String(mm).padStart(2, '0')}`)
+                  onChangeView('day')
+                }}
+              >
+                {mm}月
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

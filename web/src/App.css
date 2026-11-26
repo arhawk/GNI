@@ -571,57 +571,75 @@ h4 {
   flex-wrap: wrap;
 }
 
-.report-date-summary {
+.report-date-anchor {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.65rem;
+  margin-left: auto;
 }
 
-.report-cal-toggle {
+.report-date-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   border: 1px solid var(--line);
-  background: var(--bg-elev);
+  background: var(--bg-panel);
   color: var(--text);
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
   cursor: pointer;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
-.report-cal-toggle:hover {
+.report-date-trigger:hover,
+.report-date-trigger[aria-expanded='true'] {
   border-color: var(--accent);
 }
 
-.report-calendar {
+.report-date-trigger svg {
+  width: 15px;
+  height: 15px;
+  stroke: var(--accent);
+  fill: none;
+  stroke-width: 1.8;
+}
+
+.report-cal-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 316px;
+  height: 316px;
+  background: var(--bg-panel);
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  border-radius: 6px;
-  padding: 0.65rem 0.85rem;
-  margin-bottom: 1rem;
+  border-radius: 10px;
+  padding: 0.75rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
 }
 
 .report-cal-head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.55rem;
-}
-
-.report-cal-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+  height: 30px;
+  flex-shrink: 0;
 }
 
 .report-cal-btn {
   border: 1px solid var(--line);
-  background: var(--bg-panel);
+  background: var(--bg-elev);
   color: var(--text);
-  width: 1.7rem;
-  height: 1.7rem;
-  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   cursor: pointer;
   font: inherit;
   font-size: 0.75rem;
@@ -634,45 +652,55 @@ h4 {
   border-color: var(--accent);
 }
 
-.report-cal-month {
+.report-cal-mode-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  font-size: 0.92rem;
-  min-width: 4.5rem;
+}
+
+.report-cal-mode-btn:hover {
+  background: var(--bg-elev);
+  border-color: var(--line);
+}
+
+.report-cal-dow-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+  flex-shrink: 0;
 }
 
 .report-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.25rem;
-}
-
-.report-cal-dow {
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--muted);
-  padding: 0.15rem 0;
-}
-
-.report-cal-blank {
-  min-height: 2.35rem;
+  grid-auto-rows: 1fr;
+  gap: 3px;
+  flex: 1;
 }
 
 .report-cal-cell {
-  border: 1px solid var(--line);
-  background: var(--bg-panel);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--muted);
-  border-radius: 4px;
-  padding: 0.22rem 0.2rem;
-  min-height: 2.35rem;
+  border-radius: 6px;
+  padding: 2px 0;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.08rem;
   font: inherit;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  font-variant-numeric: tabular-nums;
 }
 
 .report-cal-cell.has-news {
@@ -680,7 +708,8 @@ h4 {
 }
 
 .report-cal-cell:hover {
-  border-color: var(--accent);
+  background: var(--bg-elev);
+  border-color: var(--line);
 }
 
 .report-cal-cell.selected {
@@ -691,16 +720,14 @@ h4 {
 }
 
 .report-cal-day {
-  font-size: 0.8rem;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  line-height: 1.15;
 }
 
 .report-cal-count {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   line-height: 1.1;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .report-cal-cell.has-news .report-cal-count {
@@ -709,6 +736,36 @@ h4 {
 
 .report-cal-cell.selected .report-cal-count {
   color: var(--text);
+}
+
+.report-cal-month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+  padding-top: 4px;
+}
+
+.report-cal-month-cell {
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.report-cal-month-cell:hover {
+  border-color: var(--accent);
+}
+
+.report-cal-month-cell.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
+  font-weight: 600;
 }
 
 .report-tabs button {
