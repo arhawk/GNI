@@ -6,7 +6,14 @@ import {
   fetchWeeklyReport,
   type DailyReport,
   type PeriodReport,
+  type V1StatsByScope,
 } from '../api'
+import {
+  EventRiskTable,
+  SourceOpsTable,
+  StanceMatrixTable,
+  TrendDeltaTable,
+} from '../components/tables'
 
 type Tab = 'daily' | 'weekly' | 'monthly'
 
@@ -103,6 +110,8 @@ function PeriodBrief({
   setShowDetail: (v: boolean) => void
 }) {
   const s = data.sections as {
+    v1_stats?: V1StatsByScope
+    v1_stats_prev?: V1StatsByScope
     summary?: {
       overview_text?: string
       kpis?: Record<string, number>
@@ -138,6 +147,23 @@ function PeriodBrief({
           ))}
         </div>
       </header>
+
+      {s.v1_stats && (
+        <section className="brief-section">
+          <V1StatsBlock v1={s.v1_stats} />
+          {s.v1_stats_prev && (
+            <>
+              <h3>15 议题环比变化（量变与态度变分离）</h3>
+              <TrendDeltaTable
+                current={s.v1_stats.topics || []}
+                previous={s.v1_stats_prev.topics || []}
+                dimensionLabel="议题"
+                showBoard
+              />
+            </>
+          )}
+        </section>
+      )}
 
       <section className="brief-section">
         <h2>大事与主题</h2>
@@ -205,41 +231,6 @@ function PeriodBrief({
         )}
       </section>
     </article>
-  )
-}
-
-function SentimentBar({
-  shares,
-  n,
-  compact,
-}: {
-  shares?: { positive: number; neutral: number; negative: number }
-  n?: number
-  compact?: boolean
-}) {
-  const pos = Math.max(0, shares?.positive ?? 0)
-  const neu = Math.max(0, shares?.neutral ?? 0)
-  const neg = Math.max(0, shares?.negative ?? 0)
-  const sum = pos + neu + neg
-  if (!sum || !(n && n > 0)) {
-    return <span className="muted small">{compact ? '无情感样本' : '暂无媒体情感样本'}</span>
-  }
-  return (
-    <div className={`sentiment-bar-wrap${compact ? ' compact' : ''}`} title="正面 / 中立 / 负面 · 情感语气 ≠ 立场">
-      <div className="sentiment-bar" role="img" aria-label={`正面 ${Math.round(pos * 100)}% 中立 ${Math.round(neu * 100)}% 负面 ${Math.round(neg * 100)}%`}>
-        <span className="seg pos" style={{ flex: pos }} />
-        <span className="seg neu" style={{ flex: neu }} />
-        <span className="seg neg" style={{ flex: neg }} />
-      </div>
-      {!compact && (
-        <div className="sentiment-legend muted small">
-          <span className="leg pos">正面 {Math.round(pos * 100)}%</span>
-          <span className="leg neu">中立 {Math.round(neu * 100)}%</span>
-          <span className="leg neg">负面 {Math.round(neg * 100)}%</span>
-          <span>· n={n}</span>
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -372,6 +363,7 @@ function DailyBrief({
           yesterday={cmp?.vs_yesterday?.china_articles}
           weekAvg={cmp?.vs_7d_avg?.china_articles}
         />
+        {s.v1_stats && <V1StatsBlock v1={s.v1_stats} />}
         {tech && (
           <p className="muted small">
             情感分均值（技术）{tech.score_mean ?? '—'}
@@ -438,61 +430,9 @@ function DailyBrief({
       <section className="brief-section">
         <div className="brief-section-head">
           <h2>3 · 当日重点事件</h2>
-          <p className="muted small">国｜媒体类型｜叙事｜情感｜风险｜赛道；异动标红</p>
+          <p className="muted small">主国｜媒体类型｜标题与叙事｜覆盖｜情感｜风险；异动行左侧红条提示</p>
         </div>
-        <div className="event-table-wrap">
-          <table className="event-risk-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>国家</th>
-                <th>媒体</th>
-                <th>标题 / 叙事</th>
-                <th>情感</th>
-                <th>风险</th>
-                <th>赛道</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(s.major_events || []).map((ev, i) => {
-                const flagged = Boolean(ev.anomaly?.flagged)
-                const sectors = (ev.sectors || [])
-                  .filter((x) => x.id !== 'unmapped')
-                  .map((x) => x.label)
-                  .join('、')
-                return (
-                  <tr key={ev.event_id} className={flagged ? 'row-anomaly' : undefined}>
-                    <td>{String(i + 1).padStart(2, '0')}</td>
-                    <td>{ev.primary_country || '—'}</td>
-                    <td className="small">{ev.source_bucket_zh || ev.source_bucket || '—'}</td>
-                    <td>
-                      <Link to={ev.href || `/events/${ev.event_id}`}>{ev.title}</Link>
-                      <div className="muted small">{(ev.narrative_labels || []).join(' · ') || ev.event_type || '—'}</div>
-                      {flagged && (
-                        <div className="anomaly-reasons small">{(ev.anomaly?.reasons || []).join('；')}</div>
-                      )}
-                    </td>
-                    <td>
-                      <SentimentBar shares={ev.sentiment_shares} n={ev.sentiment_n} compact />
-                      <span className="muted small">{ev.sentiment_label || '—'}</span>
-                    </td>
-                    <td>
-                      <span className={`risk-pill risk-${ev.risk_level || 'unmapped'}`}>{ev.risk_level || 'unmapped'}</span>
-                    </td>
-                    <td className="small">{sectors || 'unmapped'}</td>
-                  </tr>
-                )
-              })}
-              {(s.major_events || []).length === 0 && (
-                <tr>
-                  <td colSpan={7} className="muted">
-                    当日无事件 — 可先 events rebuild
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <EventRiskTable events={s.major_events || []} />
         {(s.secondary_events || []).length > 0 && (
           <details className="secondary-events">
             <summary className="muted small">次要 / 弱对华相关事件（{s.secondary_events!.length}）</summary>
@@ -582,27 +522,76 @@ function DailyBrief({
           {(s.ops?.follow_ups || []).length === 0 && <li className="muted">无专项跟踪项</li>}
         </ul>
         <h3>采集状态</h3>
-        <ul className="event-list crawl-list">
-          {(s.ops?.crawl_status || [])
-            .filter((c) => c.status !== 'ok')
-            .slice(0, 12)
-            .map((c) => (
-              <li key={c.source_id}>
-                <span className={`sev sev-${c.status === 'rate_limited' ? 'medium' : 'high'}`}>{c.status}</span>{' '}
-                {c.name || c.source_id} ({c.country_id}) · fail {c.failure_count}/{c.success_count}
-                {c.last_error && <div className="muted small">{c.last_error}</div>}
-              </li>
-            ))}
-          {(s.ops?.crawl_status || []).every((c) => c.status === 'ok') && (
-            <li className="muted">活跃源未见失败主导 / 429</li>
-          )}
-        </ul>
+        <SourceOpsTable rows={s.ops?.crawl_status || []} defaultOnlyFailed />
         <p className="muted small">
           局限：分析积压 {s.quality.missing_analysis}；无样本国{' '}
           {(s.quality.countries_without_sample || []).join(', ') || '—'}。
           {(s.quality.notes || []).slice(0, 2).join(' ')}
         </p>
       </section>
+    </div>
+  )
+}
+
+function fmtPct(v: number | null | undefined) {
+  return typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—'
+}
+
+function V1StatsBlock({ v1 }: { v1: V1StatsByScope }) {
+  const [dim, setDim] = useState<'board' | 'country' | 'topic'>('board')
+  const g = v1.global
+  if (!g) return null
+  const boards = (v1.boards || []).filter((b) => b.article_count > 0)
+  const countries = v1.countries || []
+  const topics = (v1.topics || []).filter((t) => t.article_count > 0)
+
+  const activeRows = dim === 'board' ? boards : dim === 'country' ? countries : topics
+  const activeLabel =
+    dim === 'board'
+      ? '四大板块（板块间允许重叠）'
+      : dim === 'country'
+        ? '信源所属国家 (source_country)'
+        : '15 个议题（允许跨议题重叠）'
+
+  return (
+    <div className="v1-stats-block" style={{ marginTop: 12, marginBottom: 16 }}>
+      <div className="gni-table-head">
+        <h3>V1.0 对华立场与议题统计（Article Count · published_at）</h3>
+        <div className="gni-seg-group" role="group" aria-label="切换统计维度">
+          <button
+            type="button"
+            className="gni-seg-btn"
+            aria-pressed={dim === 'board'}
+            onClick={() => setDim('board')}
+          >
+            四大板块
+          </button>
+          <button
+            type="button"
+            className="gni-seg-btn"
+            aria-pressed={dim === 'country'}
+            onClick={() => setDim('country')}
+          >
+            信源国家
+          </button>
+          <button
+            type="button"
+            className="gni-seg-btn"
+            aria-pressed={dim === 'topic'}
+            onClick={() => setDim('topic')}
+          >
+            15 议题
+          </button>
+        </div>
+      </div>
+      <p className="small">
+        全球唯一涉华文章 <strong>{g.article_count}</strong> 篇 · 正面{' '}
+        <strong>{fmtPct(g.positive_rate)}</strong> ({g.positive_count}) / 中性{' '}
+        <strong>{fmtPct(g.neutral_rate)}</strong> ({g.neutral_count}) / 负面{' '}
+        <strong>{fmtPct(g.negative_rate)}</strong> ({g.negative_count}) · Unclassified{' '}
+        {g.unclassified_count} · 立场判定覆盖率 <strong>{fmtPct(g.stance_coverage_rate)}</strong>
+      </p>
+      <StanceMatrixTable rows={activeRows} dimensionLabel={activeLabel} />
     </div>
   )
 }

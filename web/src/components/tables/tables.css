@@ -1,0 +1,238 @@
+.gni-table-block {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.gni-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.gni-table-head h3,
+.gni-table-head h4 {
+  margin: 0;
+}
+
+.gni-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.gni-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gni-table th {
+  text-align: left;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg-elev);
+  padding: 0.52rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.gni-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.gni-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.gni-table tr.gni-clickable {
+  cursor: pointer;
+}
+
+.gni-table tr.gni-clickable:hover td {
+  background: color-mix(in srgb, var(--bg-elev) 85%, var(--accent) 8%);
+}
+
+.gni-table tr.gni-selected td {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
+}
+
+.gni-table tr.gni-row-flag td:first-child {
+  box-shadow: inset 3px 0 0 #e5534b;
+}
+
+.gni-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.gni-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.gni-bar-cell {
+  min-width: 185px;
+}
+
+.gni-stance-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  margin-bottom: 0.25rem;
+}
+
+.gni-seg-pos {
+  background: #3fb950;
+}
+
+.gni-seg-neu {
+  background: #768390;
+}
+
+.gni-seg-neg {
+  background: #f85149;
+}
+
+.gni-bar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.gni-c-pos {
+  color: #3fb950;
+  font-weight: 500;
+}
+
+.gni-c-neg {
+  color: #f85149;
+  font-weight: 500;
+}
+
+.gni-c-warn {
+  color: #d29922;
+  font-weight: 500;
+}
+
+.gni-pill {
+  display: inline-block;
+  padding: 0.14rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gni-pill-pos {
+  background: color-mix(in srgb, #3fb950 18%, transparent);
+  color: #3fb950;
+}
+
+.gni-pill-neu {
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+  color: var(--muted);
+}
+
+.gni-pill-neg {
+  background: color-mix(in srgb, #f85149 20%, transparent);
+  color: #f85149;
+}
+
+.gni-pill-warn {
+  background: color-mix(in srgb, #d29922 20%, transparent);
+  color: #d29922;
+}
+
+.gni-tag {
+  display: inline-block;
+  padding: 0.08rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  margin-right: 0.28rem;
+  margin-top: 0.2rem;
+}
+
+.gni-quote {
+  margin-top: 0.3rem;
+  padding: 0.28rem 0.55rem;
+  border-left: 2px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: 0.78rem;
+  border-radius: 0 4px 4px 0;
+}
+
+.gni-seg-group {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-elev);
+}
+
+.gni-seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.gni-seg-btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.gni-drawer {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.gni-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.gni-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+  font-size: 0.74rem;
+  color: var(--muted);
+  margin-top: 0.45rem;
+}
+
+.gni-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}

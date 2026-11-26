@@ -6,9 +6,16 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from gni import __version__
 from gni.alerts.service import build_alerts_payload, run_alert_engine, transition_alert
+from gni.analysis.stance_util import (
+    extract_v1_china_stance,
+    extract_v1_stance_evidence,
+    extract_v1_topics,
+)
 from gni.dashboard.data import MAX_WINDOW_DAYS
 from gni.dashboard.pages_api import (
     countries_list_payload,
@@ -26,6 +33,8 @@ from gni.events.service import (
     rebuild_proto_events,
 )
 from gni.infrastructure.db import ensure_schema, session_scope
+from gni.infrastructure.models import Article, Source
+from gni.metrics.service import _latest_analyses
 from gni.reports.daily import SCHEMA_VERSION as DAILY_SCHEMA_VERSION
 from gni.reports.daily import build_daily_report
 from gni.reports.monthly import build_monthly_report
@@ -260,3 +269,47 @@ def api_events_merge(
 def api_system_status() -> dict:
     with session_scope() as session:
         return system_status_payload(session)
+
+
+class ArticleTraceRequest(BaseModel):
+    article_ids: list[str] = Field(default_factory=list)
+    limit: int = Field(default=30, ge=1, le=50)
+
+
+@app.post("/api/articles/trace")
+def api_articles_trace(body: ArticleTraceRequest) -> dict:
+    """Return traceable article metadata + V1.0 China stance & stance_evidence for given article_ids."""
+    ids = [str(x).strip() for x in body.article_ids if str(x).strip()][: body.limit]
+    if not ids:
+        return {"articles": []}
+    with session_scope() as session:
+        articles = list(session.scalars(select(Article).where(Article.id.in_(ids))).all())
+        sources = {s.id: s for s in session.scalars(select(Source)).all()}
+        analyses = _latest_analyses(session, [a.id for a in articles])
+        rows = []
+        for a in articles:
+            src = sources.get(a.source_id)
+            ana = analyses.get(a.id)
+            structured = (ana.structured_result if ana else None) or {}
+            schema_ver = ana.schema_version if ana else None
+            stance = extract_v1_china_stance(structured, schema_version=schema_ver)
+            ev = extract_v1_stance_evidence(structured, schema_version=schema_ver)
+            cs = structured.get("china_stance") if isinstance(structured.get("china_stance"), dict) else {}
+            conf = cs.get("stance_confidence") if schema_ver == "article_analysis_v1.0" else None
+            rows.append(
+                {
+                    "article_id": a.id,
+                    "published_at": a.published_at.isoformat() if a.published_at else None,
+                    "source_country": src.country_id if src else None,
+                    "source_id": a.source_id,
+                    "source_name": src.name if src else a.source_id,
+                    "title": a.title,
+                    "url": a.url,
+                    "stance_label": stance,
+                    "stance_confidence": conf if isinstance(conf, (int, float)) else None,
+                    "stance_evidence": ev,
+                    "topics_v1": extract_v1_topics(structured, schema_version=schema_ver),
+                }
+            )
+        rows.sort(key=lambda r: str(r.get("published_at") or ""), reverse=True)
+        return {"articles": rows}

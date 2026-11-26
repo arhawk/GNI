@@ -145,9 +145,42 @@ export type EventSummary = {
   }>
 }
 
+export type V1StatRow = {
+  period_start: string
+  period_end: string
+  scope_type: 'GLOBAL' | 'COUNTRY' | 'BOARD' | 'TOPIC' | string
+  scope_id: string
+  label_zh?: string
+  board_id?: string
+  article_count: number
+  positive_count: number
+  neutral_count: number
+  negative_count: number
+  unclassified_count: number
+  classified_count?: number
+  positive_rate: number | null
+  neutral_rate: number | null
+  negative_rate: number | null
+  stance_coverage_rate: number | null
+  methodology_version?: string
+  taxonomy_version?: string
+  analysis_version?: string
+  article_ids?: string[]
+  generated_at?: string
+}
+
+export type V1StatsByScope = {
+  global: V1StatRow | null
+  countries: V1StatRow[]
+  boards: V1StatRow[]
+  topics: V1StatRow[]
+}
+
 export type DailyReport = {
   report_type: string
   schema_version?: string
+  methodology_version?: string
+  taxonomy_version?: string
   period: string
   period_start?: string
   period_end?: string
@@ -167,12 +200,14 @@ export type DailyReport = {
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
   narratives?: {
     executive?: string
+    risk?: string
     coverage?: string
     tone?: string
     signals?: string
     quality?: string
   }
   sections: {
+    v1_stats?: V1StatsByScope
     summary: {
       kpis: {
         china_articles: number
@@ -501,6 +536,8 @@ export function fetchDailyReport(date?: string) {
 export type PeriodReport = {
   report_type: string
   schema_version?: string
+  methodology_version?: string
+  taxonomy_version?: string
   period: string
   period_start?: string
   period_end?: string
@@ -650,4 +687,33 @@ export function fetchSystemStatus() {
     source_health: Array<Record<string, unknown>>
     notes: string[]
   }>('/api/system/status')
+}
+
+export type TraceArticle = {
+  article_id: string
+  published_at: string | null
+  source_country: string | null
+  source_id: string
+  source_name: string
+  title: string | null
+  url: string | null
+  stance_label: 'Positive' | 'Neutral' | 'Negative' | 'Unclassified' | string
+  stance_confidence: number | null
+  stance_evidence: Array<{
+    quote?: string
+    span_text?: string
+    start_offset?: number | null
+    end_offset?: number | null
+  }>
+  topics_v1: string[]
+}
+
+export async function fetchArticleTrace(articleIds: string[], limit = 30) {
+  const res = await fetch('/api/articles/trace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ article_ids: articleIds.slice(0, limit), limit }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}: /api/articles/trace`)
+  return (await res.json()) as { articles: TraceArticle[] }
 }
