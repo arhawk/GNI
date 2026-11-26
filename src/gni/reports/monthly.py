@@ -46,9 +46,29 @@ def _tz() -> ZoneInfo:
         return ZoneInfo("Asia/Shanghai")
 
 
-def _month_window(month: str | date | None = None) -> tuple[str, datetime, datetime, datetime, datetime]:
-    """Return (YYYY-MM, start, end, prev_start, prev_end)."""
+def _month_window(
+    month: str | date | None = None,
+    end_day: str | date | None = None,
+) -> tuple[str, datetime, datetime, datetime, datetime]:
+    """Return (period_label, start, end, prev_start, prev_end).
+
+    If ``end_day`` (YYYY-MM-DD) is provided, computes an exact trailing 30-day window
+    ending on ``end_day`` (inclusive) vs the prior 30-day window.
+    Otherwise uses the calendar month ``month`` (YYYY-MM).
+    """
     tz = _tz()
+    if end_day is not None:
+        if isinstance(end_day, date):
+            ed = end_day
+        else:
+            ed = date.fromisoformat(str(end_day).strip()[:10])
+        end = datetime(ed.year, ed.month, ed.day, tzinfo=tz) + timedelta(days=1)
+        start = end - timedelta(days=30)
+        prev_end = start
+        prev_start = prev_end - timedelta(days=30)
+        period = f"{(ed - timedelta(days=29)).isoformat()}_{ed.isoformat()}"
+        return period, start, end, prev_start, prev_end
+
     if isinstance(month, date):
         y, m = month.year, month.month
     elif isinstance(month, str) and month:
@@ -73,13 +93,14 @@ def build_monthly_report(
     session: Session,
     *,
     month: str | date | None = None,
+    end_day: str | date | None = None,
     persist_snapshot: bool = True,
     analyze: bool = False,
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
 ) -> dict[str, Any]:
-    period, win_start, win_end, prev_start, prev_end = _month_window(month)
+    period, win_start, win_end, prev_start, prev_end = _month_window(month=month, end_day=end_day)
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
     articles = list(session.scalars(select(Article)).all())
     articles_by_id = {a.id: a for a in articles}

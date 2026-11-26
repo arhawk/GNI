@@ -648,6 +648,19 @@ def _select_articles_for_analysis(
         if not legacy_article_ids:
             return [], {}
 
+    from sqlalchemy import case, func
+
+    priority_expr = case(
+        (Article.title_screening_label == "explicit_relevant", 0),
+        (Article.title_screening_label == "likely_relevant", 1),
+        (Article.title_screening_label == "uncertain", 2),
+        else_=3,
+    )
+    order_cols = (
+        priority_expr.asc(),
+        func.coalesce(Article.published_at, Article.first_seen_at).desc(),
+    )
+
     q = select(Article).where(
         Article.processing_status == "done",
         Article.exclude_from_metrics.is_(False),
@@ -658,7 +671,7 @@ def _select_articles_for_analysis(
         q = q.where(Article.id.in_(list(legacy_article_ids)))
     elif not reanalyze:
         q = q.where(Article.analysis_status.in_(["pending", "failed"]))
-    q = q.order_by(Article.first_seen_at.asc())
+    q = q.order_by(*order_cols)
 
     # Per-country: query each country separately so one backlog (e.g. RU) cannot starve others.
     if per_country is not None and per_country > 0:
@@ -689,7 +702,7 @@ def _select_articles_for_analysis(
                 cq = cq.where(Article.id.in_(list(legacy_article_ids)))
             elif not reanalyze:
                 cq = cq.where(Article.analysis_status.in_(["pending", "failed"]))
-            cq = cq.order_by(Article.first_seen_at.asc()).limit(take)
+            cq = cq.order_by(*order_cols).limit(take)
             rows = list(session.scalars(cq).all())
             if not rows:
                 continue

@@ -1,17 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   analyzeReport,
   fetchDailyReport,
   fetchMonthlyReport,
-  fetchReportsList,
+  fetchReportCalendar,
   fetchWeeklyReport,
   type DailyReport,
   type PeriodReport,
-  type ReportListItem,
+  type ReportCalendarDay,
   type V1StatsByScope,
 } from '../api'
-import { DailyReportPackageView } from '../components/DailyReportPackageView'
 import {
   CrossCountryAnalysisBlock,
   EventInterpretationCards,
@@ -29,13 +28,45 @@ import {
 
 type Tab = 'daily' | 'weekly' | 'monthly'
 
+function todayShanghaiDate(): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date())
+    const y = parts.find((p) => p.type === 'year')?.value
+    const m = parts.find((p) => p.type === 'month')?.value
+    const d = parts.find((p) => p.type === 'day')?.value
+    if (y && m && d) return `${y}-${m}-${d}`
+  } catch {
+    // fallback below
+  }
+  return new Date().toISOString().slice(0, 10)
+}
+
+function shiftMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1 + delta, 1))
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function shiftDay(ymd: string, deltaDays: number): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays))
+  return dt.toISOString().slice(0, 10)
+}
+
 export function ReportsPage() {
+  const initialDay = useMemo(() => todayShanghaiDate(), [])
   const [tab, setTab] = useState<Tab>('daily')
+  const [selectedDate, setSelectedDate] = useState<string>(initialDay)
+  const [calendarMonth, setCalendarMonth] = useState<string>(initialDay.slice(0, 7))
+  const [calendarDays, setCalendarDays] = useState<ReportCalendarDay[]>([])
+  const [calendarOpen, setCalendarOpen] = useState<boolean>(true)
   const [data, setData] = useState<DailyReport | null>(null)
   const [period, setPeriod] = useState<PeriodReport | null>(null)
-  const [snapshots, setSnapshots] = useState<ReportListItem[]>([])
-  const [selectedDailyPeriod, setSelectedDailyPeriod] = useState<string | undefined>(undefined)
-  const [viewMode, setViewMode] = useState<'v2_package' | 'legacy'>('v2_package')
   const [error, setError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
@@ -44,10 +75,10 @@ export function ReportsPage() {
   const [showDetail, setShowDetail] = useState(false)
 
   useEffect(() => {
-    fetchReportsList('daily', 20)
-      .then((r) => setSnapshots(r.reports || []))
-      .catch(() => {})
-  }, [])
+    fetchReportCalendar(calendarMonth)
+      .then((res) => setCalendarDays(res.days || []))
+      .catch(() => setCalendarDays([]))
+  }, [calendarMonth])
 
   useEffect(() => {
     setError(null)
@@ -55,7 +86,7 @@ export function ReportsPage() {
     setData(null)
     setPeriod(null)
     if (tab === 'daily') {
-      fetchDailyReport(selectedDailyPeriod)
+      fetchDailyReport(selectedDate)
         .then((payload) => {
           const v4 =
             payload?.schema_version === 'daily_report_schema_v4' &&
@@ -72,39 +103,29 @@ export function ReportsPage() {
         .catch((e: Error) => setError(e.message))
       return
     }
-    const loader = tab === 'weekly' ? fetchWeeklyReport() : fetchMonthlyReport()
+    const loader =
+      tab === 'weekly'
+        ? fetchWeeklyReport(selectedDate)
+        : fetchMonthlyReport({ end: selectedDate })
     loader
       .then((payload) => setPeriod(payload))
       .catch((e: Error) => setError(e.message))
-  }, [tab, selectedDailyPeriod])
+  }, [tab, selectedDate])
 
   async function triggerAnalyze(
     reportType: Tab,
-    opts: { force?: boolean; tasks?: string[]; engine?: 'legacy' | 'v2'; save_snapshot?: boolean },
+    opts: { force?: boolean; tasks?: string[] },
   ) {
     setAnalyzing(true)
     setAnalyzeError(null)
     try {
-      const periodArg =
-        reportType === 'daily'
-          ? data?.period
-          : reportType === 'monthly'
-            ? period?.period
-            : period?.period?.split('_')[1]
       const updated = await analyzeReport<DailyReport | PeriodReport>(reportType, {
-        period: periodArg,
+        period: selectedDate,
         force: opts.force,
         tasks: opts.tasks,
-        engine: opts.engine,
-        save_snapshot: opts.save_snapshot,
       })
       if (reportType === 'daily') {
         setData(updated as DailyReport)
-        if (opts.save_snapshot) {
-          fetchReportsList('daily', 20)
-            .then((r) => setSnapshots(r.reports || []))
-            .catch(() => {})
-        }
       } else {
         setPeriod(updated as PeriodReport)
       }
@@ -115,79 +136,71 @@ export function ReportsPage() {
     }
   }
 
+  const windowHint =
+    tab === 'daily'
+      ? `日报口径：${selectedDate}`
+      : tab === 'weekly'
+        ? `近 7 日滚动周报：${shiftDay(selectedDate, -6)} ～ ${selectedDate}`
+        : `近 30 日滚动月报：${shiftDay(selectedDate, -29)} ～ ${selectedDate}`
+
   return (
     <div className="panel report-page">
-      <div className="report-tabs">
-        <button type="button" className={tab === 'daily' ? 'active' : ''} onClick={() => setTab('daily')}>
-          每日情报
-        </button>
-        <button type="button" className={tab === 'weekly' ? 'active' : ''} onClick={() => setTab('weekly')}>
-          每周分析
-        </button>
-        <button
-          type="button"
-          className={tab === 'monthly' ? 'active' : ''}
-          onClick={() => setTab('monthly')}
-        >
-          每月研判
-        </button>
+      <div className="report-topbar">
+        <div className="report-tabs">
+          <button type="button" className={tab === 'daily' ? 'active' : ''} onClick={() => setTab('daily')}>
+            每日情报
+          </button>
+          <button type="button" className={tab === 'weekly' ? 'active' : ''} onClick={() => setTab('weekly')}>
+            每周分析
+          </button>
+          <button
+            type="button"
+            className={tab === 'monthly' ? 'active' : ''}
+            onClick={() => setTab('monthly')}
+          >
+            每月研判
+          </button>
+        </div>
+        <div className="report-date-summary">
+          <span className="muted small">{windowHint}</span>
+          <button
+            type="button"
+            className="report-cal-toggle"
+            onClick={() => setCalendarOpen((v) => !v)}
+          >
+            {calendarOpen ? '收起日历' : '展开日历'}
+          </button>
+        </div>
       </div>
+
+      {calendarOpen && (
+        <ReportCalendar
+          month={calendarMonth}
+          days={calendarDays}
+          selectedDate={selectedDate}
+          onChangeMonth={setCalendarMonth}
+          onSelectDate={(d) => {
+            setSelectedDate(d)
+            const ym = d.slice(0, 7)
+            if (ym !== calendarMonth) setCalendarMonth(ym)
+          }}
+        />
+      )}
 
       {error && <p className="error">加载失败: {error}</p>}
       {tab === 'daily' && !error && !data && <p className="muted">加载 Daily Brief…</p>}
       {tab === 'daily' && data && (
-        <>
-          {data.report_package && (
-            <div className="intel-chip-row" style={{ marginBottom: '0.75rem' }}>
-              <button
-                type="button"
-                className={viewMode === 'v2_package' ? 'intel-btn primary' : 'intel-btn'}
-                onClick={() => setViewMode('v2_package')}
-              >
-                V2.0 六章情报简报 (Report Package)
-              </button>
-              <button
-                type="button"
-                className={viewMode === 'legacy' ? 'intel-btn primary' : 'intel-btn'}
-                onClick={() => setViewMode('legacy')}
-              >
-                经典统计明细视图 (V4)
-              </button>
-            </div>
-          )}
-          {data.report_package && viewMode === 'v2_package' ? (
-            <DailyReportPackageView
-              pkg={data.report_package}
-              kpis={{
-                china_articles: data.sections.summary.kpis.china_articles,
-                prev_day_articles: data.sections.summary.comparisons?.vs_yesterday?.china_articles ?? 0,
-                delta: data.sections.summary.comparisons?.vs_yesterday?.delta ?? 0,
-                reporting_countries: data.sections.summary.kpis.reporting_countries,
-                major_events: data.sections.summary.kpis.major_events,
-              }}
-              snapshots={snapshots}
-              selectedPeriod={selectedDailyPeriod}
-              onSelectPeriod={(p) => setSelectedDailyPeriod(p || undefined)}
-              analyzing={analyzing}
-              analyzeError={analyzeError}
-              onRunV2={(force) =>
-                triggerAnalyze('daily', { force, engine: 'v2', save_snapshot: true })
-              }
-            />
-          ) : (
-            <DailyBrief
-              data={data}
-              analyzing={analyzing}
-              analyzeError={analyzeError}
-              onGenerate={(force) => triggerAnalyze('daily', { force })}
-              onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
-              showToneDetail={showToneDetail}
-              setShowToneDetail={setShowToneDetail}
-              showCoverageDetail={showCoverageDetail}
-              setShowCoverageDetail={setShowCoverageDetail}
-            />
-          )}
-        </>
+        <DailyBrief
+          data={data}
+          analyzing={analyzing}
+          analyzeError={analyzeError}
+          onGenerate={(force) => triggerAnalyze('daily', { force })}
+          onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
+          showToneDetail={showToneDetail}
+          setShowToneDetail={setShowToneDetail}
+          showCoverageDetail={showCoverageDetail}
+          setShowCoverageDetail={setShowCoverageDetail}
+        />
       )}
       {(tab === 'weekly' || tab === 'monthly') && !error && !period && (
         <p className="muted">加载{tab === 'weekly' ? '周报' : '月报'}…</p>
@@ -204,6 +217,83 @@ export function ReportsPage() {
           setShowDetail={setShowDetail}
         />
       )}
+    </div>
+  )
+}
+
+const WEEKDAYS_ZH = ['一', '二', '三', '四', '五', '六', '日']
+
+function ReportCalendar({
+  month,
+  days,
+  selectedDate,
+  onChangeMonth,
+  onSelectDate,
+}: {
+  month: string
+  days: ReportCalendarDay[]
+  selectedDate: string
+  onChangeMonth: (m: string) => void
+  onSelectDate: (d: string) => void
+}) {
+  const [y, m] = month.split('-').map(Number)
+  const firstDow = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7
+  const blanks = Array.from({ length: firstDow }, (_, i) => i)
+  const monthTotal = days.reduce((acc, d) => acc + (d.total_articles || 0), 0)
+
+  return (
+    <div className="report-calendar" aria-label="报告日期与每日新闻总量日历">
+      <div className="report-cal-head">
+        <div className="report-cal-nav">
+          <button
+            type="button"
+            className="report-cal-btn"
+            onClick={() => onChangeMonth(shiftMonth(month, -1))}
+            aria-label="上个月"
+          >
+            ◀
+          </button>
+          <strong className="report-cal-month">{month}</strong>
+          <button
+            type="button"
+            className="report-cal-btn"
+            onClick={() => onChangeMonth(shiftMonth(month, 1))}
+            aria-label="下个月"
+          >
+            ▶
+          </button>
+        </div>
+        <span className="muted small">
+          本月采集 {monthTotal.toLocaleString()} 篇 · 点击任意日期自动切换当日日报 / 近7日周报 / 近1个月月报
+        </span>
+      </div>
+      <div className="report-cal-grid">
+        {WEEKDAYS_ZH.map((w) => (
+          <div key={w} className="report-cal-dow">
+            {w}
+          </div>
+        ))}
+        {blanks.map((b) => (
+          <div key={`b-${b}`} className="report-cal-blank" />
+        ))}
+        {days.map((item) => {
+          const dayNum = Number(item.date.slice(8, 10))
+          const isSelected = item.date === selectedDate
+          const hasNews = item.total_articles > 0
+          return (
+            <button
+              key={item.date}
+              type="button"
+              className={`report-cal-cell${isSelected ? ' selected' : ''}${hasNews ? ' has-news' : ''}`}
+              onClick={() => onSelectDate(item.date)}
+              title={`${item.date} · 总新闻 ${item.total_articles} 篇 · 涉华 ${item.china_articles} 篇`}
+            >
+              <span className="report-cal-day">{dayNum}</span>
+              <span className="report-cal-count">{item.total_articles > 0 ? item.total_articles : '·'}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -593,34 +683,6 @@ function PeriodBrief({
   )
 }
 
-function MediaVolumeSpark({
-  today,
-  yesterday,
-  weekAvg,
-}: {
-  today: number
-  yesterday?: number
-  weekAvg?: number
-}) {
-  const vals = [yesterday ?? 0, weekAvg ?? 0, today].map((v) => Math.max(0, Number(v) || 0))
-  const max = Math.max(1, ...vals)
-  const labels = ['昨日', '近7日均', '今日']
-  return (
-    <div className="media-spark" title="仅媒体报道量，无社媒公众兴趣">
-      <div className="media-spark-bars">
-        {vals.map((v, i) => (
-          <div key={labels[i]} className="media-spark-col">
-            <div className="media-spark-bar" style={{ height: `${(v / max) * 100}%` }} />
-            <span className="muted small">{labels[i]}</span>
-            <strong className="small">{v}</strong>
-          </div>
-        ))}
-      </div>
-      <p className="muted small">媒体报道量对比（无社媒栏）</p>
-    </div>
-  )
-}
-
 function DailyBrief({
   data,
   analyzing,
@@ -648,9 +710,6 @@ function DailyBrief({
   const nar = data.narratives || {}
   const cmp = summary.comparisons
   const connectedN = data.connected?.countries ?? data.country_scope?.length ?? 0
-  const stories = kpis.stories ?? data.event_count ?? (s.major_events || []).length
-  const articles = kpis.articles_analyzed ?? kpis.china_articles
-  const sourcesCited = kpis.sources_cited ?? kpis.reporting_sources
 
   const stats = s.overview_stats
   const ingest = stats?.ingest || {}
@@ -741,21 +800,11 @@ function DailyBrief({
 
       <section className="brief-section">
         <h2>2 · 涉华报道量与对华立场分布</h2>
-        <div className="kpi-grid brief-kpis brief-kpis-hero">
-          <Kpi label="今日要闻" value={stories} />
-          <Kpi label="涉华有效" value={articles} hint={deltaHint(cmp?.vs_yesterday?.delta, '较昨日')} />
-          <Kpi label="引用来源" value={sourcesCited} />
-        </div>
         <div className="kpi-grid compact">
           <Kpi label="当日采集" value={Number(ingest.day_total ?? kpis.day_articles ?? 0)} />
           <Kpi label="排除/重复" value={Number((ingest.excluded_from_metrics ?? 0) + (ingest.duplicates ?? 0))} />
           <Kpi label="采集异常源" value={Number(stats?.crawl_summary?.failing ?? 0)} />
         </div>
-        <MediaVolumeSpark
-          today={kpis.china_articles}
-          yesterday={cmp?.vs_yesterday?.china_articles}
-          weekAvg={cmp?.vs_7d_avg?.china_articles}
-        />
         {s.v1_stats && <V1StatsBlock v1={s.v1_stats} />}
         {stats?.media_type_counts_zh && (
           <p className="muted small">
@@ -973,10 +1022,4 @@ function Kpi({ label, value, hint }: { label: string; value: number; hint?: stri
       {hint && <div className="muted small">{hint}</div>}
     </div>
   )
-}
-
-function deltaHint(delta: number | undefined, prefix: string) {
-  if (delta == null) return undefined
-  const sign = delta > 0 ? '+' : ''
-  return `${prefix} ${sign}${delta}`
 }

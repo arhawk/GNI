@@ -723,13 +723,37 @@ export function analyzeReport<T = DailyReport | PeriodReport>(
   })
 }
 
+export type ReportCalendarDay = {
+  date: string
+  total_articles: number
+  china_articles: number
+}
+
+export type ReportCalendarResponse = {
+  month: string
+  timezone: string
+  days: ReportCalendarDay[]
+}
+
+export function fetchReportCalendar(month?: string) {
+  const q = month ? `month=${encodeURIComponent(month)}` : ''
+  return get<ReportCalendarResponse>(`/api/reports/calendar${q ? `?${q}` : ''}`)
+}
+
 export function fetchWeeklyReport(end?: string) {
   const q = end ? `end=${encodeURIComponent(end)}` : ''
   return get<PeriodReport>(`/api/reports/weekly${q ? `?${q}` : ''}`)
 }
 
-export function fetchMonthlyReport(month?: string) {
-  const q = month ? `month=${encodeURIComponent(month)}` : ''
+export function fetchMonthlyReport(opts?: string | { month?: string; end?: string }) {
+  const params = new URLSearchParams()
+  if (typeof opts === 'string' && opts) {
+    params.set('month', opts)
+  } else if (opts && typeof opts === 'object') {
+    if (opts.end) params.set('end', opts.end)
+    else if (opts.month) params.set('month', opts.month)
+  }
+  const q = params.toString()
   return get<PeriodReport>(`/api/reports/monthly${q ? `?${q}` : ''}`)
 }
 

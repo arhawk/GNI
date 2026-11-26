@@ -1,9 +1,9 @@
 export const PRESETS = [
-  { days: 1, label: '1 天' },
-  { days: 7, label: '1 周' },
-  { days: 30, label: '1 月' },
-  { days: 90, label: '3 月' },
-  { days: 365, label: '1 年' },
+  { days: 1, label: '近1天' },
+  { days: 7, label: '近1周' },
+  { days: 14, label: '近2周' },
+  { days: 30, label: '近1个月' },
+  { days: 90, label: '近3个月' },
 ] as const
 
 export type TimeWindow = {

@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from calendar import monthrange
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from gni.core.config import get_settings
 from gni.core.contracts import ReportPackageContract
 from gni.infrastructure.db import session_scope
-from gni.infrastructure.models import ReportSnapshot
+from gni.infrastructure.models import Article, ReportSnapshot
+from gni.metrics.definitions import CHINA_INCLUDE_LEVELS
 from gni.reports.daily import SCHEMA_VERSION as DAILY_SCHEMA_VERSION
 from gni.reports.daily import build_daily_report
 from gni.reports.daily_package import (
@@ -123,13 +129,77 @@ def api_weekly_report(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.get("/api/reports/calendar")
+def api_reports_calendar(
+    month: str | None = Query(None, description="YYYY-MM in report timezone (default current month)"),
+) -> dict[str, Any]:
+    """Return daily news totals and China-relevant article counts for every day in a month."""
+    try:
+        tz = ZoneInfo(get_settings().report_timezone or "Asia/Shanghai")
+    except Exception:  # noqa: BLE001
+        tz = ZoneInfo("Asia/Shanghai")
+    if month:
+        try:
+            y, m = (int(x) for x in month.strip().split("-")[:2])
+            if not (1 <= m <= 12):
+                raise ValueError("month out of range")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"invalid month: {month}") from e
+    else:
+        today = datetime.now(tz).date()
+        y, m = today.year, today.month
+
+    last_day = monthrange(y, m)[1]
+    start_local = datetime(y, m, 1, tzinfo=tz)
+    end_local = datetime(y, m, last_day, tzinfo=tz) + timedelta(days=1)
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+
+    totals: dict[str, int] = defaultdict(int)
+    chinas: dict[str, int] = defaultdict(int)
+    with session_scope() as session:
+        rows = session.execute(
+            select(Article.published_at, Article.china_relevance_level).where(
+                Article.exclude_from_metrics.is_(False),
+                Article.published_at.is_not(None),
+                Article.published_at >= start_utc,
+                Article.published_at < end_utc,
+            )
+        ).all()
+        for pub, rel in rows:
+            if pub is None:
+                continue
+            dt = pub if pub.tzinfo is not None else pub.replace(tzinfo=timezone.utc)
+            day_str = dt.astimezone(tz).date().isoformat()
+            totals[day_str] += 1
+            if rel in CHINA_INCLUDE_LEVELS:
+                chinas[day_str] += 1
+
+    days = []
+    for d in range(1, last_day + 1):
+        ds = date(y, m, d).isoformat()
+        days.append(
+            {
+                "date": ds,
+                "total_articles": totals.get(ds, 0),
+                "china_articles": chinas.get(ds, 0),
+            }
+        )
+    return {
+        "month": f"{y:04d}-{m:02d}",
+        "timezone": str(tz),
+        "days": days,
+    }
+
+
 @router.get("/api/reports/monthly")
 def api_monthly_report(
     month: str | None = Query(None, description="YYYY-MM"),
+    end: str | None = Query(None, description="Optional trailing 30-day end date YYYY-MM-DD (report TZ)"),
 ) -> dict[str, Any]:
     try:
         with session_scope() as session:
-            return build_monthly_report(session, month=month)
+            return build_monthly_report(session, month=month, end_day=end)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -164,9 +234,13 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str
                     analyze_tasks=body.tasks,
                     force_analyze=body.force,
                 )
+            p = (body.period or "").strip()
+            use_end_day = p if len(p) == 10 else None
+            use_month = None if use_end_day else (p or None)
             return build_monthly_report(
                 session,
-                month=body.period,
+                month=use_month,
+                end_day=use_end_day,
                 analyze=True,
                 analyze_tasks=body.tasks,
                 force_analyze=body.force,
