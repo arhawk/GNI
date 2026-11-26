@@ -39,7 +39,7 @@ from gni.infrastructure.models import (
     Organization,
     Source,
 )
-from gni.reports.narrative.schemas import Finding, OutlookSignal
+from gni.reports.narrative.assessment_validator import Finding, OutlookSignal
 
 
 @pytest.fixture

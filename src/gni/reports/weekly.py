@@ -98,7 +98,6 @@ def build_weekly_report(
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
-    use_orchestrator: bool = False,
     orchestrator_profile: str = "core",
 ) -> dict[str, Any]:
     if isinstance(end_day, str):
@@ -427,11 +426,10 @@ def build_weekly_report(
         },
     }
 
-    from gni.reports.narrative.runner import run_report_intelligence
     from gni.reports.orchestrator import ReportOrchestrator
 
     orch = ReportOrchestrator()
-    if use_orchestrator and analyze:
+    if analyze:
         orch_res = orch.run(
             session,
             report_type="weekly",
@@ -441,28 +439,19 @@ def build_weekly_report(
             force=force_analyze,
             llm_client=llm_client,
         )
-        payload["intelligence"] = orch_res.intelligence
-    elif analyze:
-        payload["intelligence"] = run_report_intelligence(
-            session,
-            report_type="weekly",
-            period=payload["period"],
-            payload=payload,
-            tasks=analyze_tasks,
-            force=force_analyze,
-            llm_client=llm_client,
-        )
     else:
-        payload["intelligence"] = orch.load_cached_intelligence(
+        orch_res = orch.load_cached(
             session,
             report_type="weekly",
             payload=payload,
         )
+    payload["assessments"] = orch_res.serialized_assessments()
+    payload["assessments_meta"] = orch_res.assessments_meta
 
-    if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
-        payload["generator"] = "rule_weekly_v1+llm_intelligence"
+    if (payload["assessments_meta"].get("meta") or {}).get("completed_tasks", 0) > 0:
+        payload["generator"] = "rule_weekly_v1+canonical_orchestrator"
 
-    from gni.reports.package_composer import build_unified_report_package, extract_report_visualizations
+    from gni.reports.package_composer import build_report_package, extract_report_visualizations
     from gni.reports.quality_gate import evaluate_report_quality_gate
     from gni.reports.window import resolve_weekly_window
 
@@ -470,7 +459,7 @@ def build_weekly_report(
     payload["visualizations"] = extract_report_visualizations(payload)
     payload["validation"] = validate_weekly_report(payload)
     payload["quality_gate"] = evaluate_report_quality_gate(payload)
-    payload["report_package"] = build_unified_report_package(
+    payload["report_package"] = build_report_package(
         session, report_type="weekly", payload=payload
     ).model_dump(mode="json")
 
@@ -509,48 +498,8 @@ def _upsert_snapshot(
 
 
 def render_weekly_markdown(payload: dict[str, Any]) -> str:
-    """Render Weekly Intelligence Report to readable Markdown (LLM conclusions first)."""
-    s = payload.get("sections") or {}
-    intel = payload.get("intelligence") or {}
-    tasks = intel.get("tasks") or {}
-    exec_t = tasks.get("executive_analysis") or {}
-    lines: list[str] = [
-        f"# GNI Weekly Intelligence Report（{payload.get('period')}）",
-        "",
-        f"**schema:** `{payload.get('schema_version')}` · **generator:** `{payload.get('generator')}`",
-        "",
-        f"> {payload.get('disclaimer')}",
-        "",
-        "## 1. 周度综合研判（Weekly Executive Summary）",
-        "",
-        exec_t.get("summary") or (s.get("summary") or {}).get("overview_text") or "",
-        "",
-    ]
-    for f in exec_t.get("findings") or []:
-        lines.append(f"- **[{f.get('classification')}] {f.get('title')}** ({f.get('confidence')}): {f.get('conclusion')}")
-    if s.get("historical_v1_stats"):
-        lines += ["", "## 2. 近 4 周文章级重算序列", "", "| 周期 | 唯一文章数 | 正面% | 中性% | 负面% | 覆盖率% |", "|------|------------|-------|-------|-------|---------|"]
-        for row in s["historical_v1_stats"]:
-            lines.append(
-                f"| {row.get('label')} | {row.get('article_count')} | {row.get('positive_pct')} | "
-                f"{row.get('neutral_pct')} | {row.get('negative_pct')} | {row.get('stance_coverage_pct')} |"
-            )
-    ev_t = tasks.get("event_analysis") or {}
-    if ev_t.get("event_interpretations"):
-        lines += ["", "## 3. 重点事件演化分析", ""]
-        for ei in ev_t["event_interpretations"]:
-            lines.append(f"### {ei.get('title')} (`{ei.get('event_id')}`)")
-            if ei.get("event_actual_changes"):
-                lines.append(f"- 事件本体变化: {ei['event_actual_changes']}")
-            if ei.get("coverage_attention_changes"):
-                lines.append(f"- 媒体关注变化: {ei['coverage_attention_changes']}")
-            if ei.get("country_differences"):
-                lines.append(f"- 各国报道差异: {ei['country_differences']}")
-            lines.append("")
-    sig_t = tasks.get("emerging_signals") or {}
-    if sig_t.get("outlook_signals"):
-        lines += ["", "## 4. 新兴风险信号与下周监测重点", ""]
-        for osig in sig_t["outlook_signals"]:
-            lines.append(f"- **{osig.get('signal')}** ({osig.get('confidence')}): {osig.get('reasoning')}")
-    lines += ["", f"**validation.ok:** {(payload.get('validation') or {}).get('ok')}", ""]
-    return "\n".join(lines)
+    """Delegate Weekly Markdown rendering to the single canonical package_composer."""
+    from gni.reports.package_composer import build_report_package, render_report_package_markdown
+
+    pkg = payload.get("report_package") or build_report_package(None, report_type="weekly", payload=payload).model_dump(mode="json")
+    return render_report_package_markdown(pkg)

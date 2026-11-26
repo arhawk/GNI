@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { NarrativeFinding, ReportIntelligenceBlock } from '../../api'
+import type { AssessmentsMeta, CanonicalAssessment, NarrativeFinding } from '../../api'
 import { EvidenceChips } from './EvidenceChips'
 import './narrative.css'
 
@@ -57,14 +57,16 @@ export function FindingsGrid({ findings }: { findings?: NarrativeFinding[] }) {
 }
 
 export function IntelligenceHeader({
-  intelligence,
+  assessments,
+  assessmentsMeta,
   analyzing,
   analyzeError,
   onGenerate,
   onRetryFailed,
   title = '综合研判（Executive Judgment）',
 }: {
-  intelligence?: ReportIntelligenceBlock
+  assessments?: Record<string, CanonicalAssessment>
+  assessmentsMeta?: AssessmentsMeta
   analyzing: boolean
   analyzeError: string | null
   onGenerate: (force: boolean) => void
@@ -72,9 +74,9 @@ export function IntelligenceHeader({
   title?: string
 }) {
   const [showValidation, setShowValidation] = useState(false)
-  const st = statusLabel(intelligence?.status)
-  const meta = intelligence?.meta
-  const taskStatuses = intelligence?.task_statuses || {}
+  const st = statusLabel(assessmentsMeta?.status)
+  const meta = assessmentsMeta?.meta
+  const taskStatuses = assessmentsMeta?.task_statuses || {}
   const failedTasks = Object.entries(taskStatuses)
     .filter(([, info]) => info.status === 'failed')
     .map(([k]) => k)
@@ -98,7 +100,10 @@ export function IntelligenceHeader({
       return { key: k, title: info.title_zh || k, issues: all, dropped: v?.dropped_count || 0, downgraded: v?.downgraded_count || 0 }
     })
     .filter((x) => x.issues.length > 0)
-  const execTask = intelligence?.tasks?.executive_analysis
+  const execTask = assessments?.overall_situation_assessment
+  const importantChanges = (execTask?.details?.important_changes || []) as string[]
+  const mainDrivers = (execTask?.details?.main_drivers || []) as string[]
+  const followUps = (execTask?.details?.follow_up_questions || []) as string[]
 
   return (
     <div>
@@ -110,10 +115,9 @@ export function IntelligenceHeader({
               <span className="muted small">
                 任务 {meta.completed_tasks}/{meta.total_tasks}
                 {meta.model_versions?.length ? ` · 模型 ${meta.model_versions.join(', ')}` : ''}
-                {meta.total_tokens ? ` · ${meta.total_tokens} tok` : ''}
               </span>
             )}
-            {intelligence?.stale && (
+            {assessmentsMeta?.stale && (
               <span className="gni-pill gni-pill-warn">底层统计已更新，建议刷新解读</span>
             )}
           </div>
@@ -139,11 +143,6 @@ export function IntelligenceHeader({
                 )
               })}
             </div>
-          )}
-          {intelligence?.fallback_reason && (
-            <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
-              回退说明：{intelligence.fallback_reason}
-            </p>
           )}
           {validationIssues.length > 0 && (
             <div style={{ marginTop: '0.35rem' }}>
@@ -216,28 +215,28 @@ export function IntelligenceHeader({
           <div className="gni-intel-panel-head">
             <h3>{title}</h3>
             <span className="muted small">
-              Prompt: {String(execTask.meta?.prompt_version || '—')} · 状态: {execTask.status}
+              Prompt: {execTask.prompt_version || '—'} · 状态: {execTask.status}
             </span>
           </div>
-          {execTask.summary && <p className="gni-intel-summary">{execTask.summary}</p>}
+          {execTask.executive_summary && <p className="gni-intel-summary">{execTask.executive_summary}</p>}
 
-          {((execTask.important_changes || []).length > 0 || (execTask.main_drivers || []).length > 0) && (
+          {(importantChanges.length > 0 || mainDrivers.length > 0) && (
             <div className="gni-two-col">
-              {(execTask.important_changes || []).length > 0 && (
+              {importantChanges.length > 0 && (
                 <div className="gni-kv-box">
                   <div className="gni-kv-label">核心变化（Important Changes）</div>
                   <ul className="event-list" style={{ margin: 0 }}>
-                    {(execTask.important_changes || []).map((c, i) => (
+                    {importantChanges.map((c, i) => (
                       <li key={i}>{c}</li>
                     ))}
                   </ul>
                 </div>
               )}
-              {(execTask.main_drivers || []).length > 0 && (
+              {mainDrivers.length > 0 && (
                 <div className="gni-kv-box">
                   <div className="gni-kv-label">主要驱动因素（Main Drivers）</div>
                   <ul className="event-list" style={{ margin: 0 }}>
-                    {(execTask.main_drivers || []).map((d, i) => (
+                    {mainDrivers.map((d, i) => (
                       <li key={i}>{d}</li>
                     ))}
                   </ul>
@@ -246,15 +245,15 @@ export function IntelligenceHeader({
             </div>
           )}
 
-          <FindingsGrid findings={execTask.findings} />
+          <FindingsGrid findings={execTask.key_findings} />
 
-          {((execTask.uncertainties || []).length > 0 || (execTask.follow_up_questions || []).length > 0) && (
+          {((execTask.limitations || []).length > 0 || followUps.length > 0) && (
             <div className="gni-two-col">
-              {(execTask.uncertainties || []).length > 0 && (
+              {(execTask.limitations || []).length > 0 && (
                 <div className="gni-kv-box">
                   <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
                   <ul className="event-list" style={{ margin: 0 }}>
-                    {(execTask.uncertainties || []).map((u, i) => (
+                    {(execTask.limitations || []).map((u, i) => (
                       <li key={i} className="muted">
                         {u}
                       </li>
@@ -262,11 +261,11 @@ export function IntelligenceHeader({
                   </ul>
                 </div>
               )}
-              {(execTask.follow_up_questions || []).length > 0 && (
+              {followUps.length > 0 && (
                 <div className="gni-kv-box">
                   <div className="gni-kv-label">待进一步核查（Follow-up Questions）</div>
                   <ul className="event-list" style={{ margin: 0 }}>
-                    {(execTask.follow_up_questions || []).map((q, i) => (
+                    {followUps.map((q, i) => (
                       <li key={i}>{q}</li>
                     ))}
                   </ul>

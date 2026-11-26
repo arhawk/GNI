@@ -99,7 +99,6 @@ def build_monthly_report(
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
-    use_orchestrator: bool = False,
     orchestrator_profile: str = "full",
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -470,11 +469,10 @@ def build_monthly_report(
         },
     }
 
-    from gni.reports.narrative.runner import run_report_intelligence
     from gni.reports.orchestrator import ReportOrchestrator
 
     orch = ReportOrchestrator()
-    if use_orchestrator and analyze:
+    if analyze:
         orch_res = orch.run(
             session,
             report_type="monthly",
@@ -484,28 +482,19 @@ def build_monthly_report(
             force=force_analyze,
             llm_client=llm_client,
         )
-        payload["intelligence"] = orch_res.intelligence
-    elif analyze:
-        payload["intelligence"] = run_report_intelligence(
-            session,
-            report_type="monthly",
-            period=period,
-            payload=payload,
-            tasks=analyze_tasks,
-            force=force_analyze,
-            llm_client=llm_client,
-        )
     else:
-        payload["intelligence"] = orch.load_cached_intelligence(
+        orch_res = orch.load_cached(
             session,
             report_type="monthly",
             payload=payload,
         )
+    payload["assessments"] = orch_res.serialized_assessments()
+    payload["assessments_meta"] = orch_res.assessments_meta
 
-    if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
-        payload["generator"] = "rule_monthly_v1+llm_intelligence"
+    if (payload["assessments_meta"].get("meta") or {}).get("completed_tasks", 0) > 0:
+        payload["generator"] = "rule_monthly_v1+canonical_orchestrator"
 
-    from gni.reports.package_composer import build_unified_report_package, extract_report_visualizations
+    from gni.reports.package_composer import build_report_package, extract_report_visualizations
     from gni.reports.quality_gate import evaluate_report_quality_gate
 
     payload["window_spec"] = win_spec.to_dict()
@@ -517,7 +506,7 @@ def build_monthly_report(
     payload["visualizations"] = extract_report_visualizations(payload)
     payload["validation"] = validate_monthly_report(payload)
     payload["quality_gate"] = evaluate_report_quality_gate(payload)
-    payload["report_package"] = build_unified_report_package(
+    payload["report_package"] = build_report_package(
         session, report_type="monthly", payload=payload
     ).model_dump(mode="json")
 
@@ -527,46 +516,8 @@ def build_monthly_report(
 
 
 def render_monthly_markdown(payload: dict[str, Any]) -> str:
-    """Render Monthly Strategic Review to readable Markdown (LLM conclusions first)."""
-    s = payload.get("sections") or {}
-    intel = payload.get("intelligence") or {}
-    tasks = intel.get("tasks") or {}
-    exec_t = tasks.get("executive_analysis") or {}
-    lines: list[str] = [
-        f"# GNI Monthly Strategic Review（{payload.get('period')}）",
-        "",
-        f"**schema:** `{payload.get('schema_version')}` · **generator:** `{payload.get('generator')}`",
-        "",
-        f"> {payload.get('disclaimer')}",
-        "",
-        "## 1. 月度战略总评（Monthly Executive Assessment）",
-        "",
-        exec_t.get("summary") or (s.get("summary") or {}).get("overview_text") or "",
-        "",
-    ]
-    for f in exec_t.get("findings") or []:
-        lines.append(f"- **[{f.get('classification')}] {f.get('title')}** ({f.get('confidence')}): {f.get('conclusion')}")
-    if s.get("historical_v1_stats"):
-        lines += ["", "## 2. 近 6 个月文章级重算序列", "", "| 月份 | 唯一文章数 | 正面% | 中性% | 负面% | 覆盖率% |", "|------|------------|-------|-------|-------|---------|"]
-        for row in s["historical_v1_stats"]:
-            lines.append(
-                f"| {row.get('month')} | {row.get('article_count')} | {row.get('positive_pct')} | "
-                f"{row.get('neutral_pct')} | {row.get('negative_pct')} | {row.get('stance_coverage_pct')} |"
-            )
-    ev_t = tasks.get("event_analysis") or {}
-    if ev_t.get("event_interpretations"):
-        lines += ["", "## 3. 月度重大事件回顾", ""]
-        for ei in ev_t["event_interpretations"]:
-            lines.append(f"### {ei.get('title')} (`{ei.get('event_id')}`)")
-            if ei.get("what_happened"):
-                lines.append(f"- 过程与影响: {ei['what_happened']}")
-            if ei.get("why_it_matters"):
-                lines.append(f"- 战略意义: {ei['why_it_matters']}")
-            lines.append("")
-    sig_t = tasks.get("emerging_signals") or {}
-    if sig_t.get("outlook_signals"):
-        lines += ["", "## 4. 战略风险信号与下月条件性展望", ""]
-        for osig in sig_t["outlook_signals"]:
-            lines.append(f"- **{osig.get('signal')}** ({osig.get('confidence')}): {osig.get('reasoning')}")
-    lines += ["", f"**validation.ok:** {(payload.get('validation') or {}).get('ok')}", ""]
-    return "\n".join(lines)
+    """Delegate Monthly Markdown rendering to the single canonical package_composer."""
+    from gni.reports.package_composer import build_report_package, render_report_package_markdown
+
+    pkg = payload.get("report_package") or build_report_package(None, report_type="monthly", payload=payload).model_dump(mode="json")
+    return render_report_package_markdown(pkg)

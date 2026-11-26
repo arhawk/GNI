@@ -1,12 +1,11 @@
-"""Unified Report Orchestrator (Task 2).
+"""Canonical Report Orchestrator — single execution entrypoint for Daily, Weekly, and Monthly reports.
 
-Single execution coordinator for Daily, Weekly, and Monthly intelligence reports:
-- Explicit ReportTaskProfile registry (no ad-hoc if/else task scattering).
-- Shares one deterministic EvidenceBundle per report run.
-- Executes Canonical Assessment Engine tasks in dependency order (analysts -> synthesis).
-- Supports cache lookup, force refresh, partial failed-task retry, and graceful degradation.
-- Projects Canonical AssessmentResultContract outputs into backward-compatible legacy
-  `payload["intelligence"]` shape so existing UI and consumers keep working seamlessly.
+Design invariants:
+- Single task registry: ASSESSMENT_TASK_SPECS in src/gni/reports/narrative/assessment.py.
+- Single task execution entrypoint: run_assessment_task().
+- Single output contract: AssessmentResultContract (exposed via payload["assessments"] & payload["assessments_meta"]).
+- Daily / Weekly / Monthly reuse the exact same orchestrator through declarative ReportTaskProfile configs.
+- Zero legacy engine fallback or legacy intelligence projection shims.
 """
 
 from __future__ import annotations
@@ -27,9 +26,9 @@ from gni.reports.narrative.assessment import (
     run_assessment_task,
 )
 from gni.reports.narrative.evidence import compute_payload_fingerprint, prepare_evidence_bundle
-from gni.reports.narrative.runner import JsonLLMClient, load_cached_intelligence
+from gni.reports.narrative.llm_client import JsonLLMClient
 
-ORCHESTRATOR_VERSION = "orchestrator_v1.0"
+ORCHESTRATOR_VERSION = "orchestrator_v2.0"
 
 
 @dataclass(frozen=True)
@@ -38,14 +37,13 @@ class ReportTaskProfile:
     profile_version: str
     core_tasks: tuple[str, ...]
     optional_tasks: tuple[str, ...]
-    # Analyst tasks run first; synthesis tasks (overall, risk, outlook) run after.
     execution_order: tuple[str, ...]
 
 
 REPORT_TASK_PROFILES: dict[str, ReportTaskProfile] = {
     "daily": ReportTaskProfile(
         report_type="daily",
-        profile_version="daily_profile_v1.0",
+        profile_version="daily_profile_v2.0",
         core_tasks=(
             "event_analysis",
             "change_detection_assessment",
@@ -73,7 +71,7 @@ REPORT_TASK_PROFILES: dict[str, ReportTaskProfile] = {
     ),
     "weekly": ReportTaskProfile(
         report_type="weekly",
-        profile_version="weekly_profile_v1.0",
+        profile_version="weekly_profile_v2.0",
         core_tasks=(
             "event_analysis",
             "topic_analysis",
@@ -99,7 +97,7 @@ REPORT_TASK_PROFILES: dict[str, ReportTaskProfile] = {
     ),
     "monthly": ReportTaskProfile(
         report_type="monthly",
-        profile_version="monthly_profile_v1.0",
+        profile_version="monthly_profile_v2.0",
         core_tasks=(
             "event_analysis",
             "topic_analysis",
@@ -126,25 +124,6 @@ REPORT_TASK_PROFILES: dict[str, ReportTaskProfile] = {
     ),
 }
 
-# Mapping from canonical task types to legacy frontend/API intelligence.tasks keys
-_CANONICAL_TO_LEGACY_KEY: dict[str, str] = {
-    "overall_situation_assessment": "executive_analysis",
-    "event_analysis": "event_analysis",
-    "topic_analysis": "topic_trend_analysis",
-    "country_comparison": "cross_country_analysis",
-    "sentiment_stance_analysis": "stance_analysis",
-    "outlook_assessment": "emerging_signals",
-}
-
-_LEGACY_TO_CANONICAL_KEY: dict[str, str] = {
-    "executive_analysis": "overall_situation_assessment",
-    "event_analysis": "event_analysis",
-    "topic_trend_analysis": "topic_analysis",
-    "cross_country_analysis": "country_comparison",
-    "stance_analysis": "sentiment_stance_analysis",
-    "emerging_signals": "outlook_assessment",
-}
-
 
 def get_report_task_profile(report_type: str) -> ReportTaskProfile:
     rt = (report_type or "").strip().lower()
@@ -162,7 +141,7 @@ def resolve_profile_tasks(
     """Resolve ordered list of canonical task types for a report run."""
     prof = get_report_task_profile(report_type)
     if requested_tasks is not None:
-        wanted = {resolve_task_type(_LEGACY_TO_CANONICAL_KEY.get(t, t)) for t in requested_tasks}
+        wanted = {resolve_task_type(t) for t in requested_tasks}
         return [t for t in prof.execution_order if t in wanted] + [
             t for t in wanted if t not in prof.execution_order
         ]
@@ -172,57 +151,62 @@ def resolve_profile_tasks(
     return [t for t in prof.execution_order if t in allowed]
 
 
-def _canonical_to_legacy_task_payload(res: AssessmentResultContract) -> dict[str, Any]:
-    """Project an AssessmentResultContract into the legacy NarrativeTaskOutput dict shape."""
-    details = res.details or {}
-    out: dict[str, Any] = {
-        "task_type": _CANONICAL_TO_LEGACY_KEY.get(res.task_type, res.task_type),
-        "summary": res.executive_summary,
-        "findings": list(res.key_findings or []),
-        "uncertainties": list(res.limitations or []),
-        "follow_up_questions": [
-            str(w.get("signal") or "")
-            for w in (res.watch_items or [])
-            if isinstance(w, dict) and w.get("kind") == "follow_up_question"
-        ],
-    }
-    if details.get("important_changes"):
-        out["important_changes"] = list(details["important_changes"])
-    if details.get("main_drivers"):
-        out["main_drivers"] = list(details["main_drivers"])
-    if details.get("event_interpretations"):
-        out["event_interpretations"] = list(details["event_interpretations"])
-    if details.get("topic_deep_dives"):
-        out["topic_trends"] = list(details["topic_deep_dives"])
-    if details.get("cross_country_comparisons"):
-        out["cross_country"] = list(details["cross_country_comparisons"])
-    if details.get("outlook_signals"):
-        out["outlook_signals"] = list(details["outlook_signals"])
-    elif res.watch_items:
-        sigs = [w for w in res.watch_items if isinstance(w, dict) and w.get("kind") != "follow_up_question"]
-        if sigs:
-            out["outlook_signals"] = sigs
-    return out
-
-
-def project_canonical_to_legacy_intelligence(
+def build_assessments_meta(
     *,
     report_type: str,
     period: str,
     evidence_hash: str,
     assessments: dict[str, AssessmentResultContract],
-    profile_version: str,
+    profile: ReportTaskProfile,
 ) -> dict[str, Any]:
-    """Build backward-compatible `payload['intelligence']` block from canonical assessments."""
-    tasks_payload: dict[str, Any] = {}
+    """Build canonical telemetry & status summary for a report's assessments."""
     task_statuses: dict[str, dict[str, Any]] = {}
     completed = 0
     needs_review = 0
     failed = 0
     models: set[str] = set()
     prompt_versions: dict[str, str] = {}
+    stale = False
 
+    for tt in profile.core_tasks:
+        spec = get_assessment_task_spec(tt)
+        pv = effective_prompt_version(spec, report_type)
+        prompt_versions[tt] = pv
+        res = assessments.get(tt)
+        if res is None:
+            task_statuses[tt] = {
+                "title_zh": spec.title_zh,
+                "prompt_version": pv,
+                "status": "pending",
+                "cached": False,
+            }
+            continue
+        if res.model_version:
+            models.add(res.model_version)
+        row_stale = bool(evidence_hash and res.evidence_hash and res.evidence_hash != evidence_hash)
+        if row_stale:
+            stale = True
+        task_statuses[tt] = {
+            "title_zh": spec.title_zh,
+            "prompt_version": res.prompt_version or pv,
+            "model_version": res.model_version,
+            "status": res.status,
+            "stale": row_stale,
+            "cached": bool((res.metadata or {}).get("cache_hit", True)),
+            "validation": res.validation_result,
+            "generated_at": res.generated_at,
+        }
+        if res.status == "failed":
+            failed += 1
+        elif res.status in {"completed", "needs_review", "degraded", "insufficient_data"}:
+            if res.status == "needs_review":
+                needs_review += 1
+            completed += 1
+
+    # Also record any optional tasks that were executed/cached
     for tt, res in assessments.items():
+        if tt in task_statuses:
+            continue
         spec = get_assessment_task_spec(tt)
         pv = res.prompt_version or effective_prompt_version(spec, report_type)
         prompt_versions[tt] = pv
@@ -234,26 +218,23 @@ def project_canonical_to_legacy_intelligence(
             "model_version": res.model_version,
             "status": res.status,
             "stale": bool(evidence_hash and res.evidence_hash and res.evidence_hash != evidence_hash),
+            "cached": bool((res.metadata or {}).get("cache_hit", True)),
             "validation": res.validation_result,
-            "updated_at": res.generated_at,
+            "generated_at": res.generated_at,
         }
         if res.status == "failed":
             failed += 1
-            continue
-        if res.status in {"completed", "needs_review", "degraded", "insufficient_data"}:
-            completed += 1
+        elif res.status in {"completed", "needs_review", "degraded", "insufficient_data"}:
             if res.status == "needs_review":
                 needs_review += 1
-            legacy_key = _CANONICAL_TO_LEGACY_KEY.get(tt)
-            if legacy_key:
-                tasks_payload[legacy_key] = _canonical_to_legacy_task_payload(res)
+            completed += 1
 
-    total_expected = len(assessments)
+    total_tasks = len(task_statuses)
     if completed == 0 and failed == 0:
         overall_status = "rule_only"
     elif completed == 0 and failed > 0:
         overall_status = "failed"
-    elif completed < total_expected or failed > 0:
+    elif completed < total_tasks or failed > 0:
         overall_status = "partial"
     elif needs_review > 0:
         overall_status = "needs_review"
@@ -264,19 +245,17 @@ def project_canonical_to_legacy_intelligence(
         "status": overall_status,
         "engine": "canonical_orchestrator",
         "orchestrator_version": ORCHESTRATOR_VERSION,
-        "profile_version": profile_version,
+        "profile_version": profile.profile_version,
         "report_type": report_type,
         "period": period,
         "evidence_hash": evidence_hash,
-        "stale": False,
-        "tasks": tasks_payload,
-        "canonical_tasks": {k: v.model_dump() for k, v in assessments.items()},
+        "stale": stale,
         "task_statuses": task_statuses,
         "meta": {
             "completed_tasks": completed,
             "failed_tasks": failed,
             "needs_review_tasks": needs_review,
-            "total_tasks": total_expected,
+            "total_tasks": total_tasks,
             "model_versions": sorted(models),
             "prompt_versions": prompt_versions,
         },
@@ -290,12 +269,15 @@ class OrchestratorRunResult:
     profile_version: str
     evidence_hash: str
     assessments: dict[str, AssessmentResultContract] = field(default_factory=dict)
-    intelligence: dict[str, Any] = field(default_factory=dict)
+    assessments_meta: dict[str, Any] = field(default_factory=dict)
     executed_tasks: list[str] = field(default_factory=list)
+
+    def serialized_assessments(self) -> dict[str, dict[str, Any]]:
+        return {k: v.model_dump(mode="json") for k, v in self.assessments.items()}
 
 
 class ReportOrchestrator:
-    """Unified orchestrator scheduling Canonical Assessment tasks across Daily/Weekly/Monthly."""
+    """Single canonical orchestrator scheduling Assessment Engine tasks across Daily/Weekly/Monthly."""
 
     def run(
         self,
@@ -319,7 +301,7 @@ class ReportOrchestrator:
         )
         shared_bundle = prepare_evidence_bundle(session, report_type=report_type, payload=payload)
 
-        # Load already-cached tasks first so partial retries preserve unaffected completed tasks
+        # Load already-cached canonical tasks first so partial retries preserve unaffected completed tasks
         assessments: dict[str, AssessmentResultContract] = self.load_cached_assessments(
             session,
             report_type=report_type,
@@ -339,12 +321,12 @@ class ReportOrchestrator:
                 allow_fallback=allow_fallback,
             )
 
-        intelligence = project_canonical_to_legacy_intelligence(
+        meta = build_assessments_meta(
             report_type=report_type,
             period=period,
             evidence_hash=shared_bundle.evidence_hash,
             assessments=assessments,
-            profile_version=prof.profile_version,
+            profile=prof,
         )
         return OrchestratorRunResult(
             report_type=report_type,
@@ -352,7 +334,7 @@ class ReportOrchestrator:
             profile_version=prof.profile_version,
             evidence_hash=shared_bundle.evidence_hash,
             assessments=assessments,
-            intelligence=intelligence,
+            assessments_meta=meta,
             executed_tasks=ordered_tasks,
         )
 
@@ -391,33 +373,35 @@ class ReportOrchestrator:
                 continue
         return out
 
-    def load_cached_intelligence(
+    def load_cached(
         self,
         session: Session,
         *,
         report_type: str,
         payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Cache-only lookup preferring canonical assessments, falling back to legacy cache."""
+    ) -> OrchestratorRunResult:
+        """Cache-only lookup reading strictly canonical AssessmentResultContract rows."""
         prof = get_report_task_profile(report_type)
         period = str(payload.get("period") or "")
-        cached_canonical = self.load_cached_assessments(
+        assessments = self.load_cached_assessments(
             session,
             report_type=report_type,
             period=period,
         )
-        if cached_canonical:
-            ev_hash = compute_payload_fingerprint(payload)
-            return project_canonical_to_legacy_intelligence(
-                report_type=report_type,
-                period=period,
-                evidence_hash=ev_hash,
-                assessments=cached_canonical,
-                profile_version=prof.profile_version,
-            )
-        return load_cached_intelligence(
-            session,
+        ev_hash = compute_payload_fingerprint(payload)
+        meta = build_assessments_meta(
             report_type=report_type,
             period=period,
-            payload=payload,
+            evidence_hash=ev_hash,
+            assessments=assessments,
+            profile=prof,
+        )
+        return OrchestratorRunResult(
+            report_type=report_type,
+            period=period,
+            profile_version=prof.profile_version,
+            evidence_hash=ev_hash,
+            assessments=assessments,
+            assessments_meta=meta,
+            executed_tasks=[],
         )

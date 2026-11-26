@@ -384,7 +384,8 @@ def test_acceptance_9_and_10_db_snapshot_published_at_traceability_and_reports(d
         val = validate_daily_report(daily)
         assert val["ok"], val["errors"]
         md = render_daily_markdown(daily)
-        assert "V1.0 统计口径摘要" in md
+        assert "GNI DAILY Intelligence Report" in md
+        assert METHODOLOGY_VERSION in md
 
         weekly = build_weekly_report(session, end_day="2026-11-20", persist_snapshot=False)
         assert weekly["methodology_version"] == METHODOLOGY_VERSION

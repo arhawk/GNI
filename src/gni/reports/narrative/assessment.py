@@ -34,10 +34,12 @@ from gni.reports.narrative.evidence import (
     build_task_evidence_package,
     prepare_evidence_bundle,
 )
-from gni.reports.narrative.prompts import _COMMON_HARD_RULES, _FINDING_SCHEMA_HINT
-from gni.reports.narrative.runner import JsonLLMClient
-from gni.reports.narrative.schemas import NarrativeTaskOutput
-from gni.reports.narrative.validator import validate_task_output
+from gni.reports.narrative.assessment_validator import NarrativeTaskOutput, validate_task_output
+from gni.reports.narrative.llm_client import (
+    COMMON_HARD_RULES as _COMMON_HARD_RULES,
+    FINDING_SCHEMA_HINT as _FINDING_SCHEMA_HINT,
+    JsonLLMClient,
+)
 
 logger = logging.getLogger(__name__)
 

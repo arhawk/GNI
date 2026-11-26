@@ -1,4 +1,4 @@
-"""Unit tests for Task 2: Unified ReportOrchestrator, Task Profiles, and Canonical->Legacy Projection."""
+"""Unit tests for Canonical ReportOrchestrator: single task registry, single execution path, caching & partial retry."""
 
 from __future__ import annotations
 
@@ -10,11 +10,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from gni.analysis.deepseek import LLMCallResult
+from gni.core.contracts import AssessmentResultContract
 from gni.infrastructure.models import Article, ArticleAnalysis, Base, Country, Organization, Source
+from gni.reports.daily import build_daily_report
 from gni.reports.monthly import build_monthly_report
 from gni.reports.orchestrator import (
     REPORT_TASK_PROFILES,
-    ReportOrchestrator,
+    build_assessments_meta,
     resolve_profile_tasks,
 )
 from gni.reports.weekly import build_weekly_report
@@ -98,9 +100,9 @@ def _seed(session: Session) -> None:
             structured_result={
                 "schema_version": "article_analysis_v1.0",
                 "taxonomy_version": "taxonomy_v1.0",
-                "china_stance": "Neutral",
+                "china_stance": {"stance_label": "Neutral", "expression_owner": "media"},
                 "topics_v1": ["tech_competition"],
-                "boards_v1": ["tech_industry"],
+                "boards_v1": ["economy_tech"],
             },
         )
     )
@@ -120,14 +122,28 @@ def test_task_profiles_and_execution_order() -> None:
     assert len(monthly_full) == 9
 
 
-def test_orchestrator_cache_hit_and_partial_retry_across_weekly_and_monthly() -> None:
+def test_orchestrator_cache_hit_and_partial_retry_across_daily_weekly_monthly() -> None:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         _seed(session)
         stub = _StubLLM()
 
-        # Weekly via orchestrator (2-task subset)
+        # Daily via single canonical orchestrator
+        d1 = build_daily_report(
+            session,
+            day="2026-11-26",
+            analyze=True,
+            analyze_tasks=["event_analysis", "overall_situation_assessment"],
+            llm_client=stub,
+        )
+        assert d1["assessments_meta"]["engine"] == "canonical_orchestrator"
+        assert "overall_situation_assessment" in d1["assessments"]
+        assert "event_analysis" in d1["assessments"]
+        assert "intelligence" not in d1
+        assert len(stub.calls) == 2
+
+        # Weekly via single canonical orchestrator (2-task subset)
         w1 = build_weekly_report(
             session,
             end_day="2026-11-26",
@@ -135,12 +151,12 @@ def test_orchestrator_cache_hit_and_partial_retry_across_weekly_and_monthly() ->
             analyze=True,
             analyze_tasks=["event_analysis", "overall_situation_assessment"],
             llm_client=stub,
-            use_orchestrator=True,
         )
-        assert w1["intelligence"]["engine"] == "canonical_orchestrator"
-        assert "executive_analysis" in w1["intelligence"]["tasks"]
-        assert "event_analysis" in w1["intelligence"]["tasks"]
-        assert len(stub.calls) == 2
+        assert w1["assessments_meta"]["engine"] == "canonical_orchestrator"
+        assert "overall_situation_assessment" in w1["assessments"]
+        assert "event_analysis" in w1["assessments"]
+        assert "intelligence" not in w1
+        assert len(stub.calls) == 4
 
         # Second call without force hits cache (0 new LLM calls)
         w2 = build_weekly_report(
@@ -150,40 +166,80 @@ def test_orchestrator_cache_hit_and_partial_retry_across_weekly_and_monthly() ->
             analyze=True,
             analyze_tasks=["event_analysis", "overall_situation_assessment"],
             llm_client=stub,
-            use_orchestrator=True,
         )
-        assert len(stub.calls) == 2
-        assert w2["intelligence"]["meta"]["completed_tasks"] == 2
+        assert len(stub.calls) == 4
+        assert w2["assessments_meta"]["meta"]["completed_tasks"] >= 2
 
-        # Partial retry of 1 new task preserves previously cached tasks
-        orch = ReportOrchestrator()
-        r3 = orch.run(
-            session,
-            report_type="weekly",
-            payload=w2,
-            tasks=["outlook_assessment"],
-            llm_client=stub,
-        )
-        assert len(stub.calls) == 3
-        assert set(r3.assessments.keys()) == {
-            "event_analysis",
-            "overall_situation_assessment",
-            "outlook_assessment",
-        }
-
-        # Monthly via orchestrator uses report-scoped prompt_version & populates governance fields
+        # Monthly partial retry: fail on event_analysis, then retry only event_analysis
+        failing_stub = _StubLLM(fail_on={"重点事件"})
         m1 = build_monthly_report(
             session,
-            end_day="2026-11-26",
+            month="2026-11",
             persist_snapshot=False,
             analyze=True,
-            analyze_tasks=["overall_situation_assessment"],
-            llm_client=stub,
-            use_orchestrator=True,
+            analyze_tasks=["event_analysis", "overall_situation_assessment"],
+            llm_client=failing_stub,
         )
-        assert m1["intelligence"]["engine"] == "canonical_orchestrator"
-        canon = m1["intelligence"]["canonical_tasks"]["overall_situation_assessment"]
-        assert canon["report_type"] == "monthly"
-        assert canon["prompt_version"] == "monthly:assess_overall_v2.0"
-        assert canon["model_version"] == "deepseek-test-v2"
-        assert canon["schema_version"]
+        assert m1["assessments_meta"]["task_statuses"]["event_analysis"]["status"] == "failed"
+        assert m1["assessments_meta"]["task_statuses"]["overall_situation_assessment"]["status"] in {
+            "completed",
+            "needs_review",
+        }
+
+        m2 = build_monthly_report(
+            session,
+            month="2026-11",
+            persist_snapshot=False,
+            analyze=True,
+            analyze_tasks=["event_analysis"],
+            force_analyze=True,
+            llm_client=stub,
+        )
+        assert m2["assessments_meta"]["task_statuses"]["event_analysis"]["status"] in {"completed", "needs_review"}
+        assert "overall_situation_assessment" in m2["assessments"]
+
+
+def test_assessments_meta_counts_optional_tasks_consistently() -> None:
+    """Optional tasks included in assessments must also be counted in total_tasks so completed <= total."""
+    profile = REPORT_TASK_PROFILES["daily"]
+
+    def _mk(task_type: str, status: str = "completed") -> AssessmentResultContract:
+        return AssessmentResultContract(
+            task_type=task_type,
+            task_version="v2.0",
+            report_type="daily",
+            period="2026-11-26",
+            evidence_hash="h1",
+            generated_at="2026-11-26T00:00:00+00:00",
+            model_version="deepseek-test",
+            prompt_version="v2.0",
+            executive_summary="ok",
+            status=status,  # type: ignore[arg-type]
+        )
+
+    # All 5 core tasks + 4 optional tasks -> 9/9 completed
+    all_tasks = list(profile.core_tasks) + list(profile.optional_tasks)
+    meta_full = build_assessments_meta(
+        report_type="daily",
+        period="2026-11-26",
+        evidence_hash="h1",
+        assessments={tt: _mk(tt) for tt in all_tasks},
+        profile=profile,
+    )
+    assert meta_full["meta"]["completed_tasks"] == len(all_tasks)
+    assert meta_full["meta"]["total_tasks"] == len(all_tasks)
+    assert meta_full["status"] == "completed"
+
+    # 4 core tasks + 1 optional task -> 5/6 and still partial because 1 core task is pending
+    partial_tasks = list(profile.core_tasks[:4]) + [profile.optional_tasks[0]]
+    meta_partial = build_assessments_meta(
+        report_type="daily",
+        period="2026-11-26",
+        evidence_hash="h1",
+        assessments={tt: _mk(tt) for tt in partial_tasks},
+        profile=profile,
+    )
+    assert meta_partial["meta"]["completed_tasks"] == 5
+    assert meta_partial["meta"]["total_tasks"] == 6
+    assert meta_partial["status"] == "partial"
+

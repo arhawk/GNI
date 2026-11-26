@@ -274,6 +274,77 @@ export type ReportVisualizations = {
   }
 }
 
+export type CanonicalAssessment = {
+  task_type: string
+  task_version?: string
+  report_type?: string
+  period?: string
+  evidence_hash?: string | null
+  generated_at?: string | null
+  model_version?: string | null
+  prompt_version?: string | null
+  schema_version?: string
+  methodology_version?: string
+  taxonomy_version?: string
+  executive_summary: string
+  key_findings: NarrativeFinding[]
+  observations?: NarrativeFinding[]
+  interpretations?: NarrativeFinding[]
+  hypotheses?: NarrativeFinding[]
+  evidence_refs?: EvidenceRef[]
+  limitations: string[]
+  watch_items?: OutlookSignalItem[]
+  details?: {
+    important_changes?: string[]
+    main_drivers?: string[]
+    event_interpretations?: EventInterpretation[]
+    topic_deep_dives?: TopicTrendInterpretation[]
+    topic_shifts?: TopicTrendInterpretation[]
+    cross_country_comparisons?: CrossCountryInterpretation[]
+    country_differences?: CrossCountryInterpretation[]
+    stance_observations?: StanceInterpretationItem[]
+    outlook_signals?: OutlookSignalItem[]
+    follow_up_questions?: string[]
+    [k: string]: unknown
+  }
+  status: string
+  validation_result?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}
+
+export type AssessmentsMeta = {
+  status: 'rule_only' | 'completed' | 'partial' | 'needs_review' | 'failed' | string
+  engine?: string
+  orchestrator_version?: string
+  profile_version?: string
+  report_type?: string
+  period?: string
+  evidence_hash?: string
+  stale?: boolean
+  task_statuses: Record<
+    string,
+    {
+      title_zh?: string
+      prompt_version?: string
+      model_version?: string | null
+      status: string
+      stale?: boolean
+      cached?: boolean
+      error_message?: string | null
+      validation?: Record<string, unknown> | null
+      generated_at?: string | null
+    }
+  >
+  meta: {
+    completed_tasks: number
+    failed_tasks: number
+    needs_review_tasks: number
+    total_tasks: number
+    model_versions: string[]
+    prompt_versions: Record<string, string>
+  }
+}
+
 export type DailyReport = {
   report_type: string
   schema_version?: string
@@ -300,7 +371,8 @@ export type DailyReport = {
   quality_gate?: ReportQualityGate
   visualizations?: ReportVisualizations
   report_package?: import('./apiV2').ReportPackage
-  intelligence?: ReportIntelligenceBlock
+  assessments?: Record<string, CanonicalAssessment>
+  assessments_meta?: AssessmentsMeta
   narratives?: {
     executive?: string
     risk?: string
@@ -650,7 +722,8 @@ export type PeriodReport = {
   article_count?: number
   sections: Record<string, unknown>
   narratives?: Record<string, string>
-  intelligence?: ReportIntelligenceBlock
+  assessments?: Record<string, CanonicalAssessment>
+  assessments_meta?: AssessmentsMeta
   validation?: { ok: boolean; checks?: Array<{ name: string; ok: boolean }>; errors?: string[] }
   window_spec?: ReportWindowSpec
   quality_gate?: ReportQualityGate
@@ -755,67 +828,13 @@ export type OutlookSignalItem = {
   needs_review?: boolean
 }
 
-export type NarrativeTaskOutput = {
-  task_type: string
-  report_type: string
-  status: string
-  summary?: string
-  findings?: NarrativeFinding[]
-  important_changes?: string[]
-  main_drivers?: string[]
-  event_interpretations?: EventInterpretation[]
-  topic_trends?: TopicTrendInterpretation[]
-  cross_country?: CrossCountryInterpretation[]
-  stance_analyses?: StanceInterpretationItem[]
-  outlook_signals?: OutlookSignalItem[]
-  uncertainties?: string[]
-  follow_up_questions?: string[]
-  meta?: Record<string, unknown>
-}
-
-export type ReportIntelligenceBlock = {
-  status: 'rule_only' | 'completed' | 'partial' | 'needs_review' | 'failed' | string
-  report_type: string
-  period: string
-  evidence_hash?: string
-  stale?: boolean
-  fallback_reason?: string
-  tasks: Record<string, NarrativeTaskOutput>
-  task_statuses: Record<
-    string,
-    {
-      title_zh?: string
-      prompt_version?: string
-      model_version?: string | null
-      status: string
-      stale?: boolean
-      total_tokens?: number | null
-      latency_ms?: number | null
-      error_message?: string | null
-      validation?: Record<string, unknown> | null
-      updated_at?: string | null
-    }
-  >
-  meta: {
-    completed_tasks: number
-    failed_tasks: number
-    needs_review_tasks: number
-    total_tasks: number
-    model_versions: string[]
-    prompt_versions: Record<string, string>
-    total_tokens: number
-    total_latency_ms: number
-    estimated_cost_usd: number
-  }
-}
-
 export function analyzeReport<T = DailyReport | PeriodReport>(
   reportType: 'daily' | 'weekly' | 'monthly',
   params?: {
     period?: string
     tasks?: string[]
     force?: boolean
-    engine?: 'legacy' | 'v2' | 'canonical' | 'orchestrator'
+    profile?: 'core' | 'full'
     save_snapshot?: boolean
   },
 ) {
@@ -823,7 +842,7 @@ export function analyzeReport<T = DailyReport | PeriodReport>(
     period: params?.period ?? null,
     tasks: params?.tasks ?? null,
     force: Boolean(params?.force),
-    engine: params?.engine ?? 'legacy',
+    profile: params?.profile ?? null,
     save_snapshot: Boolean(params?.save_snapshot),
   })
 }

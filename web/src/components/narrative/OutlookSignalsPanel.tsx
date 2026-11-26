@@ -1,26 +1,34 @@
-import type { NarrativeTaskOutput } from '../../api'
+import type { CanonicalAssessment, OutlookSignalItem } from '../../api'
 import { EvidenceChips } from './EvidenceChips'
 import { FindingsGrid } from './IntelligenceHeader'
 import './narrative.css'
 
 export function OutlookSignalsPanel({
-  task,
+  assessment,
   heading = '新兴风险信号与后续观察（Outlook & Monitoring）',
 }: {
-  task?: NarrativeTaskOutput
+  assessment?: CanonicalAssessment
   heading?: string
 }) {
-  if (!task) return null
-  const signals = task.outlook_signals || []
-  if (!signals.length && !task.summary && !(task.findings || []).length) return null
+  if (!assessment) return null
+  const signals: OutlookSignalItem[] = (
+    (assessment.details?.outlook_signals as OutlookSignalItem[] | undefined) ||
+    assessment.watch_items ||
+    []
+  ).filter((s) => s && typeof s === 'object' && 'signal' in s)
+  const summary = assessment.executive_summary || ''
+  const findings = assessment.key_findings || []
+  const limitations = assessment.limitations || []
+  const followUps = (assessment.details?.follow_up_questions || []) as string[]
+  if (!signals.length && !summary && !findings.length) return null
 
   return (
     <div className="gni-intel-panel">
       <div className="gni-intel-panel-head">
         <h3>{heading}</h3>
-        <span className="muted small">条件性研判，非既定预测 · Prompt: {String(task.meta?.prompt_version || '—')}</span>
+        <span className="muted small">条件性研判，非既定预测 · Prompt: {assessment.prompt_version || '—'}</span>
       </div>
-      {task.summary && <p className="gni-intel-summary">{task.summary}</p>}
+      {summary && <p className="gni-intel-summary">{summary}</p>}
 
       {signals.length > 0 && (
         <div className="gni-outlook-grid">
@@ -57,14 +65,14 @@ export function OutlookSignalsPanel({
         </div>
       )}
 
-      <FindingsGrid findings={task.findings} />
-      {((task.uncertainties || []).length > 0 || (task.follow_up_questions || []).length > 0) && (
+      <FindingsGrid findings={findings} />
+      {(limitations.length > 0 || followUps.length > 0) && (
         <div className="gni-two-col" style={{ marginTop: '0.5rem' }}>
-          {(task.uncertainties || []).length > 0 && (
+          {limitations.length > 0 && (
             <div className="gni-kv-box">
               <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
               <ul className="event-list" style={{ margin: 0 }}>
-                {(task.uncertainties || []).map((u, i) => (
+                {limitations.map((u, i) => (
                   <li key={i} className="muted small">
                     {u}
                   </li>
@@ -72,11 +80,11 @@ export function OutlookSignalsPanel({
               </ul>
             </div>
           )}
-          {(task.follow_up_questions || []).length > 0 && (
+          {followUps.length > 0 && (
             <div className="gni-kv-box">
               <div className="gni-kv-label">待进一步核查（Follow-up Questions）</div>
               <ul className="event-list" style={{ margin: 0 }}>
-                {(task.follow_up_questions || []).map((q, i) => (
+                {followUps.map((q, i) => (
                   <li key={i} className="small">
                     {q}
                   </li>

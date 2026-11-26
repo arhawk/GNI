@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import type { NarrativeTaskOutput } from '../../api'
+import type {
+  CanonicalAssessment,
+  CrossCountryInterpretation,
+  StanceInterpretationItem,
+  TopicTrendInterpretation,
+} from '../../api'
 import { EvidenceChips } from './EvidenceChips'
 import { FindingsGrid } from './IntelligenceHeader'
 import './narrative.css'
@@ -71,25 +76,25 @@ function persistenceZh(v?: string) {
 }
 
 export function TopicTrendAnalysisBlock({
-  task,
+  assessment,
   dataSlot,
   title = '议题趋势解释（Trend Interpretation）',
 }: {
-  task?: NarrativeTaskOutput
+  assessment?: CanonicalAssessment
   dataSlot?: ReactNode
   title?: string
 }) {
-  if (!task && !dataSlot) return null
-  const items = task?.topic_trends || []
+  if (!assessment && !dataSlot) return null
+  const items = ((assessment?.details?.topic_deep_dives || assessment?.details?.topic_shifts || []) as TopicTrendInterpretation[])
 
   return (
     <AnalysisSectionShell
       title={title}
       subtitle="严格区分：关注度变化（Attention）≠ 立场变化（Stance）≠ 议题结构变化（Structure）"
       conclusion={
-        task ? (
+        assessment ? (
           <div>
-            {task.summary && <p className="gni-intel-summary">{task.summary}</p>}
+            {assessment.executive_summary && <p className="gni-intel-summary">{assessment.executive_summary}</p>}
             {items.length > 0 && (
               <div className="gni-findings-grid">
                 {items.map((t) => (
@@ -133,14 +138,14 @@ export function TopicTrendAnalysisBlock({
         ) : undefined
       }
       evidenceSlot={
-        task?.findings?.length || task?.uncertainties?.length ? (
+        assessment?.key_findings?.length || assessment?.limitations?.length ? (
           <>
-            <FindingsGrid findings={task.findings} />
-            {(task.uncertainties || []).length > 0 && (
+            <FindingsGrid findings={assessment.key_findings} />
+            {(assessment.limitations || []).length > 0 && (
               <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
                 <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
                 <ul className="event-list" style={{ margin: 0 }}>
-                  {(task.uncertainties || []).map((u, i) => (
+                  {(assessment.limitations || []).map((u, i) => (
                     <li key={i} className="muted small">
                       {u}
                     </li>
@@ -161,25 +166,25 @@ export function TopicTrendAnalysisBlock({
 }
 
 export function CrossCountryAnalysisBlock({
-  task,
+  assessment,
   dataSlot,
   title = '跨国媒体叙事横向比较（Comparative Analysis）',
 }: {
-  task?: NarrativeTaskOutput
+  assessment?: CanonicalAssessment
   dataSlot?: ReactNode
   title?: string
 }) {
-  if (!task && !dataSlot) return null
-  const items = task?.cross_country || []
+  if (!assessment && !dataSlot) return null
+  const items = ((assessment?.details?.cross_country_comparisons || assessment?.details?.country_differences || []) as CrossCountryInterpretation[])
 
   return (
     <AnalysisSectionShell
       title={title}
       subtitle="基于各国代表文章实际表达比较，严禁仅凭篇数推断差异；样本不足国家单独披露"
       conclusion={
-        task ? (
+        assessment ? (
           <div>
-            {task.summary && <p className="gni-intel-summary">{task.summary}</p>}
+            {assessment.executive_summary && <p className="gni-intel-summary">{assessment.executive_summary}</p>}
             {items.map((item, idx) => (
               <div key={`${item.subject_id || idx}`} className="gni-event-interp-card" style={{ marginBottom: '0.7rem' }}>
                 <div className="gni-intel-panel-head">
@@ -237,14 +242,14 @@ export function CrossCountryAnalysisBlock({
         ) : undefined
       }
       evidenceSlot={
-        task?.findings?.length || task?.uncertainties?.length ? (
+        assessment?.key_findings?.length || assessment?.limitations?.length ? (
           <>
-            <FindingsGrid findings={task.findings} />
-            {(task.uncertainties || []).length > 0 && (
+            <FindingsGrid findings={assessment.key_findings} />
+            {(assessment.limitations || []).length > 0 && (
               <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
                 <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
                 <ul className="event-list" style={{ margin: 0 }}>
-                  {(task.uncertainties || []).map((u, i) => (
+                  {(assessment.limitations || []).map((u, i) => (
                     <li key={i} className="muted small">
                       {u}
                     </li>
@@ -262,25 +267,25 @@ export function CrossCountryAnalysisBlock({
 }
 
 export function StanceAnalysisBlock({
-  task,
+  assessment,
   dataSlot,
   title = '对华立场变化解读（Stance Analysis）',
 }: {
-  task?: NarrativeTaskOutput
+  assessment?: CanonicalAssessment
   dataSlot?: ReactNode
   title?: string
 }) {
-  if (!task && !dataSlot) return null
-  const items = task?.stance_analyses || []
+  if (!assessment && !dataSlot) return null
+  const items = ((assessment?.details?.stance_observations || []) as StanceInterpretationItem[])
 
   return (
     <AnalysisSectionShell
       title={title}
       subtitle="严格使用程序计算的 V1.0 Positive/Neutral/Negative 比例与覆盖率，区分比例变化与绝对篇数变化"
       conclusion={
-        task ? (
+        assessment ? (
           <div>
-            {task.summary && <p className="gni-intel-summary">{task.summary}</p>}
+            {assessment.executive_summary && <p className="gni-intel-summary">{assessment.executive_summary}</p>}
             {items.length > 0 && (
               <div className="gni-findings-grid">
                 {items.map((s, idx) => (
@@ -307,14 +312,14 @@ export function StanceAnalysisBlock({
         ) : undefined
       }
       evidenceSlot={
-        task?.findings?.length || task?.uncertainties?.length ? (
+        assessment?.key_findings?.length || assessment?.limitations?.length ? (
           <>
-            <FindingsGrid findings={task.findings} />
-            {(task.uncertainties || []).length > 0 && (
+            <FindingsGrid findings={assessment.key_findings} />
+            {(assessment.limitations || []).length > 0 && (
               <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
                 <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
                 <ul className="event-list" style={{ margin: 0 }}>
-                  {(task.uncertainties || []).map((u, i) => (
+                  {(assessment.limitations || []).map((u, i) => (
                     <li key={i} className="muted small">
                       {u}
                     </li>

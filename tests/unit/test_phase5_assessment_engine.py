@@ -34,8 +34,7 @@ from gni.reports.narrative.assessment import (
     run_assessment_task,
 )
 from gni.reports.narrative.evidence import build_task_evidence_package
-from gni.reports.narrative.schemas import NarrativeTaskOutput
-from gni.reports.narrative.validator import validate_task_output
+from gni.reports.narrative.assessment_validator import NarrativeTaskOutput, validate_task_output
 
 
 @pytest.fixture

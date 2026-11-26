@@ -13,37 +13,33 @@ FORBIDDEN_PHRASES = (
 )
 
 
-def _check_intelligence_block(
+def _check_assessments_block(
     payload: dict[str, Any],
     ok_fn: Any,
 ) -> None:
-    intel = payload.get("intelligence")
-    if not isinstance(intel, dict):
+    meta = payload.get("assessments_meta")
+    if isinstance(meta, dict):
+        status = meta.get("status")
+        ok_fn(
+            "assessments_status",
+            status in {"rule_only", "completed", "partial", "needs_review", "failed"},
+            str(status),
+        )
+    assessments = payload.get("assessments")
+    if not isinstance(assessments, dict):
         return
-    status = intel.get("status")
-    ok_fn(
-        "intelligence_status",
-        status in {"rule_only", "completed", "partial", "needs_review", "failed"},
-        str(status),
-    )
-    tasks = intel.get("tasks") or {}
-    if not isinstance(tasks, dict):
-        ok_fn("intelligence_tasks_dict", False, "tasks must be dict")
-        return
-
-    # Verify every Fact finding inside intelligence tasks still carries >= 1 evidence_ref
     fact_bound = True
-    for tname, tout in tasks.items():
+    for tout in assessments.values():
         if not isinstance(tout, dict):
             continue
-        for f in tout.get("findings") or []:
+        for f in tout.get("key_findings") or []:
             if isinstance(f, dict) and f.get("classification") == "Fact":
                 if not (f.get("evidence_refs") or []):
                     fact_bound = False
                     break
         if not fact_bound:
             break
-    ok_fn("intelligence_facts_evidenced", fact_bound, "Fact finding missing evidence_refs")
+    ok_fn("assessments_facts_evidenced", fact_bound, "Fact finding missing evidence_refs")
 
 
 def validate_daily_report(payload: dict[str, Any]) -> dict[str, Any]:
@@ -127,7 +123,7 @@ def validate_daily_report(payload: dict[str, Any]) -> dict[str, Any]:
     banned_hit = next((p for p in FORBIDDEN_PHRASES if p in body_wo_disclaimer), None)
     ok("no_forbidden_claims", banned_hit is None, banned_hit or "")
 
-    _check_intelligence_block(payload, ok)
+    _check_assessments_block(payload, ok)
 
     return {"ok": len(errors) == 0, "checks": checks, "errors": errors}
 
@@ -183,7 +179,7 @@ def validate_weekly_report(payload: dict[str, Any]) -> dict[str, Any]:
     banned_hit = next((p for p in FORBIDDEN_PHRASES if p in body_wo_disclaimer), None)
     ok("no_forbidden_claims", banned_hit is None, banned_hit or "")
 
-    _check_intelligence_block(payload, ok)
+    _check_assessments_block(payload, ok)
     return {"ok": len(errors) == 0, "checks": checks, "errors": errors}
 
 
@@ -237,5 +233,5 @@ def validate_monthly_report(payload: dict[str, Any]) -> dict[str, Any]:
     banned_hit = next((p for p in FORBIDDEN_PHRASES if p in body_wo_disclaimer), None)
     ok("no_forbidden_claims", banned_hit is None, banned_hit or "")
 
-    _check_intelligence_block(payload, ok)
+    _check_assessments_block(payload, ok)
     return {"ok": len(errors) == 0, "checks": checks, "errors": errors}

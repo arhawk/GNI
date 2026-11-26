@@ -1,14 +1,15 @@
-"""Task 4: Unified ReportPackage Composer for Daily (6ch), Weekly (8ch), and Monthly (8ch).
+"""Canonical ReportPackage Composer, Visualization Builder, Snapshot Store & Markdown Renderer.
 
-Builds structured, evidence-curated, visualization-ready ReportPackageContract objects
-and renders clean Markdown for all three report cadences without modifying V1.0 statistical definitions.
+Single unified module for Daily (6ch + appendix), Weekly (8ch + appendix), and Monthly (8ch + appendix).
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gni.core.contracts import (
@@ -16,32 +17,49 @@ from gni.core.contracts import (
     ReportPackageContract,
     ReportSectionContract,
 )
+from gni.infrastructure.models import ReportSnapshot
 from gni.metrics.definitions import METHODOLOGY_VERSION, TAXONOMY_V1_VERSION, V1_ANALYSIS_VERSION
 from gni.reports.narrative.evidence import curate_finding_evidence
 
+DAILY_CHAPTER_DEFS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("chapter_1_executive_judgment", "1. Executive Judgment", ("overall_situation_assessment",)),
+    ("chapter_2_key_developments", "2. Key Developments", ("event_analysis",)),
+    ("chapter_3_global_situation", "3. Global Situation", ("topic_analysis", "country_comparison")),
+    ("chapter_4_key_changes_anomalies", "4. Key Changes & Anomalies", ("change_detection_assessment", "sentiment_stance_analysis")),
+    ("chapter_5_emerging_signals", "5. Emerging Signals", ("risk_signal_assessment", "narrative_analysis")),
+    ("chapter_6_outlook_watchlist", "6. Outlook & Watchlist", ("outlook_assessment",)),
+    ("appendix", "7. Data Coverage & Methodology", ()),
+)
+
 WEEKLY_CHAPTER_DEFS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("chapter_1_weekly_executive", "1. Weekly Executive Assessment", ("overall_situation_assessment", "executive_analysis")),
+    ("chapter_1_weekly_executive", "1. Weekly Executive Assessment", ("overall_situation_assessment",)),
     ("chapter_2_attention_changes", "2. Global Attention Changes", ("change_detection_assessment",)),
     ("chapter_3_event_evolution", "3. Major Event Evolution", ("event_analysis",)),
-    ("chapter_4_country_comparison", "4. Cross-country Comparison", ("country_comparison", "cross_country_analysis")),
-    ("chapter_5_topic_narrative_trends", "5. Topic & Narrative Trends", ("topic_analysis", "narrative_analysis", "topic_trend_analysis")),
-    ("chapter_6_stance_changes", "6. Sentiment & Stance Changes", ("sentiment_stance_analysis", "stance_analysis")),
-    ("chapter_7_emerging_risks", "7. Emerging Risks & Signals", ("risk_signal_assessment", "emerging_signals")),
+    ("chapter_4_country_comparison", "4. Cross-country Comparison", ("country_comparison",)),
+    ("chapter_5_topic_narrative_trends", "5. Topic & Narrative Trends", ("topic_analysis", "narrative_analysis")),
+    ("chapter_6_stance_changes", "6. Sentiment & Stance Changes", ("sentiment_stance_analysis",)),
+    ("chapter_7_emerging_risks", "7. Emerging Risks & Signals", ("risk_signal_assessment",)),
     ("chapter_8_outlook_priorities", "8. Outlook & Next Week Priorities", ("outlook_assessment",)),
     ("appendix", "9. Data Coverage & Methodology", ()),
 )
 
 MONTHLY_CHAPTER_DEFS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("chapter_1_monthly_executive", "1. Monthly Executive Assessment", ("overall_situation_assessment", "executive_analysis")),
+    ("chapter_1_monthly_executive", "1. Monthly Executive Assessment", ("overall_situation_assessment",)),
     ("chapter_2_attention_landscape", "2. Global Attention Landscape", ("change_detection_assessment",)),
     ("chapter_3_event_retrospective", "3. Major Event Retrospective", ("event_analysis",)),
-    ("chapter_4_country_analysis", "4. Country-Level Analysis", ("country_comparison", "cross_country_analysis")),
+    ("chapter_4_country_analysis", "4. Country-Level Analysis", ("country_comparison",)),
     ("chapter_5_narrative_landscape", "5. Narrative Landscape", ("narrative_analysis",)),
-    ("chapter_6_topic_structural", "6. Topic Structural Changes", ("topic_analysis", "topic_trend_analysis")),
-    ("chapter_7_stance_trends", "7. Sentiment & Stance Trends", ("sentiment_stance_analysis", "stance_analysis")),
-    ("chapter_8_strategic_outlook", "8. Strategic Signals & Outlook", ("risk_signal_assessment", "outlook_assessment", "emerging_signals")),
+    ("chapter_6_topic_structural", "6. Topic Structural Changes", ("topic_analysis",)),
+    ("chapter_7_stance_trends", "7. Sentiment & Stance Trends", ("sentiment_stance_analysis",)),
+    ("chapter_8_strategic_outlook", "8. Strategic Signals & Outlook", ("risk_signal_assessment", "outlook_assessment")),
     ("appendix", "9. Methodology & Limitations", ()),
 )
+
+_CHAPTER_DEFS_BY_TYPE = {
+    "daily": DAILY_CHAPTER_DEFS,
+    "weekly": WEEKLY_CHAPTER_DEFS,
+    "monthly": MONTHLY_CHAPTER_DEFS,
+}
 
 
 def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +68,6 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
     v1 = sections.get("v1_stats") or {}
     g = v1.get("global") or {}
 
-    # 1. Trend line (daily_volume_trend or monthly/weekly historical_v1_stats)
     trend_series: list[dict[str, Any]] = []
     if isinstance(sections.get("daily_volume_trend"), list) and sections["daily_volume_trend"]:
         for row in sections["daily_volume_trend"]:
@@ -76,7 +93,6 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
 
-    # 2. Country horizontal bar (by source country)
     by_country = v1.get("countries") or v1.get("by_country") or []
     country_bar = [
         {
@@ -93,7 +109,6 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(c, dict)
     ]
 
-    # 3. Topic distribution / delta
     by_topic = v1.get("topics") or v1.get("by_topic") or []
     prev_v1 = sections.get("v1_stats_prev") or sections.get("prev_v1_stats") or {}
     prev_topics = {
@@ -112,7 +127,6 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(t, dict)
     ]
 
-    # 4. Stance stacked breakdown (Unclassified preserved & excluded from ratio denominator)
     stance_stacked = {
         "article_count": int(g.get("article_count") or 0),
         "positive_count": int(g.get("positive_count") or 0),
@@ -125,7 +139,6 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
         "stance_coverage_rate": g.get("stance_coverage_rate"),
     }
 
-    # 5. Event timeline (strictly event_time, NEVER fabricated from published_at)
     raw_events = (
         sections.get("major_events")
         or sections.get("top_events")
@@ -136,7 +149,7 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
         {
             "event_id": str(ev.get("event_id") or ev.get("id") or ""),
             "title": str(ev.get("title") or ev.get("canonical_title") or ""),
-            "event_time": ev.get("event_time"),  # NULL if unknown; never substituted with published_at
+            "event_time": ev.get("event_time"),
             "article_count": int(ev.get("article_count") or 0),
             "countries": ev.get("countries") or [],
         }
@@ -155,7 +168,7 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
             "type": "country_bar",
             "title": "国家分布（按信源国家）",
             "items": country_bar,
-            "caption": "按信源所属国家聚合，包含各国立场覆盖率。",
+            "caption": "按信源所属国家聚合；样本量 < 3 篇的国家标记为样本不足。",
         },
         "topic_delta": {
             "type": "topic_delta",
@@ -184,15 +197,16 @@ def _normalize_finding(
     curated: dict[str, list[dict[str, Any]]],
     supporting_metrics: dict[str, Any],
 ) -> dict[str, Any]:
-    """Normalize any LLM or deterministic finding to Task 4 unified Key Finding structure."""
     title = str(raw.get("title") or raw.get("statement") or "关键发现").strip()[:160]
-    summary = str(raw.get("finding_summary") or raw.get("statement") or raw.get("summary") or "").strip()
+    summary = str(raw.get("finding_summary") or raw.get("conclusion") or raw.get("statement") or raw.get("summary") or "").strip()
     existing_refs = [r for r in (raw.get("evidence_refs") or []) if isinstance(r, dict)]
     refs = existing_refs[:3] if existing_refs else curated["evidence_refs"]
     counter = [c for c in (raw.get("counter_evidence") or []) if isinstance(c, dict)] or curated["counter_evidence"]
     return {
         "title": title,
         "finding_summary": summary,
+        "conclusion": summary,
+        "classification": str(raw.get("classification") or "Inference"),
         "observed_change": str(raw.get("observed_change") or ""),
         "interpretation": str(raw.get("interpretation") or raw.get("reasoning") or ""),
         "why_it_matters": str(raw.get("why_it_matters") or ""),
@@ -219,12 +233,12 @@ def _collect_pool_articles(session: Session | None, payload: dict[str, Any]) -> 
                     ev.get("articles")
                     or ev.get("representative_articles")
                     or ev.get("sample_articles")
+                    or ev.get("evidence")
                     or []
                 ):
                     if isinstance(a, dict):
                         pool.append({**a, "event_id": ev.get("event_id") or ev.get("id")})
     if not pool and session is not None:
-        from sqlalchemy import select
         from gni.infrastructure.models import Article, Source
 
         p_start = payload.get("period_start")
@@ -262,26 +276,29 @@ def _collect_pool_articles(session: Session | None, payload: dict[str, Any]) -> 
     return pool
 
 
-def build_unified_report_package(
+def build_report_package(
     session: Session | None,
     *,
     report_type: str,
     payload: dict[str, Any],
 ) -> ReportPackageContract:
-    """Compose unified ReportPackageContract for Weekly (8ch+appendix) or Monthly (8ch+appendix)."""
+    """Single canonical composer for Daily (6ch+appendix), Weekly (8ch+appendix), Monthly (8ch+appendix)."""
     rt = report_type.lower().strip()
-    chapter_defs = WEEKLY_CHAPTER_DEFS if rt == "weekly" else MONTHLY_CHAPTER_DEFS
+    chapter_defs = _CHAPTER_DEFS_BY_TYPE.get(rt, DAILY_CHAPTER_DEFS)
     sections_raw = payload.get("sections") or {}
     v1 = sections_raw.get("v1_stats") or {}
     g = v1.get("global") or {}
     summary_kpis = (sections_raw.get("summary") or {}).get("kpis") or {}
-    intel_tasks = (payload.get("intelligence") or {}).get("tasks") or {}
-    visualizations = extract_report_visualizations(payload)
+    assessments = payload.get("assessments") or {}
+    assessments_meta = payload.get("assessments_meta") or {}
+    visualizations = payload.get("visualizations") or extract_report_visualizations(payload)
     article_pool = _collect_pool_articles(session, payload)
     curated_global = curate_finding_evidence(article_pool, max_refs=3, include_counter=True)
 
-    # Map chapter IDs to relevant deterministic visualizations
     chapter_viz_map: dict[str, list[dict[str, Any]]] = {
+        "chapter_2_key_developments": [visualizations["event_timeline"]],
+        "chapter_3_global_situation": [visualizations["country_bar"], visualizations["topic_delta"]],
+        "chapter_4_key_changes_anomalies": [visualizations["trend_line"], visualizations["stance_stacked"]],
         "chapter_2_attention_changes": [visualizations["trend_line"]],
         "chapter_2_attention_landscape": [visualizations["trend_line"]],
         "chapter_3_event_evolution": [visualizations["event_timeline"]],
@@ -296,13 +313,15 @@ def build_unified_report_package(
 
     built_sections: list[ReportSectionContract] = []
     for ch_id, ch_title, task_keys in chapter_defs:
-        matched_task: dict[str, Any] | None = None
-        for tk in task_keys:
-            if isinstance(intel_tasks.get(tk), dict):
-                matched_task = intel_tasks[tk]
-                break
+        matched_tasks = [assessments[tk] for tk in task_keys if isinstance(assessments.get(tk), dict)]
+        primary = matched_tasks[0] if matched_tasks else None
 
-        raw_findings = (matched_task or {}).get("findings") or (matched_task or {}).get("key_findings") or []
+        raw_findings: list[dict[str, Any]] = []
+        for mt in matched_tasks:
+            for f in mt.get("key_findings") or []:
+                if isinstance(f, dict):
+                    raw_findings.append(f)
+
         norm_findings = [
             _normalize_finding(
                 f,
@@ -310,38 +329,39 @@ def build_unified_report_package(
                 supporting_metrics={"global_article_count": int(g.get("article_count") or 0)},
             )
             for f in raw_findings[:5]
-            if isinstance(f, dict)
         ]
 
-        # Deterministic fallback finding when LLM intelligence hasn't been triggered yet
-        if not norm_findings and ch_id != "appendix":
-            if ch_id.startswith("chapter_1_"):
-                art_cnt = int(g.get("article_count") or summary_kpis.get("china_articles") or 0)
-                delta = summary_kpis.get("delta")
-                cov = g.get("stance_coverage_rate")
-                norm_findings = [
-                    _normalize_finding(
-                        {
-                            "title": f"{'本周' if rt == 'weekly' else '本月'}涉华报道总量 {art_cnt} 篇",
-                            "finding_summary": (
-                                f"统计窗口内共监测去重涉华报道 {art_cnt} 篇"
-                                + (f"（环比变化 {delta:+d} 篇）" if isinstance(delta, int) else "")
-                                + (f"，立场覆盖率 {cov * 100:.1f}%。" if isinstance(cov, (int, float)) else "。")
-                            ),
-                            "observed_change": f"delta={delta}" if delta is not None else "",
-                            "interpretation": "该结论由 V1.0 确定性指标层生成；运行研判引擎后将补充深度归因。",
-                            "confidence": "high" if art_cnt >= 5 else "low",
-                        },
-                        curated=curated_global,
-                        supporting_metrics={"article_count": art_cnt, "delta": delta, "stance_coverage_rate": cov},
-                    )
-                ]
+        if not norm_findings and ch_id.startswith("chapter_1_"):
+            art_cnt = int(g.get("article_count") or summary_kpis.get("china_articles") or 0)
+            delta = summary_kpis.get("delta")
+            if delta is None:
+                delta = summary_kpis.get("delta_vs_yesterday")
+            cov = g.get("stance_coverage_rate")
+            cadence_zh = "当日" if rt == "daily" else ("本周" if rt == "weekly" else "本月")
+            norm_findings = [
+                _normalize_finding(
+                    {
+                        "title": f"{cadence_zh}涉华报道总量 {art_cnt} 篇",
+                        "finding_summary": (
+                            f"统计窗口内共监测去重涉华报道 {art_cnt} 篇"
+                            + (f"（环比变化 {delta:+d} 篇）" if isinstance(delta, int) else "")
+                            + (f"，立场覆盖率 {cov * 100:.1f}%。" if isinstance(cov, (int, float)) else "。")
+                        ),
+                        "classification": "Fact",
+                        "observed_change": f"delta={delta}" if delta is not None else "",
+                        "interpretation": "该结论由 V1.0 确定性指标层生成；运行 Canonical 研判引擎后将补充深度归因。",
+                        "confidence": "high" if art_cnt >= 5 else "low",
+                    },
+                    curated=curated_global,
+                    supporting_metrics={"article_count": art_cnt, "delta": delta, "stance_coverage_rate": cov},
+                )
+            ]
 
         limitations: list[str] = []
         if ch_id == "appendix":
             ws = payload.get("window_spec") or {}
             if ws.get("is_partial_period"):
-                limitations.append(str(ws.get("comparison_note") or "当前为月中未完整周期，已采用同天数 MTD 公平环比。"))
+                limitations.append(str(ws.get("comparison_note") or "当前为未完整周期，已采用公平对比口径。"))
             if rt == "monthly":
                 hist = sections_raw.get("historical_v1_stats") or []
                 months_with_data = sum(1 for row in hist if isinstance(row, dict) and int(row.get("article_count") or 0) > 0)
@@ -350,25 +370,23 @@ def build_unified_report_package(
             limitations.append("跨议题与跨板块文章允许重叠，不得将各议题文章数直接相加替代全球去重总量。")
             limitations.append("立场比例分母仅含已分类文章（Positive/Neutral/Negative），Unclassified 独立统计并展示覆盖率。")
 
+        sec_summary = str((primary or {}).get("executive_summary") or "")
+        if not sec_summary and ch_id.startswith("chapter_1_"):
+            sec_summary = str((sections_raw.get("summary") or {}).get("judgment_text") or (sections_raw.get("summary") or {}).get("overview_text") or "")
+
         built_sections.append(
             ReportSectionContract(
                 section_id=ch_id,
                 title=ch_title,
-                summary=str((matched_task or {}).get("summary") or (matched_task or {}).get("executive_summary") or ""),
+                summary=sec_summary,
                 key_findings=norm_findings,
-                evidence_refs=curated_global["evidence_refs"] if ch_id in {"chapter_1_weekly_executive", "chapter_1_monthly_executive", "appendix"} else [],
-                metrics=[
-                    {
-                        "global": g,
-                        "kpis": summary_kpis,
-                        "window_spec": payload.get("window_spec") or {},
-                    }
-                ]
-                if ch_id.startswith("chapter_1_") or ch_id == "appendix"
+                evidence_refs=curated_global["evidence_refs"] if (ch_id.startswith("chapter_1_") or ch_id == "appendix") else [],
+                metrics=[{"global": g, "kpis": summary_kpis, "window_spec": payload.get("window_spec") or {}}]
+                if (ch_id.startswith("chapter_1_") or ch_id == "appendix")
                 else [],
                 visualizations=chapter_viz_map.get(ch_id, []),
                 limitations=limitations,
-                status="completed" if matched_task else "rule_only",
+                status="completed" if primary else "rule_only",
             )
         )
 
@@ -376,8 +394,8 @@ def build_unified_report_package(
     qg = payload.get("quality_gate") or {}
     qg_status = qg.get("status")
     val_status = "failed" if qg_status == "blocked" else ("needs_review" if qg_status == "passed_with_warnings" else "passed")
-    has_llm = bool((payload.get("intelligence") or {}).get("meta", {}).get("completed_tasks", 0))
-    gen_status = "completed" if has_llm else ("insufficient_data" if int(g.get("article_count") or 0) == 0 else "rule_only")
+    completed_tasks = int((assessments_meta.get("meta") or {}).get("completed_tasks") or 0)
+    gen_status = "completed" if completed_tasks > 0 else ("insufficient_data" if int(g.get("article_count") or 0) == 0 else "rule_only")
 
     return ReportPackageContract(
         report_id=f"{rt}:{period_label}",
@@ -392,6 +410,7 @@ def build_unified_report_package(
         period_start=payload.get("period_start"),
         period_end=payload.get("period_end"),
         generated_at=datetime.now(timezone.utc).isoformat(),
+        assessment_results=list(assessments.values()) if isinstance(assessments, dict) else [],
         sections=built_sections,
         evidence_refs=curated_global["evidence_refs"],
         methodology={
@@ -403,23 +422,68 @@ def build_unified_report_package(
         coverage={
             "global_article_count": int(g.get("article_count") or 0),
             "stance_coverage_rate": g.get("stance_coverage_rate"),
-            "countries_reporting": len(v1.get("by_country") or []),
+            "countries_reporting": len(v1.get("countries") or v1.get("by_country") or []),
             "quality_gate": qg,
             "window_spec": payload.get("window_spec") or {},
         },
         limitations=built_sections[-1].limitations if built_sections else [],
         generation_status=gen_status,  # type: ignore[arg-type]
         validation_status=val_status,  # type: ignore[arg-type]
-        validation_notes=[str(w.get("message") or "") for w in (qg.get("warnings") or []) if isinstance(w, dict)],
+        validation_notes=[str(w.get("detail") or w.get("message") or "") for w in (qg.get("warnings") or []) if isinstance(w, dict)],
         generation_metadata={
             "report_schema_version": REPORT_PACKAGE_VERSION,
             "quality_gate_status": qg_status,
+            "orchestrator_version": assessments_meta.get("orchestrator_version"),
         },
     )
 
 
+def save_report_snapshot(
+    session: Session,
+    report_type: str,
+    payload: dict[str, Any],
+) -> ReportSnapshot:
+    period = str(payload.get("period") or "")
+    schema_version = str(payload.get("schema_version") or REPORT_PACKAGE_VERSION)
+    existing = session.scalar(
+        select(ReportSnapshot)
+        .where(ReportSnapshot.report_type == report_type, ReportSnapshot.period == period)
+        .order_by(ReportSnapshot.created_at.desc())
+        .limit(1)
+    )
+    if existing:
+        existing.payload = payload
+        existing.schema_version = schema_version
+        session.flush()
+        return existing
+    snap = ReportSnapshot(
+        id=str(uuid4()),
+        report_type=report_type,
+        period=period,
+        schema_version=schema_version,
+        payload=payload,
+    )
+    session.add(snap)
+    session.flush()
+    return snap
+
+
+def get_report_snapshot(
+    session: Session,
+    report_type: str,
+    period: str,
+) -> dict[str, Any] | None:
+    row = session.scalar(
+        select(ReportSnapshot)
+        .where(ReportSnapshot.report_type == report_type, ReportSnapshot.period == period)
+        .order_by(ReportSnapshot.created_at.desc())
+        .limit(1)
+    )
+    return dict(row.payload) if row and isinstance(row.payload, dict) else None
+
+
 def render_report_package_markdown(package: ReportPackageContract | dict[str, Any]) -> str:
-    """Render any Daily/Weekly/Monthly ReportPackageContract to structured Markdown."""
+    """Single Markdown renderer for Daily, Weekly, and Monthly ReportPackageContract."""
     data = package.model_dump(mode="json") if isinstance(package, ReportPackageContract) else dict(package)
     period_obj = data.get("period")
     period_label = period_obj.get("label") if isinstance(period_obj, dict) else str(period_obj or "")
@@ -447,14 +511,14 @@ def render_report_package_markdown(package: ReportPackageContract | dict[str, An
             refs = f.get("evidence_refs") or []
             if refs:
                 ref_str = "；".join(
-                    f"[{r.get('source_name') or '源'}/{r.get('country_code') or '-'}] {r.get('title') or ''}"
+                    f"[{r.get('source_name') or r.get('type') or '源'}/{r.get('country_code') or r.get('ref_id') or '-'}] {r.get('title') or r.get('label') or ''}"
                     for r in refs[:3]
                 )
                 lines.append(f"- **代表证据**：{ref_str}")
             counter = f.get("counter_evidence") or []
             if counter:
                 c_str = "；".join(
-                    f"[{r.get('source_name') or '源'}/{r.get('china_stance')}] {r.get('title') or ''}"
+                    f"[{r.get('source_name') or '源'}/{r.get('china_stance') or '-'}] {r.get('title') or ''}"
                     for r in counter[:2]
                 )
                 lines.append(f"- **反证/对照视角**：{c_str}")

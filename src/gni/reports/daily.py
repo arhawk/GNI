@@ -328,13 +328,11 @@ def build_daily_report(
     *,
     day: date | str | None = None,
     country_scope: list[str] | None = None,
-    polish: bool = False,
     analyze: bool = False,
     analyze_tasks: list[str] | None = None,
     force_analyze: bool = False,
     llm_client: Any = None,
-    run_v2_assessments: bool = False,
-    assessment_tasks: list[str] | None = None,
+    orchestrator_profile: str = "core",
 ) -> dict[str, Any]:
     countries = country_scope or list(MONITOR_DEFAULT)
     sources = {s.id: s for s in session.scalars(select(Source)).all()}
@@ -1351,251 +1349,51 @@ def build_daily_report(
         },
     }
 
-    from gni.reports.narrative.runner import (
-        load_cached_intelligence,
-        run_report_intelligence,
-    )
+    from gni.reports.orchestrator import ReportOrchestrator
+    from gni.reports.package_composer import build_report_package, extract_report_visualizations
+    from gni.reports.quality_gate import evaluate_report_quality_gate
+    from gni.reports.window import resolve_daily_window
 
+    orch = ReportOrchestrator()
     if analyze:
-        payload["intelligence"] = run_report_intelligence(
+        orch_res = orch.run(
             session,
             report_type="daily",
-            period=payload["period"],
             payload=payload,
+            profile=orchestrator_profile,
             tasks=analyze_tasks,
             force=force_analyze,
             llm_client=llm_client,
         )
     else:
-        payload["intelligence"] = load_cached_intelligence(
+        orch_res = orch.load_cached(
             session,
             report_type="daily",
-            period=payload["period"],
             payload=payload,
         )
+    payload["assessments"] = orch_res.serialized_assessments()
+    payload["assessments_meta"] = orch_res.assessments_meta
 
-    if (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0:
-        payload["generator"] = "rule_brief_v4+llm_intelligence"
-
-    from gni.reports.package_composer import extract_report_visualizations
-    from gni.reports.quality_gate import evaluate_report_quality_gate
-    from gni.reports.window import resolve_daily_window
+    if (payload["assessments_meta"].get("meta") or {}).get("completed_tasks", 0) > 0:
+        payload["generator"] = "rule_brief_v4+canonical_orchestrator"
 
     payload["window_spec"] = resolve_daily_window(report_day).to_dict()
     payload["visualizations"] = extract_report_visualizations(payload)
     payload["validation"] = validate_daily_report(payload)
     payload["quality_gate"] = evaluate_report_quality_gate(payload)
-
-    if polish:
-        has_intel = (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0
-        if has_intel:
-            payload["polish"] = {"applied": False, "reason": "skipped_when_intelligence_present"}
-        else:
-            from gni.reports.polish import polish_daily_narratives
-
-            polished = polish_daily_narratives(payload)
-            if polished:
-                if polished.get("executive"):
-                    payload["sections"]["summary"]["overview_text"] = polished["executive"]
-                payload["narratives"].update(polished)
-                payload["generator"] = "rule_brief_v4+llm_narratives"
-                payload["polish"] = {"applied": True}
-                payload["validation"] = validate_daily_report(payload)
-            else:
-                payload["polish"] = {"applied": False, "reason": "llm_unavailable_or_rejected"}
-
-    # Phase 6: Attach unified 6-Chapter + Appendix ReportPackageContract (100% backward compatible)
-    from gni.reports.daily_package import assemble_daily_report_package
-
-    report_pkg = assemble_daily_report_package(
-        session,
-        payload=payload,
-        run_assessments=run_v2_assessments,
-        assessment_tasks=assessment_tasks,
-        llm_client=llm_client,
-        force=force_analyze,
-    )
-    payload["report_package"] = report_pkg.model_dump(mode="json")
+    payload["report_package"] = build_report_package(
+        session, report_type="daily", payload=payload
+    ).model_dump(mode="json")
 
     return payload
 
 
 def render_daily_markdown(payload: dict[str, Any]) -> str:
-    s = payload.get("sections") or {}
-    summary = s.get("summary") or {}
-    kpis = summary.get("kpis") or {}
-    tone = s.get("tone") or {}
-    coverage = s.get("coverage") or {}
-    quality = s.get("quality") or {}
-    nar = payload.get("narratives") or {}
+    """Delegate Daily Markdown rendering to the single canonical package_composer."""
+    from gni.reports.package_composer import build_report_package, render_report_package_markdown
 
-    lines: list[str] = [
-        f"# GNI Daily Brief（{payload.get('period')}）",
-        "",
-        f"**schema:** `{payload.get('schema_version')}` · **generator:** `{payload.get('generator')}`",
-        "",
-        f"> {payload.get('disclaimer')}",
-        "",
-        "## 1. Executive Summary",
-        "",
-        summary.get("judgment_text") or nar.get("executive") or summary.get("overview_text") or "",
-        "",
-        f"- 研判置信度: **{summary.get('confidence') or '—'}**",
-        f"- 涉华文章: **{kpis.get('china_articles')}**",
-        f"- 报道国家: **{kpis.get('reporting_countries')}**",
-        f"- 报道媒体: **{kpis.get('reporting_sources')}**",
-        f"- 新发现事件: **{kpis.get('new_events')}** · 高重要: **{kpis.get('major_events')}**",
-        "",
-        "### 今日值得关注",
-        "",
-    ]
-    for ch in summary.get("top_changes") or []:
-        lines.append(f"1. **{ch.get('title')}** — {ch.get('summary')}")
-
-    v1 = s.get("v1_stats") or {}
-    g = v1.get("global") or {}
-    if g:
-        def _pct(v: float | None) -> str:
-            return f"{v * 100:.1f}%" if isinstance(v, (int, float)) else "—"
-
-        lines += [
-            "",
-            "## V1.0 统计口径摘要（Article Count · published_at）",
-            "",
-            f"- 全球唯一涉华文章: **{g.get('article_count', 0)}** 篇 · "
-            f"正面 {_pct(g.get('positive_rate'))} ({g.get('positive_count', 0)}) / "
-            f"中性 {_pct(g.get('neutral_rate'))} ({g.get('neutral_count', 0)}) / "
-            f"负面 {_pct(g.get('negative_rate'))} ({g.get('negative_count', 0)}) · "
-            f"Unclassified {g.get('unclassified_count', 0)} · "
-            f"立场判定覆盖率 **{_pct(g.get('stance_coverage_rate'))}**",
-        ]
-        boards = [b for b in (v1.get("boards") or []) if b.get("article_count", 0) > 0]
-        if boards:
-            b_txt = "；".join(f"{b.get('label_zh') or b.get('scope_id')} {b.get('article_count')} 篇" for b in boards)
-            lines.append(f"- 四大板块（板块间允许重叠）: {b_txt}")
-        topics = [t for t in (v1.get("topics") or []) if t.get("article_count", 0) > 0][:8]
-        if topics:
-            t_txt = "；".join(f"{t.get('label_zh') or t.get('scope_id')} {t.get('article_count')} 篇" for t in topics)
-            lines.append(f"- 热门议题 Top: {t_txt}")
-
-    lines += ["", "## 2. Major Events", ""]
-    for i, ev in enumerate(s.get("major_events") or [], 1):
-        lines.append(f"### 事件 {i:02d}：{ev.get('title')}")
-        lines.append("")
-        lines.append(ev.get("overview_text") or "")
-        lines.append("")
-        core = ev.get("core") or {}
-        lines.append(
-            f"- 主体/行动/对象: {core.get('actor')} / {core.get('action')} / {core.get('object')}"
-        )
-        cov = ev.get("coverage") or {}
-        lines.append(
-            f"- 覆盖: {cov.get('article_count')} 篇 · {cov.get('country_count')} 国 · "
-            f"{cov.get('source_count')} 源"
-        )
-        lines.append(f"- event_time: {ev.get('event_time')} · first_seen: {ev.get('first_seen_at')}")
-        lines.append(f"- 详情: `{ev.get('href')}`")
-        for evi in (ev.get("evidence") or [])[:5]:
-            lines.append(
-                f"  - [{evi.get('country_id')}] {evi.get('title')} · "
-                f"{evi.get('sentiment')}/{evi.get('stance')} · `{evi.get('article_id')}`"
-            )
-        lines.append("")
-    lines += ["## 3. Global Coverage", "", coverage.get("note") or "", ""]
-    if nar.get("coverage"):
-        lines.append(f"*{nar['coverage']}*")
-        lines.append("")
-    lines.append("| 国家 | 涉华篇数 | 加权量 | 源数 |")
-    lines.append("|------|----------|--------|------|")
-    for r in coverage.get("by_country") or []:
-        lines.append(
-            f"| {r['country_id']} | {r['article_count']} | {r.get('weighted_volume')} | "
-            f"{r.get('source_count')} |"
-        )
-    lines += ["", "**主议题**"]
-    for t in coverage.get("topics_top") or []:
-        lines.append(f"- {t['label']}: {t['count']} ({t['share']})")
-    lines += ["", "**主框架**"]
-    for t in coverage.get("frames_top") or []:
-        lines.append(f"- {t['label']}: {t['count']} ({t['share']})")
-    lines += ["", "## 4. Sentiment & Stance", "", tone.get("note") or "", ""]
-    for row in tone.get("by_country") or []:
-        lines.append(f"- {row.get('summary_text')}")
-    lines += ["", "## 5. Emerging Signals", ""]
-    for sig in s.get("signals") or []:
-        lines.append(
-            f"- [{sig.get('status')}] **{sig.get('title')}** — {sig.get('summary')}"
-        )
-    lines += ["", "## 6. Data Coverage Notes", ""]
-    if nar.get("quality"):
-        lines.append(f"*{nar['quality']}*")
-        lines.append("")
-    lines.append(f"- 分析积压: **{quality.get('missing_analysis')}**")
-    lines.append(f"- 无样本国家: {quality.get('countries_without_sample')}")
-    for note in quality.get("notes") or []:
-        lines.append(f"- {note}")
-    intel = payload.get("intelligence") or {}
-    intel_tasks = intel.get("tasks") or {}
-    if intel_tasks:
-        lines += ["", "## Intelligence Narrative Analysis (LLM 解读层)", ""]
-        lines.append(
-            f"- 状态: `{intel.get('status')}` · 模型: `{', '.join((intel.get('meta') or {}).get('model_versions') or []) or '—'}`"
-        )
-        exec_t = intel_tasks.get("executive_analysis") or {}
-        if exec_t.get("summary"):
-            lines += ["", "### 综合研判（Executive Judgment）", "", exec_t["summary"], ""]
-        if exec_t.get("important_changes"):
-            lines.append("- 核心变化: " + "；".join(exec_t["important_changes"]))
-        if exec_t.get("main_drivers"):
-            lines.append("- 主要驱动: " + "；".join(exec_t["main_drivers"]))
-        for f in exec_t.get("findings") or []:
-            refs = ", ".join(
-                f"{r.get('type')}:{r.get('ref_id')}" for r in (f.get("evidence_refs") or [])
-            )
-            lines.append(
-                f"- **[{f.get('classification')}] {f.get('title')}** ({f.get('confidence')}): "
-                f"{f.get('conclusion')} {f'(证据: `{refs}`)' if refs else ''}"
-            )
-        if exec_t.get("uncertainties"):
-            lines.append("- 不确定性: " + "；".join(exec_t["uncertainties"]))
-        if exec_t.get("follow_up_questions"):
-            lines.append("- 待核查问题: " + "；".join(exec_t["follow_up_questions"]))
-        ev_t = intel_tasks.get("event_analysis") or {}
-        if ev_t.get("event_interpretations"):
-            lines += ["", "### 重点事件深度解读", ""]
-            for ei in ev_t["event_interpretations"]:
-                lines.append(f"#### {ei.get('title')} (`{ei.get('event_id')}`)")
-                if ei.get("what_happened"):
-                    lines.append(f"- 发生了什么: {ei['what_happened']}")
-                if ei.get("background"):
-                    lines.append(f"- 背景: {ei['background']}")
-                if ei.get("event_actual_changes") or ei.get("coverage_attention_changes"):
-                    lines.append(
-                        f"- 事件本体变化 vs 媒体关注变化: {ei.get('event_actual_changes') or '—'} / "
-                        f"{ei.get('coverage_attention_changes') or '—'}"
-                    )
-                if ei.get("country_differences"):
-                    lines.append(f"- 各国报道差异: {ei['country_differences']}")
-                if ei.get("why_it_matters"):
-                    lines.append(f"- 为什么值得关注: {ei['why_it_matters']}")
-                if ei.get("what_to_monitor"):
-                    lines.append(f"- 后续观察: {'；'.join(ei['what_to_monitor'])}")
-                lines.append("")
-        sig_t = intel_tasks.get("emerging_signals") or {}
-        if sig_t.get("outlook_signals"):
-            lines += ["", "### 异动解释与明日监测重点", ""]
-            for osig in sig_t["outlook_signals"]:
-                lines.append(
-                    f"- **{osig.get('signal')}** ({osig.get('confidence')}): "
-                    f"{osig.get('reasoning')} · 潜在触发: {osig.get('potential_trigger') or '—'} · "
-                    f"不确定性: {osig.get('uncertainty') or '待观察'}"
-                )
-                if osig.get("what_to_monitor"):
-                    lines.append(f"  - 监测指标: {'；'.join(osig['what_to_monitor'])}")
-
-    val = payload.get("validation") or {}
-    lines += ["", f"**validation.ok:** {val.get('ok')}", ""]
-    return "\n".join(lines)
+    pkg = payload.get("report_package") or build_report_package(None, report_type="daily", payload=payload).model_dump(mode="json")
+    return render_report_package_markdown(pkg)
 
 
 def write_daily_files(payload: dict[str, Any], *, out_dir: str | None = None) -> dict[str, str]:

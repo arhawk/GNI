@@ -115,21 +115,21 @@ def evaluate_report_quality_gate(payload: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
-    # 5. Intelligence / LLM task health check (non-blocking warnings for partial/needs_review)
-    checks.append("intelligence_layer_status")
-    intel = payload.get("intelligence") if isinstance(payload.get("intelligence"), dict) else {}
-    ist = str(intel.get("status") or "")
+    # 5. Canonical Assessments layer health check (non-blocking warnings for partial/needs_review)
+    checks.append("assessments_layer_status")
+    meta = payload.get("assessments_meta") if isinstance(payload.get("assessments_meta"), dict) else {}
+    ist = str(meta.get("status") or "")
     if ist in {"partial", "needs_review", "failed"}:
         warnings.append(
             {
-                "code": f"intelligence_{ist}",
+                "code": f"assessments_{ist}",
                 "detail": f"智能研判层状态为 {ist}，部分任务需要复核或重试。",
             }
         )
-    if intel.get("stale"):
+    if meta.get("stale"):
         warnings.append(
             {
-                "code": "stale_intelligence_cache",
+                "code": "stale_assessments_cache",
                 "detail": "缓存研判对应的证据指纹已变化，建议刷新研判。",
             }
         )

@@ -356,10 +356,10 @@ def test_phase7_all_domain_routers_and_data_consistency(tmp_path: Path, monkeypa
     outlook = client.get(f"/api/outlook?date={ids['day']}").json()
     assert "disclaimer" in outlook["meta"]
 
-    # Save snapshot via v2 analyze and verify reports/list & package markdown
+    # Save snapshot via canonical analyze and verify reports/list & package markdown
     client.post(
         "/api/reports/daily/analyze",
-        json={"period": ids["day"], "engine": "v2", "tasks": ["overall_situation_assessment"], "save_snapshot": True},
+        json={"period": ids["day"], "tasks": ["overall_situation_assessment"], "save_snapshot": True},
     )
     rep_list = client.get("/api/reports/list?report_type=daily").json()
     assert rep_list["total"] >= 1
@@ -367,4 +367,4 @@ def test_phase7_all_domain_routers_and_data_consistency(tmp_path: Path, monkeypa
     assert pkg_json["report_package"]["report_id"] == f"daily:{ids['day']}"
     pkg_md = client.get(f"/api/reports/daily/package?date={ids['day']}&format=markdown")
     assert pkg_md.status_code == 200
-    assert "Daily Intelligence Brief" in pkg_md.text
+    assert "GNI DAILY Intelligence Report" in pkg_md.text

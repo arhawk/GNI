@@ -25,10 +25,14 @@ import {
   TrendDeltaTable,
 } from '../components/tables'
 import {
-  DailyReportViewChrome,
-  MonthlyReportViewChrome,
-  WeeklyReportViewChrome,
+  CuratedEvidencePanel,
+  ReportExportBar,
 } from '../components/reports/ReportViewChrome'
+import {
+  QualityGateBanner,
+  ReportVisualDashboard,
+  WindowSpecBadge,
+} from '../components/reports/ReportVisualizations'
 
 type Tab = 'daily' | 'weekly' | 'monthly'
 
@@ -145,7 +149,6 @@ export function ReportsPage() {
         period: selectedDate,
         force: opts.force,
         tasks: opts.tasks,
-        engine: 'orchestrator',
       })
       if (reportType === 'daily') {
         setData(updated as DailyReport)
@@ -231,47 +234,30 @@ export function ReportsPage() {
       {error && <p className="error">加载失败: {error}</p>}
       {tab === 'daily' && !error && !data && <p className="muted">加载 Daily Brief…</p>}
       {tab === 'daily' && data && (
-        <>
-          <DailyReportViewChrome data={data} selectedDate={selectedDate} />
-          <DailyBrief
-            data={data}
-            analyzing={analyzing}
-            analyzeError={analyzeError}
-            onGenerate={(force) => triggerAnalyze('daily', { force })}
-            onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
-            showCoverageDetail={showCoverageDetail}
-            setShowCoverageDetail={setShowCoverageDetail}
-          />
-        </>
+        <DailyBrief
+          data={data}
+          selectedDate={selectedDate}
+          analyzing={analyzing}
+          analyzeError={analyzeError}
+          onGenerate={(force) => triggerAnalyze('daily', { force })}
+          onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
+          showCoverageDetail={showCoverageDetail}
+          setShowCoverageDetail={setShowCoverageDetail}
+        />
       )}
       {(tab === 'weekly' || tab === 'monthly') && !error && !period && (
         <p className="muted">加载{tab === 'weekly' ? '周报' : '月报'}…</p>
       )}
-      {tab === 'weekly' && period && (
-        <>
-          <WeeklyReportViewChrome data={period} selectedDate={selectedDate} />
-          <PeriodBrief
-            data={period}
-            tab="weekly"
-            analyzing={analyzing}
-            analyzeError={analyzeError}
-            onGenerate={(force) => triggerAnalyze('weekly', { force })}
-            onRetryFailed={(tasks) => triggerAnalyze('weekly', { tasks, force: true })}
-          />
-        </>
-      )}
-      {tab === 'monthly' && period && (
-        <>
-          <MonthlyReportViewChrome data={period} selectedDate={selectedDate} />
-          <PeriodBrief
-            data={period}
-            tab="monthly"
-            analyzing={analyzing}
-            analyzeError={analyzeError}
-            onGenerate={(force) => triggerAnalyze('monthly', { force })}
-            onRetryFailed={(tasks) => triggerAnalyze('monthly', { tasks, force: true })}
-          />
-        </>
+      {(tab === 'weekly' || tab === 'monthly') && period && (
+        <PeriodBrief
+          data={period}
+          tab={tab}
+          selectedDate={selectedDate}
+          analyzing={analyzing}
+          analyzeError={analyzeError}
+          onGenerate={(force) => triggerAnalyze(tab, { force })}
+          onRetryFailed={(tasks) => triggerAnalyze(tab, { tasks, force: true })}
+        />
       )}
     </div>
   )
@@ -408,6 +394,7 @@ const KPI_LABELS_ZH: Record<string, string> = {
 function PeriodBrief({
   data,
   tab,
+  selectedDate,
   analyzing,
   analyzeError,
   onGenerate,
@@ -415,13 +402,13 @@ function PeriodBrief({
 }: {
   data: PeriodReport
   tab: 'weekly' | 'monthly'
+  selectedDate: string
   analyzing: boolean
   analyzeError: string | null
   onGenerate: (force: boolean) => void
   onRetryFailed: (tasks: string[]) => void
 }) {
   const isMonthly = tab === 'monthly'
-  const kind = isMonthly ? '月报' : '周报'
   const s = data.sections as {
     v1_stats?: V1StatsByScope
     v1_stats_prev?: V1StatsByScope
@@ -449,20 +436,22 @@ function PeriodBrief({
   }
   const nar = data.narratives || {}
   const kpis = s.summary?.kpis || {}
-  const intel = data.intelligence
-  const tasks = intel?.tasks || {}
+  const assessments = data.assessments || {}
+  const assessmentsMeta = data.assessments_meta
+  const pkgRefs = (data.report_package as { evidence_refs?: Array<Record<string, unknown>> } | undefined)?.evidence_refs
+  const globalStanceCov = s.v1_stats?.global?.stance_coverage_rate
 
   return (
     <article className="daily-brief">
       <header className="brief-hero">
-        <p className="muted small">
-          {kind} · {data.period}
-        </p>
+        <ReportExportBar cadence={tab} period={data.period} selectedDate={selectedDate} />
         <h1>
           {isMonthly ? '每月战略研判 · Monthly Strategic Review' : '每周变化分析 · Weekly Intelligence Report'}
         </h1>
+        <WindowSpecBadge spec={data.window_spec} />
+        <QualityGateBanner gate={data.quality_gate} />
         <p className="callout">{data.disclaimer}</p>
-        {!tasks.executive_analysis && <p>{s.summary?.overview_text || nar.executive}</p>}
+        {!assessments.overall_situation_assessment && <p>{s.summary?.overview_text || nar.executive}</p>}
         <div className="kpi-grid compact">
           {Object.entries(kpis)
             .filter(([k]) => k !== 'months_with_history')
@@ -472,19 +461,29 @@ function PeriodBrief({
                 <strong>{v}</strong>
               </div>
             ))}
+          <div>
+            <div className="muted small">立场判定覆盖率</div>
+            <strong>{fmtPct(globalStanceCov)}</strong>
+          </div>
         </div>
       </header>
 
       <section className="brief-section">
         <h2>{isMonthly ? '1 · 月度战略总评（Monthly Executive Assessment）' : '1 · 周度综合研判（Weekly Executive Summary）'}</h2>
         <IntelligenceHeader
-          intelligence={intel}
+          assessments={assessments}
+          assessmentsMeta={assessmentsMeta}
           analyzing={analyzing}
           analyzeError={analyzeError}
           onGenerate={onGenerate}
           onRetryFailed={onRetryFailed}
           title={isMonthly ? '月度战略总评与核心发现' : '周度核心变化与综合研判（本周 vs 上周）'}
         />
+        <CuratedEvidencePanel refs={pkgRefs as never} />
+      </section>
+
+      <section className="brief-section">
+        <ReportVisualDashboard visualizations={data.visualizations} cadence={tab} />
       </section>
 
       {(s.historical_v1_stats || []).length > 0 && (
@@ -531,7 +530,7 @@ function PeriodBrief({
       <section className="brief-section">
         <h2>{isMonthly ? '3 · 重大事件回顾（Major Event Retrospective）' : '3 · 本周重点事件与演化（Major Event Evolution）'}</h2>
         <EventInterpretationCards
-          task={tasks.event_analysis}
+          assessment={assessments.event_analysis}
           heading={isMonthly ? '月度重大事件阶段性回顾' : '本周事件演化分析（事件本体 vs 媒体关注 vs 跟进时间）'}
         />
         {!isMonthly && (s.event_evolution || []).length > 0 && (
@@ -589,7 +588,7 @@ function PeriodBrief({
       <section className="brief-section">
         <h2>{isMonthly ? '4 · 长期议题结构与趋势（Topic Trends）' : '4 · 议题趋势变化解释（Topic Trend Interpretation）'}</h2>
         <TopicTrendAnalysisBlock
-          task={tasks.topic_trend_analysis}
+          assessment={assessments.topic_analysis}
           title={isMonthly ? '长期议题结构变化与持续性分析' : '本周 vs 上周议题变化原因解释'}
           dataSlot={
             s.v1_stats && s.v1_stats_prev ? (
@@ -611,7 +610,7 @@ function PeriodBrief({
             : '5 · 跨国叙事横向比较（Cross-country Narrative Comparison）'}
         </h2>
         <CrossCountryAnalysisBlock
-          task={tasks.cross_country_analysis}
+          assessment={assessments.country_comparison}
           title={isMonthly ? '国别监测媒体画像与主导/新兴叙事格局' : '同事件 / 同议题跨国叙事比较'}
           dataSlot={
             isMonthly ? (
@@ -714,7 +713,7 @@ function PeriodBrief({
       <section className="brief-section">
         <h2>{isMonthly ? '6 · 长期对华立场趋势（Long-term Stance Trends）' : '6 · 情感与对华立场变化（Sentiment & Stance Changes）'}</h2>
         <StanceAnalysisBlock
-          task={tasks.stance_analysis}
+          assessment={assessments.sentiment_stance_analysis}
           title={isMonthly ? '长期对华立场演变与单事件冲击辨析' : '周度对华立场比例 vs 绝对数量变化解读'}
           dataSlot={s.v1_stats ? <V1StatsBlock v1={s.v1_stats} /> : undefined}
         />
@@ -724,10 +723,10 @@ function PeriodBrief({
       <section className="brief-section">
         <h2>{isMonthly ? '7 · 战略风险信号与条件性展望（Strategic Signals & Outlook）' : '7 · 新兴风险与下周监测重点（Emerging Signals & Next Week）'}</h2>
         <OutlookSignalsPanel
-          task={tasks.emerging_signals}
+          assessment={assessments.outlook_assessment || assessments.risk_signal_assessment}
           heading={isMonthly ? '战略风险信号与下月条件性展望' : '持续性异常、跨国扩散信号与下周监测清单'}
         />
-        {!tasks.emerging_signals && (
+        {!assessments.outlook_assessment && !assessments.risk_signal_assessment && (
           <>
             <p>{nar.signals}</p>
             {s.summary?.outlook && <p className="callout">{s.summary.outlook}</p>}
@@ -752,6 +751,7 @@ function PeriodBrief({
 
 function DailyBrief({
   data,
+  selectedDate,
   analyzing,
   analyzeError,
   onGenerate,
@@ -760,6 +760,7 @@ function DailyBrief({
   setShowCoverageDetail,
 }: {
   data: DailyReport
+  selectedDate: string
   analyzing: boolean
   analyzeError: string | null
   onGenerate: (force: boolean) => void
@@ -776,24 +777,28 @@ function DailyBrief({
 
   const stats = s.overview_stats
   const risk = summary.risk_banner
-  const intel = data.intelligence
-  const tasks = intel?.tasks || {}
+  const assessments = data.assessments || {}
+  const assessmentsMeta = data.assessments_meta
   const prevDayArticles = cmp?.vs_yesterday?.china_articles ?? 0
   const deltaYesterday = cmp?.vs_yesterday?.delta ?? 0
+  const globalStanceCov = s.v1_stats?.global?.stance_coverage_rate
 
   return (
     <div className="daily-brief daily-brief-v4">
       <header className="brief-header">
+        <ReportExportBar cadence="daily" period={data.period} selectedDate={selectedDate} />
         <div className="brief-eyebrow">DAILY BRIEF · 全局涉华态势 + 情报研判</div>
         <h1>全球对华监测 · 日报</h1>
         <p className="muted small">
           当前接入 {connectedN} 国
           {data.connected?.active_sources != null ? ` · 活跃源 ${data.connected.active_sources}` : ''} · {data.period}
         </p>
+        <WindowSpecBadge spec={data.window_spec} />
+        <QualityGateBanner gate={data.quality_gate} />
         <p className="callout">{data.disclaimer}</p>
         <div className="kpi-grid compact">
           <div>
-            <div className="muted small">涉华唯一文章</div>
+            <div className="muted small">判定为涉华文章</div>
             <strong>{kpis.china_articles}</strong>
           </div>
           <div>
@@ -812,13 +817,18 @@ function DailyBrief({
             <div className="muted small">重点事件数</div>
             <strong>{kpis.major_events}</strong>
           </div>
+          <div>
+            <div className="muted small">立场判定覆盖率</div>
+            <strong>{fmtPct(globalStanceCov)}</strong>
+          </div>
         </div>
       </header>
 
       <section className="brief-section">
         <h2>1 · 全局态势与综合研判（Global Situation &amp; Intelligence Judgment）</h2>
         <IntelligenceHeader
-          intelligence={intel}
+          assessments={assessments}
+          assessmentsMeta={assessmentsMeta}
           analyzing={analyzing}
           analyzeError={analyzeError}
           onGenerate={onGenerate}
@@ -828,7 +838,7 @@ function DailyBrief({
         <div className={`risk-banner ${risk?.has_high_risk ? 'hot' : 'calm'}`} style={{ marginTop: '0.6rem' }}>
           规则关键词初筛：{risk?.text || nar.risk || '—'}
         </div>
-        {tasks.executive_analysis ? (
+        {assessments.overall_situation_assessment ? (
           <details style={{ marginTop: '0.5rem' }}>
             <summary className="muted small">查看规则基线摘要（置信度：{summary.confidence || '—'}）</summary>
             <p className="brief-lede">{summary.judgment_text || nar.executive || summary.overview_text}</p>
@@ -870,6 +880,9 @@ function DailyBrief({
               .join(' · ') || '—'}
           </p>
         )}
+        <div style={{ marginTop: '0.9rem' }}>
+          <ReportVisualDashboard visualizations={data.visualizations} cadence="daily" />
+        </div>
       </section>
 
       <section className="brief-section">
@@ -878,7 +891,7 @@ function DailyBrief({
           <p className="muted small">主国｜媒体类型｜标题与叙事｜覆盖｜对华立场｜风险；异动行左侧红条提示</p>
         </div>
         <EventInterpretationCards
-          task={tasks.event_analysis}
+          assessment={assessments.event_analysis}
           heading="当日重点事件分析卡（发生了什么 / 背景 / 为何关注 / 各国差异 / 后续观察）"
         />
         <EventRiskTable events={s.major_events || []} />
@@ -938,10 +951,10 @@ function DailyBrief({
       <section className="brief-section">
         <h2>4 · 舆情异动解释与明日监测重点</h2>
         <OutlookSignalsPanel
-          task={tasks.emerging_signals}
+          assessment={assessments.outlook_assessment || assessments.risk_signal_assessment}
           heading="异动解释与明日监测优先级（Anomaly Explanation & Tomorrow's Priorities）"
         />
-        <details style={{ marginTop: '0.5rem' }} open={!tasks.emerging_signals}>
+        <details style={{ marginTop: '0.5rem' }} open={!assessments.outlook_assessment && !assessments.risk_signal_assessment}>
           <summary className="muted small">
             查看规则异动与信号明细（{(s.anomalies || []).length}）
           </summary>

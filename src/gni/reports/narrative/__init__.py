@@ -1,40 +1,49 @@
-"""LLM Intelligence Narrative Layer for GNI Daily / Weekly / Monthly reports."""
+"""Canonical Assessment Engine, Evidence Preparation, and 3-Layer Validation for GNI reports."""
 
-from gni.reports.narrative.evidence import EvidenceBundle, prepare_evidence_bundle
-from gni.reports.narrative.prompts import (
-    REPORT_TASK_ORDER,
-    TaskPromptSpec,
-    get_task_prompt_spec,
-    list_report_tasks,
+from gni.reports.narrative.assessment import (
+    ASSESSMENT_TASK_SPECS,
+    CANONICAL_ASSESSMENT_TASKS,
+    AssessmentTaskSpec,
+    effective_prompt_version,
+    get_assessment_task_spec,
+    resolve_task_type,
+    run_assessment_suite,
+    run_assessment_task,
 )
-from gni.reports.narrative.runner import (
-    load_cached_intelligence,
-    run_report_intelligence,
-)
-from gni.reports.narrative.schemas import (
+from gni.reports.narrative.assessment_validator import (
     EvidenceRef,
     EventInterpretation,
     Finding,
     NarrativeTaskOutput,
     OutlookSignal,
     TopicTrendItem,
+    validate_task_output,
 )
-from gni.reports.narrative.validator import validate_task_output
+from gni.reports.narrative.evidence import (
+    EvidenceBundle,
+    curate_finding_evidence,
+    prepare_evidence_bundle,
+)
+from gni.reports.narrative.llm_client import JsonLLMClient
 
 __all__ = [
+    "ASSESSMENT_TASK_SPECS",
+    "AssessmentTaskSpec",
+    "CANONICAL_ASSESSMENT_TASKS",
     "EvidenceBundle",
     "EvidenceRef",
     "EventInterpretation",
     "Finding",
+    "JsonLLMClient",
     "NarrativeTaskOutput",
     "OutlookSignal",
-    "REPORT_TASK_ORDER",
-    "TaskPromptSpec",
     "TopicTrendItem",
-    "get_task_prompt_spec",
-    "list_report_tasks",
-    "load_cached_intelligence",
+    "curate_finding_evidence",
+    "effective_prompt_version",
+    "get_assessment_task_spec",
     "prepare_evidence_bundle",
-    "run_report_intelligence",
+    "resolve_task_type",
+    "run_assessment_suite",
+    "run_assessment_task",
     "validate_task_output",
 ]

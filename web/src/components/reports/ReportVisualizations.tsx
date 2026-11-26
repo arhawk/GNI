@@ -139,6 +139,7 @@ function CountryBarChart({
         <div className="mt-2.5 space-y-2">
           {items.map((item) => {
             const pct = Math.max(4, (item.article_count / maxVal) * 100)
+            const lowSample = item.article_count < 3
             const cov =
               item.stance_coverage_rate != null ? `${(item.stance_coverage_rate * 100).toFixed(0)}%` : '—'
             return (
@@ -148,7 +149,14 @@ function CountryBarChart({
                     {item.country_name || item.country_code}
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    {item.article_count} 篇 · 覆盖率 {cov}
+                    {item.article_count} 篇 ·{' '}
+                    {lowSample ? (
+                      <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800">
+                        样本不足（n&lt;3，不计覆盖率百分比）
+                      </span>
+                    ) : (
+                      `覆盖率 ${cov}`
+                    )}
                   </span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">

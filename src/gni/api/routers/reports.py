@@ -1,4 +1,4 @@
-"""Reports endpoints: Daily/Weekly/Monthly, ReportPackageContract, Markdown, and ReportSnapshot list."""
+"""Reports endpoints: Daily/Weekly/Monthly, unified ReportPackageContract, Markdown, Calendar, and Analyze."""
 
 from __future__ import annotations
 
@@ -14,18 +14,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from gni.core.config import get_settings
-from gni.core.contracts import ReportPackageContract
 from gni.infrastructure.db import session_scope
 from gni.infrastructure.models import Article, ReportSnapshot
 from gni.metrics.definitions import CHINA_INCLUDE_LEVELS
 from gni.reports.daily import SCHEMA_VERSION as DAILY_SCHEMA_VERSION
 from gni.reports.daily import build_daily_report
-from gni.reports.daily_package import (
-    get_daily_report_snapshot,
-    render_daily_brief_markdown,
-    save_daily_report_snapshot,
-)
 from gni.reports.monthly import build_monthly_report
+from gni.reports.package_composer import (
+    get_report_snapshot,
+    render_report_package_markdown,
+    save_report_snapshot,
+)
 from gni.reports.weekly import build_weekly_report
 
 router = APIRouter(tags=["reports"])
@@ -33,10 +32,10 @@ router = APIRouter(tags=["reports"])
 
 class ReportAnalyzeRequest(BaseModel):
     period: str | None = Field(default=None, description="YYYY-MM-DD (daily/weekly end) or YYYY-MM (monthly)")
-    tasks: list[str] | None = Field(default=None, description="Optional subset of task_type names to run/retry")
+    tasks: list[str] | None = Field(default=None, description="Optional subset of canonical task_type names to run/retry")
     force: bool = Field(default=False, description="Bypass cache and regenerate targeted tasks")
-    engine: str = Field(default="legacy", description="'legacy' (default 3-task) or 'v2' (unified 9-task assessment engine)")
-    save_snapshot: bool = Field(default=False, description="Persist generated daily report into ReportSnapshot")
+    profile: str | None = Field(default=None, description="Optional profile override: 'core' | 'full'")
+    save_snapshot: bool = Field(default=False, description="Persist generated report into ReportSnapshot")
 
 
 @router.get("/api/reports/list")
@@ -73,18 +72,17 @@ def api_reports_list(
 def api_daily_report(
     response: Response,
     date: str | None = Query(None, description="YYYY-MM-DD in Asia/Shanghai"),
-    polish: bool = Query(False, description="LLM narrative polish only"),
     from_snapshot: bool = Query(False, description="Prefer persisted ReportSnapshot if available"),
 ) -> dict[str, Any]:
     try:
         with session_scope() as session:
             if from_snapshot and date:
-                snap = get_daily_report_snapshot(session, date)
+                snap = get_report_snapshot(session, "daily", date)
                 if snap is not None:
                     response.headers["X-GNI-Report-Schema"] = str(snap.get("schema_version") or DAILY_SCHEMA_VERSION)
                     response.headers["X-GNI-Report-Source"] = "snapshot"
                     return snap
-            payload = build_daily_report(session, day=date, polish=polish)
+            payload = build_daily_report(session, day=date)
         response.headers["X-GNI-Report-Schema"] = str(payload.get("schema_version") or DAILY_SCHEMA_VERSION)
         response.headers["X-GNI-Report-Source"] = "live"
         return payload
@@ -102,17 +100,17 @@ def api_daily_report_package(
         with session_scope() as session:
             payload = None
             if from_snapshot and date:
-                payload = get_daily_report_snapshot(session, date)
+                payload = get_report_snapshot(session, "daily", date)
             if payload is None:
                 payload = build_daily_report(session, day=date, analyze=False)
             pkg = payload.get("report_package") or {}
             if format.strip().lower() == "markdown":
-                md = render_daily_brief_markdown(ReportPackageContract.model_validate(pkg))
-                return PlainTextResponse(md, media_type="text/markdown; charset=utf-8")
+                return PlainTextResponse(render_report_package_markdown(pkg), media_type="text/markdown; charset=utf-8")
             return {
                 "report_package": pkg,
                 "period": payload.get("period"),
                 "schema_version": payload.get("schema_version"),
+                "quality_gate": payload.get("quality_gate"),
             }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -135,8 +133,6 @@ def api_weekly_report_package(
     format: str = Query("json", description="'json' or 'markdown'"),
 ) -> Any:
     try:
-        from gni.reports.package_composer import render_report_package_markdown
-
         with session_scope() as session:
             payload = build_weekly_report(session, end_day=end)
             pkg = payload.get("report_package") or {}
@@ -159,8 +155,6 @@ def api_monthly_report_package(
     format: str = Query("json", description="'json' or 'markdown'"),
 ) -> Any:
     try:
-        from gni.reports.package_composer import render_report_package_markdown
-
         with session_scope() as session:
             payload = build_monthly_report(session, month=month, end_day=end)
             pkg = payload.get("report_package") or {}
@@ -253,25 +247,23 @@ def api_monthly_report(
 
 @router.post("/api/reports/{report_type}/analyze")
 def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str, Any]:
-    """Explicitly trigger (or retry failed tasks for) the LLM Intelligence Narrative / Assessment Layer."""
+    """Single canonical analysis entrypoint: triggers ReportOrchestrator for daily/weekly/monthly."""
     rt = report_type.strip().lower()
     if rt not in {"daily", "weekly", "monthly"}:
         raise HTTPException(status_code=400, detail=f"unsupported report_type: {report_type}")
     try:
         with session_scope() as session:
-            use_v2 = body.engine.strip().lower() in {"v2", "canonical", "orchestrator"}
             if rt == "daily":
                 payload = build_daily_report(
                     session,
                     day=body.period,
-                    analyze=not use_v2,
-                    analyze_tasks=None if use_v2 else body.tasks,
+                    analyze=True,
+                    analyze_tasks=body.tasks,
                     force_analyze=body.force,
-                    run_v2_assessments=use_v2,
-                    assessment_tasks=body.tasks if use_v2 else None,
+                    orchestrator_profile=body.profile or "core",
                 )
                 if body.save_snapshot:
-                    save_daily_report_snapshot(session, payload)
+                    save_report_snapshot(session, "daily", payload)
                 return payload
             if rt == "weekly":
                 return build_weekly_report(
@@ -280,7 +272,7 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str
                     analyze=True,
                     analyze_tasks=body.tasks,
                     force_analyze=body.force,
-                    use_orchestrator=use_v2,
+                    orchestrator_profile=body.profile or "core",
                 )
             p = (body.period or "").strip()
             use_end_day = p if len(p) == 10 else None
@@ -292,7 +284,7 @@ def api_analyze_report(report_type: str, body: ReportAnalyzeRequest) -> dict[str
                 analyze=True,
                 analyze_tasks=body.tasks,
                 force_analyze=body.force,
-                use_orchestrator=use_v2,
+                orchestrator_profile=body.profile or "full",
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

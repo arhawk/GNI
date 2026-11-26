@@ -206,14 +206,13 @@ def cmd_reports_daily(args: argparse.Namespace) -> int:
         payload = build_daily_report(
             session,
             day=args.date,
-            polish=bool(getattr(args, "polish", False)),
             analyze=bool(getattr(args, "analyze", False)),
             analyze_tasks=getattr(args, "task", None) or None,
             force_analyze=bool(getattr(args, "force", False)),
         )
     paths = write_daily_files(payload, out_dir=args.out_dir)
     sections = payload.get("sections") or {}
-    intel = payload.get("intelligence") or {}
+    ameta = payload.get("assessments_meta") or {}
     print(
         json.dumps(
             {
@@ -224,9 +223,8 @@ def cmd_reports_daily(args: argparse.Namespace) -> int:
                 "files": paths,
                 "missing_analysis": (sections.get("quality") or {}).get("missing_analysis"),
                 "events": len(sections.get("major_events") or []),
-                "polish": payload.get("polish"),
-                "intelligence_status": intel.get("status"),
-                "intelligence_meta": intel.get("meta"),
+                "assessments_status": ameta.get("status"),
+                "assessments_meta": ameta.get("meta"),
             },
             ensure_ascii=False,
             indent=2,
@@ -255,7 +253,7 @@ def cmd_reports_weekly(args: argparse.Namespace) -> int:
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     else:
         out_path = None
-    intel = payload.get("intelligence") or {}
+    ameta = payload.get("assessments_meta") or {}
     print(
         json.dumps(
             {
@@ -265,8 +263,8 @@ def cmd_reports_weekly(args: argparse.Namespace) -> int:
                 "generator": payload.get("generator"),
                 "article_count": payload.get("article_count"),
                 "file": str(out_path) if out_path else None,
-                "intelligence_status": intel.get("status"),
-                "intelligence_meta": intel.get("meta"),
+                "assessments_status": ameta.get("status"),
+                "assessments_meta": ameta.get("meta"),
                 "validation_ok": (payload.get("validation") or {}).get("ok"),
             },
             ensure_ascii=False,
@@ -296,7 +294,7 @@ def cmd_reports_monthly(args: argparse.Namespace) -> int:
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     else:
         out_path = None
-    intel = payload.get("intelligence") or {}
+    ameta = payload.get("assessments_meta") or {}
     print(
         json.dumps(
             {
@@ -306,8 +304,8 @@ def cmd_reports_monthly(args: argparse.Namespace) -> int:
                 "generator": payload.get("generator"),
                 "article_count": payload.get("article_count"),
                 "file": str(out_path) if out_path else None,
-                "intelligence_status": intel.get("status"),
-                "intelligence_meta": intel.get("meta"),
+                "assessments_status": ameta.get("status"),
+                "assessments_meta": ameta.get("meta"),
                 "validation_ok": (payload.get("validation") or {}).get("ok"),
             },
             ensure_ascii=False,

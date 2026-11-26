@@ -1,29 +1,31 @@
 import { Link } from 'react-router-dom'
-import type { EventInterpretation, NarrativeTaskOutput } from '../../api'
+import type { CanonicalAssessment, EventInterpretation } from '../../api'
 import { EvidenceChips } from './EvidenceChips'
 import { FindingsGrid } from './IntelligenceHeader'
 import './narrative.css'
 
 export function EventInterpretationCards({
-  task,
+  assessment,
   heading = '重点事件深度解读（Event Interpretation）',
 }: {
-  task?: NarrativeTaskOutput
+  assessment?: CanonicalAssessment
   heading?: string
 }) {
-  if (!task) return null
-  const items: EventInterpretation[] = task.event_interpretations || []
-  if (!items.length && !task.summary && !(task.findings || []).length) return null
+  if (!assessment) return null
+  const items: EventInterpretation[] = (assessment.details?.event_interpretations || []) as EventInterpretation[]
+  const summary = assessment.executive_summary || ''
+  const findings = assessment.key_findings || []
+  if (!items.length && !summary && !findings.length) return null
 
   return (
     <div className="gni-intel-panel">
       <div className="gni-intel-panel-head">
         <h3>{heading}</h3>
         <span className="muted small">
-          Prompt: {String(task.meta?.prompt_version || '—')} · 区分事件本体变化 / 媒体关注度变化 / 各国跟进时间
+          Prompt: {assessment.prompt_version || '—'} · 区分事件本体变化 / 媒体关注度变化 / 各国跟进时间
         </span>
       </div>
-      {task.summary && <p className="gni-intel-summary">{task.summary}</p>}
+      {summary && <p className="gni-intel-summary">{summary}</p>}
 
       {items.length > 0 && (
         <div className="gni-event-interp-list">
@@ -127,12 +129,12 @@ export function EventInterpretationCards({
         </div>
       )}
 
-      <FindingsGrid findings={task.findings} />
-      {(task.uncertainties || []).length > 0 && (
+      <FindingsGrid findings={findings} />
+      {(assessment.limitations || []).length > 0 && (
         <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
           <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
           <ul className="event-list" style={{ margin: 0 }}>
-            {(task.uncertainties || []).map((u, i) => (
+            {(assessment.limitations || []).map((u, i) => (
               <li key={i} className="muted small">
                 {u}
               </li>

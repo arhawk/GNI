@@ -1,10 +1,3 @@
-import type { DailyReport, PeriodReport } from '../../api'
-import {
-  QualityGateBanner,
-  ReportVisualDashboard,
-  WindowSpecBadge,
-} from './ReportVisualizations'
-
 type CuratedRef = {
   article_id?: string
   title?: string
@@ -61,7 +54,7 @@ export function CuratedEvidencePanel({
   const list = (refs ?? []).filter((r) => r && r.title).slice(0, 6)
   if (list.length === 0) return null
   return (
-    <details className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs">
+    <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs">
       <summary className="cursor-pointer font-semibold text-slate-700">
         精选代表证据（{list.length} 篇 · 多国/多源去重抽样）
       </summary>
@@ -88,60 +81,5 @@ export function CuratedEvidencePanel({
         ))}
       </ul>
     </details>
-  )
-}
-
-export function DailyReportViewChrome({
-  data,
-  selectedDate,
-}: {
-  data: DailyReport
-  selectedDate: string
-}) {
-  return (
-    <div className="mb-4">
-      <ReportExportBar cadence="daily" period={data.period} selectedDate={selectedDate} />
-      <WindowSpecBadge spec={data.window_spec} />
-      <QualityGateBanner gate={data.quality_gate} />
-      <ReportVisualDashboard visualizations={data.visualizations} cadence="daily" />
-    </div>
-  )
-}
-
-export function WeeklyReportViewChrome({
-  data,
-  selectedDate,
-}: {
-  data: PeriodReport
-  selectedDate: string
-}) {
-  const pkgRefs = (data.report_package as { evidence_refs?: CuratedRef[] } | undefined)?.evidence_refs
-  return (
-    <div className="mb-4">
-      <ReportExportBar cadence="weekly" period={data.period} selectedDate={selectedDate} />
-      <WindowSpecBadge spec={data.window_spec} />
-      <QualityGateBanner gate={data.quality_gate} />
-      <ReportVisualDashboard visualizations={data.visualizations} cadence="weekly" />
-      <CuratedEvidencePanel refs={pkgRefs} />
-    </div>
-  )
-}
-
-export function MonthlyReportViewChrome({
-  data,
-  selectedDate,
-}: {
-  data: PeriodReport
-  selectedDate: string
-}) {
-  const pkgRefs = (data.report_package as { evidence_refs?: CuratedRef[] } | undefined)?.evidence_refs
-  return (
-    <div className="mb-4">
-      <ReportExportBar cadence="monthly" period={data.period} selectedDate={selectedDate} />
-      <WindowSpecBadge spec={data.window_spec} />
-      <QualityGateBanner gate={data.quality_gate} />
-      <ReportVisualDashboard visualizations={data.visualizations} cadence="monthly" />
-      <CuratedEvidencePanel refs={pkgRefs} />
-    </div>
   )
 }
