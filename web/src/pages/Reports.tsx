@@ -21,7 +21,6 @@ import {
 } from '../components/narrative'
 import {
   EventRiskTable,
-  SourceOpsTable,
   StanceMatrixTable,
   TrendDeltaTable,
 } from '../components/tables'
@@ -72,9 +71,7 @@ export function ReportsPage() {
   const [error, setError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
-  const [showToneDetail, setShowToneDetail] = useState(false)
   const [showCoverageDetail, setShowCoverageDetail] = useState(false)
-  const [showDetail, setShowDetail] = useState(false)
 
   useEffect(() => {
     fetchReportCalendar(calendarMonth)
@@ -234,8 +231,6 @@ export function ReportsPage() {
           analyzeError={analyzeError}
           onGenerate={(force) => triggerAnalyze('daily', { force })}
           onRetryFailed={(tasks) => triggerAnalyze('daily', { tasks, force: true })}
-          showToneDetail={showToneDetail}
-          setShowToneDetail={setShowToneDetail}
           showCoverageDetail={showCoverageDetail}
           setShowCoverageDetail={setShowCoverageDetail}
         />
@@ -251,8 +246,6 @@ export function ReportsPage() {
           analyzeError={analyzeError}
           onGenerate={(force) => triggerAnalyze(tab, { force })}
           onRetryFailed={(tasks) => triggerAnalyze(tab, { tasks, force: true })}
-          showDetail={showDetail}
-          setShowDetail={setShowDetail}
         />
       )}
     </div>
@@ -385,7 +378,6 @@ const KPI_LABELS_ZH: Record<string, string> = {
   delta: '环比变化 Δ',
   reporting_countries: '报道国家数',
   major_events: '重点事件数',
-  months_with_history: '有数据月份',
 }
 
 function PeriodBrief({
@@ -395,8 +387,6 @@ function PeriodBrief({
   analyzeError,
   onGenerate,
   onRetryFailed,
-  showDetail,
-  setShowDetail,
 }: {
   data: PeriodReport
   tab: 'weekly' | 'monthly'
@@ -404,8 +394,6 @@ function PeriodBrief({
   analyzeError: string | null
   onGenerate: (force: boolean) => void
   onRetryFailed: (tasks: string[]) => void
-  showDetail: boolean
-  setShowDetail: (v: boolean) => void
 }) {
   const isMonthly = tab === 'monthly'
   const kind = isMonthly ? '月报' : '周报'
@@ -443,7 +431,7 @@ function PeriodBrief({
     <article className="daily-brief">
       <header className="brief-hero">
         <p className="muted small">
-          {kind} · {data.schema_version} · {data.period} · {data.generator || 'rule'}
+          {kind} · {data.period}
         </p>
         <h1>
           {isMonthly ? '每月战略研判 · Monthly Strategic Review' : '每周变化分析 · Weekly Intelligence Report'}
@@ -451,12 +439,14 @@ function PeriodBrief({
         <p className="callout">{data.disclaimer}</p>
         {!tasks.executive_analysis && <p>{s.summary?.overview_text || nar.executive}</p>}
         <div className="kpi-grid compact">
-          {Object.entries(kpis).map(([k, v]) => (
-            <div key={k}>
-              <div className="muted small">{KPI_LABELS_ZH[k] || k}</div>
-              <strong>{v}</strong>
-            </div>
-          ))}
+          {Object.entries(kpis)
+            .filter(([k]) => k !== 'months_with_history')
+            .map(([k, v]) => (
+              <div key={k}>
+                <div className="muted small">{KPI_LABELS_ZH[k] || k}</div>
+                <strong>{v}</strong>
+              </div>
+            ))}
         </div>
       </header>
 
@@ -572,7 +562,7 @@ function PeriodBrief({
       </section>
 
       <section className="brief-section">
-        <h2>{isMonthly ? '4 · 长期议题结构与趋势（Topic Trends）' : '3 · 议题趋势变化解释（Topic Trend Interpretation）'}</h2>
+        <h2>{isMonthly ? '4 · 长期议题结构与趋势（Topic Trends）' : '4 · 议题趋势变化解释（Topic Trend Interpretation）'}</h2>
         <TopicTrendAnalysisBlock
           task={tasks.topic_trend_analysis}
           title={isMonthly ? '长期议题结构变化与持续性分析' : '本周 vs 上周议题变化原因解释'}
@@ -593,7 +583,7 @@ function PeriodBrief({
         <h2>
           {isMonthly
             ? '5 · 国别媒体画像与叙事格局（Country-Level & Narrative Landscape）'
-            : '4 · 跨国叙事横向比较（Cross-country Narrative Comparison）'}
+            : '5 · 跨国叙事横向比较（Cross-country Narrative Comparison）'}
         </h2>
         <CrossCountryAnalysisBlock
           task={tasks.cross_country_analysis}
@@ -697,7 +687,7 @@ function PeriodBrief({
       </section>
 
       <section className="brief-section">
-        <h2>{isMonthly ? '6 · 长期对华立场趋势（Long-term Stance Trends）' : '5 · 情感与对华立场变化（Sentiment & Stance Changes）'}</h2>
+        <h2>{isMonthly ? '6 · 长期对华立场趋势（Long-term Stance Trends）' : '6 · 情感与对华立场变化（Sentiment & Stance Changes）'}</h2>
         <StanceAnalysisBlock
           task={tasks.stance_analysis}
           title={isMonthly ? '长期对华立场演变与单事件冲击辨析' : '周度对华立场比例 vs 绝对数量变化解读'}
@@ -707,7 +697,7 @@ function PeriodBrief({
       </section>
 
       <section className="brief-section">
-        <h2>{isMonthly ? '7 · 战略风险信号与条件性展望（Strategic Signals & Outlook）' : '6 · 新兴风险与下周监测重点（Emerging Signals & Next Week）'}</h2>
+        <h2>{isMonthly ? '7 · 战略风险信号与条件性展望（Strategic Signals & Outlook）' : '7 · 新兴风险与下周监测重点（Emerging Signals & Next Week）'}</h2>
         <OutlookSignalsPanel
           task={tasks.emerging_signals}
           heading={isMonthly ? '战略风险信号与下月条件性展望' : '持续性异常、跨国扩散信号与下周监测清单'}
@@ -731,33 +721,6 @@ function PeriodBrief({
         </details>
       </section>
 
-      <section className="brief-section">
-        <h2>{isMonthly ? '8 · 数据覆盖与口径说明（Data Coverage & Methodology）' : '7 · 数据覆盖与原始明细'}</h2>
-        {(s.quality?.notes || []).map((n, i) => (
-          <p key={i} className="muted small">
-            {n}
-          </p>
-        ))}
-        <button type="button" onClick={() => setShowDetail(!showDetail)}>
-          {showDetail ? '收起明细' : '展开原始统计明细 JSON'}
-        </button>
-        {showDetail && (
-          <pre className="muted small" style={{ whiteSpace: 'pre-wrap' }}>
-            {JSON.stringify(
-              {
-                source_buckets: s.summary?.source_buckets,
-                event_evolution: s.event_evolution,
-                cross_country_narrative: s.cross_country_narrative,
-                narrative_landscape: s.narrative_landscape,
-                sentiment: s.sentiment_stance?.by_country_sentiment,
-                quality: s.quality,
-              },
-              null,
-              2,
-            )}
-          </pre>
-        )}
-      </section>
     </article>
   )
 }
@@ -768,8 +731,6 @@ function DailyBrief({
   analyzeError,
   onGenerate,
   onRetryFailed,
-  showToneDetail,
-  setShowToneDetail,
   showCoverageDetail,
   setShowCoverageDetail,
 }: {
@@ -778,8 +739,6 @@ function DailyBrief({
   analyzeError: string | null
   onGenerate: (force: boolean) => void
   onRetryFailed: (tasks: string[]) => void
-  showToneDetail: boolean
-  setShowToneDetail: (v: boolean) => void
   showCoverageDetail: boolean
   setShowCoverageDetail: (v: boolean) => void
 }) {
@@ -791,7 +750,6 @@ function DailyBrief({
   const connectedN = data.connected?.countries ?? data.country_scope?.length ?? 0
 
   const stats = s.overview_stats
-  const ingest = stats?.ingest || {}
   const risk = summary.risk_banner
   const intel = data.intelligence
   const tasks = intel?.tasks || {}
@@ -805,8 +763,7 @@ function DailyBrief({
         <h1>全球对华监测 · 日报</h1>
         <p className="muted small">
           当前接入 {connectedN} 国
-          {data.connected?.active_sources != null ? ` · 活跃源 ${data.connected.active_sources}` : ''} ·{' '}
-          {data.period} · {data.schema_version} · {data.generator || 'rule'}
+          {data.connected?.active_sources != null ? ` · 活跃源 ${data.connected.active_sources}` : ''} · {data.period}
         </p>
         <p className="callout">{data.disclaimer}</p>
         <div className="kpi-grid compact">
@@ -879,11 +836,6 @@ function DailyBrief({
 
       <section className="brief-section">
         <h2>2 · 涉华报道量与对华立场分布</h2>
-        <div className="kpi-grid compact">
-          <Kpi label="当日采集" value={Number(ingest.day_total ?? kpis.day_articles ?? 0)} />
-          <Kpi label="排除/重复" value={Number((ingest.excluded_from_metrics ?? 0) + (ingest.duplicates ?? 0))} />
-          <Kpi label="采集异常源" value={Number(stats?.crawl_summary?.failing ?? 0)} />
-        </div>
         {s.v1_stats && <V1StatsBlock v1={s.v1_stats} />}
         {stats?.media_type_counts_zh && (
           <p className="muted small">
@@ -892,21 +844,6 @@ function DailyBrief({
               .map(([k, v]) => `${k} ${v}`)
               .join(' · ') || '—'}
           </p>
-        )}
-        <button type="button" className="linkish" onClick={() => setShowToneDetail(!showToneDetail)}>
-          {showToneDetail ? '收起立场计数' : '展开立场计数 / 官方vs媒体主题'}
-        </button>
-        {showToneDetail && (
-          <pre className="muted small" style={{ whiteSpace: 'pre-wrap' }}>
-            {JSON.stringify(
-              {
-                stance: s.tone.overall_stance_counts,
-                narrative_split: stats?.narrative_split,
-              },
-              null,
-              2,
-            )}
-          </pre>
         )}
       </section>
 
@@ -1000,32 +937,6 @@ function DailyBrief({
         </details>
       </section>
 
-      <section className="brief-section">
-        <h2>5 · 运维与数据覆盖说明</h2>
-        <details>
-          <summary className="muted small">
-            展开次日规则跟踪建议（{(s.ops?.follow_ups || []).length}）与采集状态（异常源 {Number(stats?.crawl_summary?.failing ?? 0)}）
-          </summary>
-          <p className="muted small">{s.ops?.note}</p>
-          <h3>规则跟踪建议</h3>
-          <ul className="event-list">
-            {(s.ops?.follow_ups || []).map((f) => (
-              <li key={String(f.event_id || f.title)}>
-                {f.href ? <Link to={f.href}>{f.title}</Link> : f.title}
-                <div className="muted small">{f.action}</div>
-              </li>
-            ))}
-            {(s.ops?.follow_ups || []).length === 0 && <li className="muted">无专项跟踪项</li>}
-          </ul>
-          <h3>采集状态</h3>
-          <SourceOpsTable rows={s.ops?.crawl_status || []} defaultOnlyFailed />
-        </details>
-        <p className="muted small" style={{ marginTop: '0.5rem' }}>
-          局限：分析积压 {s.quality.missing_analysis}；无样本国{' '}
-          {(s.quality.countries_without_sample || []).join(', ') || '—'}。
-          {(s.quality.notes || []).slice(0, 2).join(' ')}
-        </p>
-      </section>
     </div>
   )
 }
@@ -1089,16 +1000,6 @@ function V1StatsBlock({ v1 }: { v1: V1StatsByScope }) {
         {g.unclassified_count} · 立场判定覆盖率 <strong>{fmtPct(g.stance_coverage_rate)}</strong>
       </p>
       <StanceMatrixTable rows={activeRows} dimensionLabel={activeLabel} />
-    </div>
-  )
-}
-
-function Kpi({ label, value, hint }: { label: string; value: number; hint?: string }) {
-  return (
-    <div className="brief-kpi">
-      <div className="brief-kpi-value">{value}</div>
-      <div className="brief-kpi-label">{label}</div>
-      {hint && <div className="muted small">{hint}</div>}
     </div>
   )
 }
