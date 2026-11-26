@@ -32,10 +32,14 @@ from gni.infrastructure.models import (
     ArticleChinaSpan,
     Event,
     EventArticle,
+    EventLocation,
+    EventParticipant,
+    NarrativeCluster,
     Source,
 )
 from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
 from gni.metrics.v1_stats import normalize_url_for_dedup
+from gni.reports.risk_tagging import media_type_bucket
 
 ARTICLE_CAP_BY_REPORT = {
     "daily": 18,
@@ -48,6 +52,11 @@ EVENT_CAP_BY_REPORT = {
     "monthly": 10,
 }
 PER_EVENT_ARTICLE_CAP = 4
+PER_EVENT_ARTICLE_CAP_BY_REPORT = {
+    "daily": 4,
+    "weekly": 6,
+    "monthly": 6,
+}
 MIN_RELIABLE_SAMPLE_N = 3
 LOW_COVERAGE_THRESHOLD = 0.7
 
@@ -64,6 +73,8 @@ class EvidenceBundle:
     historical: dict[str, Any]
     alerts: list[dict[str, Any]]
     evidence_hash: str
+    counter_examples: list[dict[str, Any]] = field(default_factory=list)
+    orphan_articles: list[dict[str, Any]] = field(default_factory=list)
     global_article_count: int = 0
     low_sample_scopes: list[str] = field(default_factory=list)
     allowed_article_ids: set[str] = field(default_factory=set)
@@ -92,6 +103,7 @@ class EvidenceBundle:
                 for ev in self.events[:6]
             ]
             base["articles"] = self.articles[:12]
+            base["counter_examples"] = self.counter_examples[:4]
             base["alerts"] = self.alerts[:8]
         elif task_type == "event_analysis":
             base["events"] = self.events
@@ -103,6 +115,7 @@ class EvidenceBundle:
                 if a.get("article_id")
             }
             base["articles"] = [a for a in self.articles if a["article_id"] in ev_aids][:20]
+            base["counter_examples"] = self.counter_examples[:3]
         elif task_type == "topic_trend_analysis":
             base["events"] = [
                 {
@@ -114,9 +127,11 @@ class EvidenceBundle:
                 for ev in self.events[:8]
             ]
             base["articles"] = self.articles[:22]
+            base["counter_examples"] = self.counter_examples[:4]
         elif task_type == "cross_country_analysis":
             base["events"] = self.events[:6]
             base["articles"] = self.articles
+            base["counter_examples"] = self.counter_examples[:4]
         elif task_type == "stance_analysis":
             base["events"] = [
                 {
@@ -128,6 +143,7 @@ class EvidenceBundle:
                 for ev in self.events[:6]
             ]
             base["articles"] = self.articles[:24]
+            base["counter_examples"] = self.counter_examples[:4]
         elif task_type == "emerging_signals":
             base["alerts"] = self.alerts[:12]
             base["events"] = [
@@ -143,9 +159,12 @@ class EvidenceBundle:
                 for ev in self.events[:8]
             ]
             base["articles"] = self.articles[:14]
+            if self.orphan_articles:
+                base["orphan_articles"] = self.orphan_articles[:6]
         else:
             base["events"] = self.events[:6]
             base["articles"] = self.articles[:16]
+            base["counter_examples"] = self.counter_examples[:4]
             base["alerts"] = self.alerts[:8]
         return base
 
@@ -377,23 +396,30 @@ def _compute_historical_evidence(
     if report_type == "weekly":
         existing_hist = sections.get("historical_v1_stats")
         series: list[dict[str, Any]] = []
-        if isinstance(existing_hist, list) and existing_hist:
-            series = list(existing_hist)
-        elif win_start is not None and win_end is not None:
+        countries_series: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        topics_series: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        if win_start is not None and win_end is not None:
             for offset in range(3, -1, -1):
                 s = win_start - timedelta(days=7 * offset)
                 e = win_end - timedelta(days=7 * offset)
-                snap = run_v1_stat_snapshots(
-                    session,
-                    period_start=s,
-                    period_end=e,
-                    persist=False,
-                    include_zero_taxonomy=False,
-                )
-                g = (snap["by_scope"] or {}).get("global") or {}
+                lbl = f"{s.date().isoformat()}~{(e - timedelta(days=1)).date().isoformat()}"
+                if offset == 0 and isinstance(sections.get("v1_stats"), dict):
+                    by_scope = sections["v1_stats"]
+                elif offset == 1 and isinstance(v1_prev, dict):
+                    by_scope = v1_prev
+                else:
+                    snap = run_v1_stat_snapshots(
+                        session,
+                        period_start=s,
+                        period_end=e,
+                        persist=False,
+                        include_zero_taxonomy=False,
+                    )
+                    by_scope = snap["by_scope"] or {}
+                g = by_scope.get("global") or {}
                 series.append(
                     {
-                        "label": f"{s.date().isoformat()}~{(e - timedelta(days=1)).date().isoformat()}",
+                        "label": lbl,
                         "article_count": int(g.get("article_count") or 0),
                         "positive_pct": _fmt_pct(g.get("positive_rate")),
                         "neutral_pct": _fmt_pct(g.get("neutral_rate")),
@@ -401,12 +427,34 @@ def _compute_historical_evidence(
                         "stance_coverage_pct": _fmt_pct(g.get("stance_coverage_rate")),
                     }
                 )
+                for cr in (by_scope.get("countries") or [])[:6]:
+                    if isinstance(cr, dict) and (cr.get("article_count") or 0) > 0:
+                        countries_series[str(cr.get("scope_id"))].append(
+                            {
+                                "label": lbl,
+                                "article_count": int(cr.get("article_count") or 0),
+                                "negative_pct": _fmt_pct(cr.get("negative_rate")),
+                            }
+                        )
+                for tr in (by_scope.get("topics") or [])[:6]:
+                    if isinstance(tr, dict) and (tr.get("article_count") or 0) > 0:
+                        topics_series[str(tr.get("scope_id"))].append(
+                            {
+                                "label": lbl,
+                                "article_count": int(tr.get("article_count") or 0),
+                                "negative_pct": _fmt_pct(tr.get("negative_rate")),
+                            }
+                        )
+        elif isinstance(existing_hist, list) and existing_hist:
+            series = list(existing_hist)
         non_empty = [r for r in series if (r.get("article_count") or 0) > 0]
         missing = [r["label"] for r in series if (r.get("article_count") or 0) == 0]
         return (
             {
                 "window_kind": "weekly_4w_series",
                 "weeks_series": series,
+                "countries_4w_series": dict(countries_series),
+                "topics_4w_series": dict(topics_series),
                 "weeks_with_data": len(non_empty),
                 "missing_weeks": missing,
                 "history_note": (
@@ -421,9 +469,9 @@ def _compute_historical_evidence(
     # monthly
     existing_hist = sections.get("historical_v1_stats")
     series = []
-    if isinstance(existing_hist, list) and existing_hist:
-        series = list(existing_hist)
-    elif win_start is not None:
+    countries_m_series: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    topics_m_series: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    if win_start is not None:
         # Build up to 6 calendar months ending with current month
         cur_y, cur_m = win_start.year, win_start.month
         months: list[tuple[int, int]] = []
@@ -439,20 +487,25 @@ def _compute_historical_evidence(
 
         tz = win_start.tzinfo or timezone.utc
         for my, mm in months:
-            last_day = monthrange(my, mm)[1]
-            ms = datetime(my, mm, 1, tzinfo=tz)
-            me = datetime(my, mm, last_day, tzinfo=tz) + timedelta(days=1)
-            snap = run_v1_stat_snapshots(
-                session,
-                period_start=ms,
-                period_end=me,
-                persist=False,
-                include_zero_taxonomy=False,
-            )
-            g = (snap["by_scope"] or {}).get("global") or {}
+            mlabel = f"{my:04d}-{mm:02d}"
+            if my == cur_y and mm == cur_m and isinstance(sections.get("v1_stats"), dict):
+                by_scope = sections["v1_stats"]
+            else:
+                last_day = monthrange(my, mm)[1]
+                ms = datetime(my, mm, 1, tzinfo=tz)
+                me = datetime(my, mm, last_day, tzinfo=tz) + timedelta(days=1)
+                snap = run_v1_stat_snapshots(
+                    session,
+                    period_start=ms,
+                    period_end=me,
+                    persist=False,
+                    include_zero_taxonomy=False,
+                )
+                by_scope = snap["by_scope"] or {}
+            g = by_scope.get("global") or {}
             series.append(
                 {
-                    "month": f"{my:04d}-{mm:02d}",
+                    "month": mlabel,
                     "article_count": int(g.get("article_count") or 0),
                     "positive_pct": _fmt_pct(g.get("positive_rate")),
                     "neutral_pct": _fmt_pct(g.get("neutral_rate")),
@@ -460,12 +513,34 @@ def _compute_historical_evidence(
                     "stance_coverage_pct": _fmt_pct(g.get("stance_coverage_rate")),
                 }
             )
+            for cr in (by_scope.get("countries") or [])[:6]:
+                if isinstance(cr, dict) and (cr.get("article_count") or 0) > 0:
+                    countries_m_series[str(cr.get("scope_id"))].append(
+                        {
+                            "month": mlabel,
+                            "article_count": int(cr.get("article_count") or 0),
+                            "negative_pct": _fmt_pct(cr.get("negative_rate")),
+                        }
+                    )
+            for tr in (by_scope.get("topics") or [])[:6]:
+                if isinstance(tr, dict) and (tr.get("article_count") or 0) > 0:
+                    topics_m_series[str(tr.get("scope_id"))].append(
+                        {
+                            "month": mlabel,
+                            "article_count": int(tr.get("article_count") or 0),
+                            "negative_pct": _fmt_pct(tr.get("negative_rate")),
+                        }
+                    )
+    elif isinstance(existing_hist, list) and existing_hist:
+        series = list(existing_hist)
     non_empty = [r for r in series if (r.get("article_count") or 0) > 0]
     missing_m = [r.get("month") or r.get("label") for r in series if (r.get("article_count") or 0) == 0]
     return (
         {
             "window_kind": "monthly_6m_series",
             "months_series": series,
+            "countries_6m_series": dict(countries_m_series),
+            "topics_6m_series": dict(topics_m_series),
             "months_with_data": len(non_empty),
             "missing_months": missing_m,
             "history_note": (
@@ -532,6 +607,7 @@ def prepare_evidence_bundle(
         "topics": stat_topics,
         "country_profiles": sections.get("country_profiles"),
         "narrative_landscape": sections.get("narrative_landscape"),
+        "cross_country_narrative": sections.get("cross_country_narrative"),
         "note": "所有数字均为程序确定性计算；严禁 LLM 重新计算或篡改任何数值。",
     }
 
@@ -550,13 +626,39 @@ def prepare_evidence_bundle(
         e.id: e for e in session.scalars(select(Event).where(Event.id.in_(event_ids))).all()
     } if event_ids else {}
     event_links_by_eid: dict[str, list[str]] = defaultdict(list)
+    event_locs_by_eid: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    event_parts_by_eid: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    event_narrs_by_eid: dict[str, list[dict[str, Any]]] = defaultdict(list)
     if event_ids:
         for link in session.scalars(
             select(EventArticle).where(EventArticle.event_id.in_(event_ids))
         ).all():
             event_links_by_eid[link.event_id].append(link.article_id)
+        for loc in session.scalars(
+            select(EventLocation).where(EventLocation.event_id.in_(event_ids))
+        ).all():
+            event_locs_by_eid[loc.event_id].append(
+                {"label": loc.label, "country_id": loc.country_id, "type": loc.location_type}
+            )
+        for part in session.scalars(
+            select(EventParticipant).where(EventParticipant.event_id.in_(event_ids))
+        ).all():
+            event_parts_by_eid[part.event_id].append(
+                {"name": part.participant_name or part.participant_id, "role": part.role}
+            )
+        for nc in session.scalars(
+            select(NarrativeCluster).where(NarrativeCluster.event_id.in_(event_ids))
+        ).all():
+            event_narrs_by_eid[nc.event_id].append(
+                {"label": nc.label, "frame_id": nc.frame_id, "summary": (nc.summary or "")[:160]}
+            )
 
-    all_candidate_aids: set[str] = set(window_article_ids)
+    orphan_aids: list[str] = [
+        str(oh.get("article_id"))
+        for oh in (sections.get("orphan_headlines") or [])
+        if isinstance(oh, dict) and oh.get("article_id")
+    ]
+    all_candidate_aids: set[str] = set(window_article_ids) | set(orphan_aids)
     for aids in event_links_by_eid.values():
         all_candidate_aids.update(aids)
     for raw_ev in raw_events:
@@ -579,7 +681,26 @@ def prepare_evidence_bundle(
         ).all():
             if sp.validation_status == "valid" and sp.text_original:
                 if len(spans_by_aid[sp.article_id]) < 2:
-                    spans_by_aid[sp.article_id].append(sp.text_original.strip()[:260])
+                    spans_by_aid[sp.article_id].append(sp.text_original.strip()[:340])
+
+    # Sort window_article_ids by relevance weight, stance confidence, excerpt richness, and recency
+    def _article_rank(aid: str) -> tuple[float, float, int, str]:
+        art = db_articles.get(aid)
+        if not art:
+            return (0.0, 0.0, 0, "")
+        ana = analyses.get(aid)
+        st = (ana.structured_result if ana else None) or {}
+        cs = st.get("china_stance") if isinstance(st.get("china_stance"), dict) else {}
+        conf = float(cs.get("stance_confidence") or 0.0) if isinstance(cs.get("stance_confidence"), (int, float)) else 0.0
+        has_span = 1 if spans_by_aid.get(aid) else 0
+        return (
+            float(art.china_relevance_weight or 0.0),
+            conf,
+            has_span,
+            art.published_at.isoformat() if art.published_at else "",
+        )
+
+    window_article_ids.sort(key=_article_rank, reverse=True)
 
     def _article_card(aid: str, *, event_id: str | None = None) -> dict[str, Any] | None:
         art = db_articles.get(aid)
@@ -594,20 +715,23 @@ def prepare_evidence_bundle(
         boards_v1 = extract_v1_boards(structured, schema_version=sver)
         stance_ev = extract_v1_stance_evidence(structured, schema_version=sver)
         quotes = [
-            str(x.get("quote") or x.get("span_text") or "").strip()[:220]
+            str(x.get("quote") or x.get("span_text") or "").strip()[:240]
             for x in stance_ev[:2]
             if isinstance(x, dict) and (x.get("quote") or x.get("span_text"))
         ]
         framing = structured.get("framing")
         frame_primary = framing.get("primary") if isinstance(framing, dict) else None
         cs = structured.get("china_stance") if isinstance(structured.get("china_stance"), dict) else {}
-        excerpt = " | ".join(spans_by_aid.get(aid) or []) or (art.content_clean or "")[:360]
+        excerpt = " | ".join(spans_by_aid.get(aid) or []) or (art.content_clean or "")[:650]
         return {
             "article_id": art.id,
             "title": art.title,
             "source_id": art.source_id,
             "source_name": src.name if src else art.source_id,
             "source_country": src.country_id if src else None,
+            "feed_scope": src.feed_scope if src else None,
+            "media_type": media_type_bucket(src),
+            "china_relevance_level": art.china_relevance_level,
             "published_at": art.published_at.isoformat() if art.published_at else None,
             "url": art.url,
             "stance_label": stance,
@@ -616,10 +740,11 @@ def prepare_evidence_bundle(
             "boards_v1": boards_v1,
             "framing": frame_primary,
             "stance_quotes": quotes,
-            "china_excerpt": excerpt[:380],
+            "china_excerpt": excerpt[:700],
             "event_id": event_id,
         }
 
+    per_event_cap = PER_EVENT_ARTICLE_CAP_BY_REPORT.get(report_type, PER_EVENT_ARTICLE_CAP)
     events_evidence: list[dict[str, Any]] = []
     event_selected_aids: list[tuple[str, str]] = []  # (aid, event_id)
     for raw_ev in raw_events:
@@ -632,18 +757,45 @@ def prepare_evidence_bundle(
             if isinstance(evi, dict) and evi.get("article_id") and str(evi["article_id"]) not in linked_ids:
                 linked_ids.append(str(evi["article_id"]))
 
-        # Select diverse representative articles for this event (country & stance diversity, capped at PER_EVENT_ARTICLE_CAP)
-        cards = [c for aid in linked_ids if (c := _article_card(aid, event_id=eid)) is not None]
-        cards.sort(key=lambda c: str(c.get("published_at") or ""), reverse=True)
+        # Deduplicate by URL & content_hash inside each event, prioritize 1 per country first, then (country, stance)
+        raw_cards = [c for aid in linked_ids if (c := _article_card(aid, event_id=eid)) is not None]
+        raw_cards.sort(key=lambda c: str(c.get("published_at") or ""), reverse=True)
+        cards: list[dict[str, Any]] = []
+        ev_seen_urls: set[str] = set()
+        ev_seen_hashes: set[str] = set()
+        for c in raw_cards:
+            uk = normalize_url_for_dedup(c.get("url"))
+            art_obj = db_articles.get(c["article_id"])
+            ch = (art_obj.content_hash or "").strip() if art_obj else ""
+            if uk and uk in ev_seen_urls:
+                continue
+            if ch and ch in ev_seen_hashes:
+                continue
+            if uk:
+                ev_seen_urls.add(uk)
+            if ch:
+                ev_seen_hashes.add(ch)
+            cards.append(c)
+
         picked: list[dict[str, Any]] = []
+        seen_countries: set[str | None] = set()
         seen_c_st: set[tuple[str | None, str]] = set()
+        # Pass 1: ensure at least 1 representative article per reporting country
+        for c in cards:
+            cid = c.get("source_country")
+            if cid and cid not in seen_countries and len(picked) < per_event_cap:
+                picked.append(c)
+                seen_countries.add(cid)
+                seen_c_st.add((cid, c.get("stance_label") or "Unclassified"))
+        # Pass 2: stance diversity across countries
         for c in cards:
             key = (c.get("source_country"), c.get("stance_label") or "Unclassified")
-            if key not in seen_c_st and len(picked) < PER_EVENT_ARTICLE_CAP:
+            if c not in picked and key not in seen_c_st and len(picked) < per_event_cap:
                 picked.append(c)
                 seen_c_st.add(key)
+        # Pass 3: fill remaining slots
         for c in cards:
-            if len(picked) >= PER_EVENT_ARTICLE_CAP:
+            if len(picked) >= per_event_cap:
                 break
             if c not in picked:
                 picked.append(c)
@@ -660,22 +812,42 @@ def prepare_evidence_bundle(
             if cid and pub and cid not in first_by_country:
                 first_by_country[cid] = pub
 
+        # Build timeline from raw_ev or linked articles
+        ev_timeline = raw_ev.get("timeline")
+        if not ev_timeline:
+            ev_timeline = [
+                {
+                    "at": c.get("published_at"),
+                    "country_id": c.get("source_country"),
+                    "article_id": c.get("article_id"),
+                }
+                for c in sorted(cards, key=lambda x: str(x.get("published_at") or ""))[:6]
+                if c.get("published_at")
+            ]
+
         events_evidence.append(
             {
                 "event_id": eid,
                 "title": raw_ev.get("title") or (ev_obj.title if ev_obj else ""),
-                "summary": raw_ev.get("overview_text") or (ev_obj.summary if ev_obj else ""),
+                "summary": (ev_obj.summary if ev_obj and ev_obj.summary else "") or (raw_ev.get("summary") or ""),
                 "actor": (raw_ev.get("core") or {}).get("actor") if isinstance(raw_ev.get("core"), dict) else (ev_obj.actor_key if ev_obj else raw_ev.get("actor_key")),
                 "action": (raw_ev.get("core") or {}).get("action") if isinstance(raw_ev.get("core"), dict) else (ev_obj.action_key if ev_obj else raw_ev.get("action_key")),
                 "object": (raw_ev.get("core") or {}).get("object") if isinstance(raw_ev.get("core"), dict) else (ev_obj.object_key if ev_obj else None),
                 "event_time": raw_ev.get("event_time") or (ev_obj.event_time.isoformat() if ev_obj and ev_obj.event_time else None),
                 "first_seen_at": raw_ev.get("first_seen_at") or (ev_obj.created_at.isoformat() if ev_obj and ev_obj.created_at else None),
                 "status": raw_ev.get("status") or (ev_obj.status if ev_obj else None),
-                "risk_level": raw_ev.get("risk_level"),
                 "importance_score": raw_ev.get("importance_score"),
                 "article_count": len(cards) or int((raw_ev.get("coverage") or {}).get("article_count") or raw_ev.get("article_count") or 0),
+                "this_week_articles": raw_ev.get("this_week_articles"),
+                "prev_week_articles": raw_ev.get("prev_week_articles"),
+                "this_month_articles": raw_ev.get("this_month_articles"),
                 "countries": countries_in_ev,
                 "country_first_reported_at": first_by_country,
+                "by_country_views": raw_ev.get("by_country_views") or [],
+                "timeline": ev_timeline[:6],
+                "locations": event_locs_by_eid.get(eid, [])[:3],
+                "participants": event_parts_by_eid.get(eid, [])[:5],
+                "narrative_clusters": event_narrs_by_eid.get(eid, [])[:3],
                 "anomaly_reasons": (raw_ev.get("anomaly") or {}).get("reasons") if isinstance(raw_ev.get("anomaly"), dict) else [],
                 "articles": picked,
             }
@@ -686,6 +858,7 @@ def prepare_evidence_bundle(
     selected_articles: list[dict[str, Any]] = []
     seen_aids: set[str] = set()
     seen_urls: set[str] = set()
+    seen_hashes: set[str] = set()
 
     def _try_add(card: dict[str, Any] | None) -> bool:
         if not card or len(selected_articles) >= cap:
@@ -696,9 +869,15 @@ def prepare_evidence_bundle(
         ukey = normalize_url_for_dedup(card.get("url"))
         if ukey and ukey in seen_urls:
             return False
+        art_obj = db_articles.get(aid)
+        ch = (art_obj.content_hash or "").strip() if art_obj else ""
+        if ch and ch in seen_hashes:
+            return False
         seen_aids.add(aid)
         if ukey:
             seen_urls.add(ukey)
+        if ch:
+            seen_hashes.add(ch)
         selected_articles.append(card)
         return True
 
@@ -761,6 +940,29 @@ def prepare_evidence_bundle(
         if len(selected_articles) >= cap:
             break
         _try_add(_article_card(aid))
+
+    # Explicit counter-examples contradicting dominant global stance (never sliced off by for_task)
+    counter_examples: list[dict[str, Any]] = []
+    pos_n = int((stat_global or {}).get("positive_count") or 0)
+    neu_n = int((stat_global or {}).get("neutral_count") or 0)
+    neg_n = int((stat_global or {}).get("negative_count") or 0)
+    dominant_stance = max(
+        [("Negative", neg_n), ("Neutral", neu_n), ("Positive", pos_n)],
+        key=lambda x: x[1],
+    )[0]
+    counter_targets = [s for s in ("Positive", "Negative", "Neutral") if s != dominant_stance]
+    ce_seen: set[str] = set()
+    for aid in window_article_ids:
+        if len(counter_examples) >= 4:
+            break
+        card = _article_card(aid)
+        if card and card.get("stance_label") in counter_targets and card["article_id"] not in ce_seen:
+            ce_seen.add(card["article_id"])
+            counter_examples.append(card)
+
+    orphan_articles: list[dict[str, Any]] = [
+        c for aid in orphan_aids[:6] if (c := _article_card(aid)) is not None
+    ]
 
     # 4. Alerts / Anomalies Evidence
     alerts_evidence: list[dict[str, Any]] = []
@@ -860,6 +1062,8 @@ def prepare_evidence_bundle(
         historical=historical,
         alerts=alerts_evidence,
         evidence_hash=ev_hash,
+        counter_examples=counter_examples,
+        orphan_articles=orphan_articles,
         global_article_count=global_count,
         low_sample_scopes=low_sample_scopes,
         allowed_article_ids=allowed_article_ids,

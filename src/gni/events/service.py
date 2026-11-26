@@ -304,11 +304,30 @@ def _event_sort_time(e: Event) -> datetime:
     return datetime.min.replace(tzinfo=timezone.utc)
 
 
-def list_events(session: Session, *, limit: int = 50) -> list[dict[str, Any]]:
+def list_events(
+    session: Session,
+    *,
+    limit: int = 50,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> list[dict[str, Any]]:
     from sqlalchemy import func
 
     # Fetch then sort in Python so SQLite/Postgres both honor event_time fallbacks.
-    rows = list(session.scalars(select(Event).limit(max(limit * 3, 80))).all())
+    if window_start is not None or window_end is not None:
+        all_rows = list(session.scalars(select(Event)).all())
+        ws = window_start if (window_start is None or window_start.tzinfo) else window_start.replace(tzinfo=timezone.utc)
+        we = window_end if (window_end is None or window_end.tzinfo) else window_end.replace(tzinfo=timezone.utc)
+        rows = []
+        for e in all_rows:
+            t = _event_sort_time(e)
+            if ws is not None and t < ws:
+                continue
+            if we is not None and t >= we:
+                continue
+            rows.append(e)
+    else:
+        rows = list(session.scalars(select(Event).limit(max(limit * 3, 80))).all())
     rows.sort(key=_event_sort_time, reverse=True)
     rows = rows[:limit]
     out: list[dict[str, Any]] = []

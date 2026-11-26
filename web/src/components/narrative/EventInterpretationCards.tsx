@@ -128,6 +128,18 @@ export function EventInterpretationCards({
       )}
 
       <FindingsGrid findings={task.findings} />
+      {(task.uncertainties || []).length > 0 && (
+        <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
+          <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
+          <ul className="event-list" style={{ margin: 0 }}>
+            {(task.uncertainties || []).map((u, i) => (
+              <li key={i} className="muted small">
+                {u}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

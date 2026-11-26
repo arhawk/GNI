@@ -1,4 +1,4 @@
-"""Daily Intelligence Brief: daily_report_schema_v2 (rule facts + optional LLM narratives)."""
+"""Daily Intelligence Brief: daily_report_schema_v4 (Global Situation + Intelligence Judgment)."""
 
 from __future__ import annotations
 
@@ -481,7 +481,7 @@ def build_daily_report(
                 "country_id": cid,
                 "n": n,
                 "status": tone_status,
-                "sentiment_counts": sc if tone_status == "ok" else sc,
+                "sentiment_counts": sc,
                 "stance_counts": stc,
                 "summary_text": _country_tone_summary(cid, n, sc, stc),
                 "href": f"/countries?c={cid}",
@@ -502,7 +502,12 @@ def build_daily_report(
     )
 
     # Major events — importance first; touch day window via event_time / first article / updated
-    raw_events = list_events(session, limit=40)
+    raw_events = list_events(
+        session,
+        limit=40,
+        window_start=win_start - timedelta(days=7),
+        window_end=win_end + timedelta(days=1),
+    )
     event_rows = list(session.scalars(select(Event).limit(80)).all())
     event_by_id = {e.id: e for e in event_rows}
 
@@ -766,7 +771,9 @@ def build_daily_report(
     for m in major_events:
         score = float(m.get("china_signal_score") or 0)
         risk = str(m.get("risk_level") or "unmapped")
-        if score >= PRIMARY_EVENT_MIN_SCORE or risk in {"high", "medium"}:
+        imp_val = float(m.get("importance_score") or 0)
+        country_n = int((m.get("coverage") or {}).get("country_count") or 0)
+        if score >= PRIMARY_EVENT_MIN_SCORE or risk in {"high", "medium"} or imp_val >= 0.6 or country_n >= 2:
             m["list_tier"] = "primary"
         else:
             m["list_tier"] = "secondary"
@@ -1383,18 +1390,22 @@ def build_daily_report(
     payload["validation"] = validate_daily_report(payload)
 
     if polish:
-        from gni.reports.polish import polish_daily_narratives
-
-        polished = polish_daily_narratives(payload)
-        if polished:
-            if polished.get("executive"):
-                payload["sections"]["summary"]["overview_text"] = polished["executive"]
-            payload["narratives"].update(polished)
-            payload["generator"] = "rule_brief_v2+llm_narratives"
-            payload["polish"] = {"applied": True}
-            payload["validation"] = validate_daily_report(payload)
+        has_intel = (payload["intelligence"].get("meta") or {}).get("completed_tasks", 0) > 0
+        if has_intel:
+            payload["polish"] = {"applied": False, "reason": "skipped_when_intelligence_present"}
         else:
-            payload["polish"] = {"applied": False, "reason": "llm_unavailable_or_rejected"}
+            from gni.reports.polish import polish_daily_narratives
+
+            polished = polish_daily_narratives(payload)
+            if polished:
+                if polished.get("executive"):
+                    payload["sections"]["summary"]["overview_text"] = polished["executive"]
+                payload["narratives"].update(polished)
+                payload["generator"] = "rule_brief_v4+llm_narratives"
+                payload["polish"] = {"applied": True}
+                payload["validation"] = validate_daily_report(payload)
+            else:
+                payload["polish"] = {"applied": False, "reason": "llm_unavailable_or_rejected"}
 
     return payload
 
@@ -1523,6 +1534,10 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
         exec_t = intel_tasks.get("executive_analysis") or {}
         if exec_t.get("summary"):
             lines += ["", "### 综合研判（Executive Judgment）", "", exec_t["summary"], ""]
+        if exec_t.get("important_changes"):
+            lines.append("- 核心变化: " + "；".join(exec_t["important_changes"]))
+        if exec_t.get("main_drivers"):
+            lines.append("- 主要驱动: " + "；".join(exec_t["main_drivers"]))
         for f in exec_t.get("findings") or []:
             refs = ", ".join(
                 f"{r.get('type')}:{r.get('ref_id')}" for r in (f.get("evidence_refs") or [])
@@ -1531,6 +1546,10 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
                 f"- **[{f.get('classification')}] {f.get('title')}** ({f.get('confidence')}): "
                 f"{f.get('conclusion')} {f'(证据: `{refs}`)' if refs else ''}"
             )
+        if exec_t.get("uncertainties"):
+            lines.append("- 不确定性: " + "；".join(exec_t["uncertainties"]))
+        if exec_t.get("follow_up_questions"):
+            lines.append("- 待核查问题: " + "；".join(exec_t["follow_up_questions"]))
         ev_t = intel_tasks.get("event_analysis") or {}
         if ev_t.get("event_interpretations"):
             lines += ["", "### 重点事件深度解读", ""]
@@ -1545,6 +1564,8 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
                         f"- 事件本体变化 vs 媒体关注变化: {ei.get('event_actual_changes') or '—'} / "
                         f"{ei.get('coverage_attention_changes') or '—'}"
                     )
+                if ei.get("country_differences"):
+                    lines.append(f"- 各国报道差异: {ei['country_differences']}")
                 if ei.get("why_it_matters"):
                     lines.append(f"- 为什么值得关注: {ei['why_it_matters']}")
                 if ei.get("what_to_monitor"):
@@ -1556,8 +1577,11 @@ def render_daily_markdown(payload: dict[str, Any]) -> str:
             for osig in sig_t["outlook_signals"]:
                 lines.append(
                     f"- **{osig.get('signal')}** ({osig.get('confidence')}): "
-                    f"{osig.get('reasoning')} · 不确定性: {osig.get('uncertainty') or '待观察'}"
+                    f"{osig.get('reasoning')} · 潜在触发: {osig.get('potential_trigger') or '—'} · "
+                    f"不确定性: {osig.get('uncertainty') or '待观察'}"
                 )
+                if osig.get("what_to_monitor"):
+                    lines.append(f"  - 监测指标: {'；'.join(osig['what_to_monitor'])}")
 
     val = payload.get("validation") or {}
     lines += ["", f"**validation.ok:** {val.get('ok')}", ""]

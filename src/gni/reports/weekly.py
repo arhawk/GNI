@@ -178,7 +178,12 @@ def build_weekly_report(
             {"topic": t, "this_week": cur, "last_week": prev, "delta": cur - prev, "status": status}
         )
 
-    events = list_events(session, limit=80)
+    events = list_events(
+        session,
+        limit=80,
+        window_start=win_start - timedelta(days=14),
+        window_end=win_end + timedelta(days=1),
+    )
     ev_ids_all = [e["id"] for e in events if e.get("id")]
     db_events = {
         ev.id: ev for ev in session.scalars(select(Event).where(Event.id.in_(ev_ids_all))).all()
@@ -480,3 +485,51 @@ def _upsert_snapshot(
             )
         )
     session.flush()
+
+
+def render_weekly_markdown(payload: dict[str, Any]) -> str:
+    """Render Weekly Intelligence Report to readable Markdown (LLM conclusions first)."""
+    s = payload.get("sections") or {}
+    intel = payload.get("intelligence") or {}
+    tasks = intel.get("tasks") or {}
+    exec_t = tasks.get("executive_analysis") or {}
+    lines: list[str] = [
+        f"# GNI Weekly Intelligence Report（{payload.get('period')}）",
+        "",
+        f"**schema:** `{payload.get('schema_version')}` · **generator:** `{payload.get('generator')}`",
+        "",
+        f"> {payload.get('disclaimer')}",
+        "",
+        "## 1. 周度综合研判（Weekly Executive Summary）",
+        "",
+        exec_t.get("summary") or (s.get("summary") or {}).get("overview_text") or "",
+        "",
+    ]
+    for f in exec_t.get("findings") or []:
+        lines.append(f"- **[{f.get('classification')}] {f.get('title')}** ({f.get('confidence')}): {f.get('conclusion')}")
+    if s.get("historical_v1_stats"):
+        lines += ["", "## 2. 近 4 周文章级重算序列", "", "| 周期 | 唯一文章数 | 正面% | 中性% | 负面% | 覆盖率% |", "|------|------------|-------|-------|-------|---------|"]
+        for row in s["historical_v1_stats"]:
+            lines.append(
+                f"| {row.get('label')} | {row.get('article_count')} | {row.get('positive_pct')} | "
+                f"{row.get('neutral_pct')} | {row.get('negative_pct')} | {row.get('stance_coverage_pct')} |"
+            )
+    ev_t = tasks.get("event_analysis") or {}
+    if ev_t.get("event_interpretations"):
+        lines += ["", "## 3. 重点事件演化分析", ""]
+        for ei in ev_t["event_interpretations"]:
+            lines.append(f"### {ei.get('title')} (`{ei.get('event_id')}`)")
+            if ei.get("event_actual_changes"):
+                lines.append(f"- 事件本体变化: {ei['event_actual_changes']}")
+            if ei.get("coverage_attention_changes"):
+                lines.append(f"- 媒体关注变化: {ei['coverage_attention_changes']}")
+            if ei.get("country_differences"):
+                lines.append(f"- 各国报道差异: {ei['country_differences']}")
+            lines.append("")
+    sig_t = tasks.get("emerging_signals") or {}
+    if sig_t.get("outlook_signals"):
+        lines += ["", "## 4. 新兴风险信号与下周监测重点", ""]
+        for osig in sig_t["outlook_signals"]:
+            lines.append(f"- **{osig.get('signal')}** ({osig.get('confidence')}): {osig.get('reasoning')}")
+    lines += ["", f"**validation.ok:** {(payload.get('validation') or {}).get('ok')}", ""]
+    return "\n".join(lines)

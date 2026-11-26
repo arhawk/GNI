@@ -145,6 +145,16 @@ export function ReportsPage() {
   )
 }
 
+const KPI_LABELS_ZH: Record<string, string> = {
+  china_articles: '涉华唯一文章',
+  prev_week_articles: '上周同期文章',
+  prev_month_articles: '上月同期文章',
+  delta: '环比变化 Δ',
+  reporting_countries: '报道国家数',
+  major_events: '重点事件数',
+  months_with_history: '有数据月份',
+}
+
 function PeriodBrief({
   data,
   tab,
@@ -206,11 +216,11 @@ function PeriodBrief({
           {isMonthly ? '每月战略研判 · Monthly Strategic Review' : '每周变化分析 · Weekly Intelligence Report'}
         </h1>
         <p className="callout">{data.disclaimer}</p>
-        <p>{s.summary?.overview_text || nar.executive}</p>
+        {!tasks.executive_analysis && <p>{s.summary?.overview_text || nar.executive}</p>}
         <div className="kpi-grid compact">
           {Object.entries(kpis).map(([k, v]) => (
             <div key={k}>
-              <div className="muted small">{k}</div>
+              <div className="muted small">{KPI_LABELS_ZH[k] || k}</div>
               <strong>{v}</strong>
             </div>
           ))}
@@ -229,17 +239,19 @@ function PeriodBrief({
         />
       </section>
 
-      {isMonthly && (s.historical_v1_stats || []).length > 0 && (
+      {(s.historical_v1_stats || []).length > 0 && (
         <section className="brief-section">
-          <h2>2 · 全球关注格局与近 6 个月文章级重算序列</h2>
+          <h2>{isMonthly ? '2 · 全球关注格局与近 6 个月文章级重算序列' : '2 · 近 4 周文章级重算趋势序列'}</h2>
           <p className="muted small">
-            所有月度统计均直接基于文章级 V1.0 口径重算（不合并周报）；缺失月份如实标 0，不伪装成趋势。
+            {isMonthly
+              ? '所有月度统计均直接基于文章级 V1.0 口径重算（不合并周报）；缺失月份如实标 0，不伪装成趋势。'
+              : '近 4 周逐周 V1.0 文章级统计；缺失周如实标 0，不伪装成趋势。'}
           </p>
           <div className="gni-table-wrap">
             <table className="gni-table">
               <thead>
                 <tr>
-                  <th>月份</th>
+                  <th>{isMonthly ? '月份' : '周期'}</th>
                   <th className="gni-num">唯一文章数</th>
                   <th className="gni-num">正面 %</th>
                   <th className="gni-num">中性 %</th>
@@ -249,8 +261,8 @@ function PeriodBrief({
               </thead>
               <tbody>
                 {(s.historical_v1_stats || []).map((row, idx) => (
-                  <tr key={String(row.month || idx)}>
-                    <td className="gni-mono">{String(row.month || '—')}</td>
+                  <tr key={String(row.month || row.label || idx)}>
+                    <td className="gni-mono">{String(row.month || row.label || '—')}</td>
                     <td className="gni-num">
                       <strong>{String(row.article_count ?? 0)}</strong>
                     </td>
@@ -269,26 +281,61 @@ function PeriodBrief({
       )}
 
       <section className="brief-section">
-        <h2>{isMonthly ? '3 · 重大事件回顾（Major Event Retrospective）' : '2 · 本周重点事件与演化（Major Event Evolution）'}</h2>
+        <h2>{isMonthly ? '3 · 重大事件回顾（Major Event Retrospective）' : '3 · 本周重点事件与演化（Major Event Evolution）'}</h2>
         <EventInterpretationCards
           task={tasks.event_analysis}
           heading={isMonthly ? '月度重大事件阶段性回顾' : '本周事件演化分析（事件本体 vs 媒体关注 vs 跟进时间）'}
         />
-        <ul className="event-list">
-          {(s.major_events || []).slice(0, 10).map((ev) => (
-            <li key={String(ev.event_id || ev.id)}>
-              {ev.href ? (
-                <Link to={String(ev.href)}>{String(ev.title)}</Link>
-              ) : (
-                String(ev.title)
-              )}{' '}
-              <span className="muted small">
-                · 重要度 {String(ev.importance_score ?? '—')} · 关联 {String(ev.article_count ?? 0)} 篇
-              </span>
-            </li>
-          ))}
-          {(s.major_events || []).length === 0 && <li className="muted">窗口内无事件卡</li>}
-        </ul>
+        {!isMonthly && (s.event_evolution || []).length > 0 && (
+          <div className="gni-table-wrap" style={{ marginTop: '0.6rem' }}>
+            <table className="gni-table">
+              <thead>
+                <tr>
+                  <th>事件</th>
+                  <th className="gni-num">本周篇数</th>
+                  <th className="gni-num">上周篇数</th>
+                  <th>覆盖国家</th>
+                  <th>报道增量说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(s.event_evolution || []).map((ev, idx) => (
+                  <tr key={String(ev.event_id || idx)}>
+                    <td>
+                      <Link to={`/events/${String(ev.event_id || '')}`}>{String(ev.title || '—')}</Link>
+                    </td>
+                    <td className="gni-num">
+                      <strong>{String(ev.this_week_articles ?? 0)}</strong>
+                    </td>
+                    <td className="gni-num muted">{String(ev.prev_week_articles ?? 0)}</td>
+                    <td className="small">{Array.isArray(ev.countries) ? ev.countries.join(', ') : '—'}</td>
+                    <td className="small muted">{String(ev.coverage_focus_note || '')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <details style={{ marginTop: '0.5rem' }}>
+          <summary className="muted small">
+            查看窗口内全部重点事件列表（{(s.major_events || []).length}）
+          </summary>
+          <ul className="event-list">
+            {(s.major_events || []).slice(0, 10).map((ev) => (
+              <li key={String(ev.event_id || ev.id)}>
+                {ev.href ? (
+                  <Link to={String(ev.href)}>{String(ev.title)}</Link>
+                ) : (
+                  String(ev.title)
+                )}{' '}
+                <span className="muted small">
+                  · 重要度 {String(ev.importance_score ?? '—')} · 关联 {String(ev.article_count ?? 0)} 篇
+                </span>
+              </li>
+            ))}
+            {(s.major_events || []).length === 0 && <li className="muted">窗口内无事件卡</li>}
+          </ul>
+        </details>
       </section>
 
       <section className="brief-section">
@@ -319,34 +366,95 @@ function PeriodBrief({
           task={tasks.cross_country_analysis}
           title={isMonthly ? '国别监测媒体画像与主导/新兴叙事格局' : '同事件 / 同议题跨国叙事比较'}
           dataSlot={
-            isMonthly && (s.country_profiles || []).length > 0 ? (
+            isMonthly ? (
+              <div>
+                {(s.country_profiles || []).length > 0 && (
+                  <div className="gni-table-wrap">
+                    <table className="gni-table">
+                      <thead>
+                        <tr>
+                          <th>国家</th>
+                          <th className="gni-num">本月篇数</th>
+                          <th className="gni-num">环比 Δ</th>
+                          <th className="gni-num">负面率</th>
+                          <th className="gni-num">覆盖率</th>
+                          <th>样本状态</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(s.country_profiles || []).map((cp) => (
+                          <tr key={String(cp.country_id)}>
+                            <td>
+                              <Link to={`/countries?c=${encodeURIComponent(String(cp.country_id))}`}>
+                                <strong>{String(cp.country_id)}</strong>
+                              </Link>
+                            </td>
+                            <td className="gni-num">{String(cp.article_count ?? 0)}</td>
+                            <td className="gni-num">{String(cp.delta ?? 0)}</td>
+                            <td className="gni-num">{fmtPct(cp.negative_rate as number | null)}</td>
+                            <td className="gni-num">{fmtPct(cp.stance_coverage_rate as number | null)}</td>
+                            <td className="small muted">{cp.sample_sufficient ? '可用' : '样本不足'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {s.narrative_landscape && (
+                  <div className="gni-two-col" style={{ marginTop: '0.6rem' }}>
+                    <div className="gni-kv-box">
+                      <div className="gni-kv-label">主导叙事框架（Dominant）</div>
+                      <div className="small">
+                        {(s.narrative_landscape.dominant_frames || [])
+                          .slice(0, 6)
+                          .map((f) => `${f.frame} (${f.count})`)
+                          .join(' · ') || '—'}
+                      </div>
+                    </div>
+                    <div className="gni-kv-box">
+                      <div className="gni-kv-label">新兴 / 减弱框架（Emerging vs Fading）</div>
+                      <div className="small">
+                        升温：
+                        {(s.narrative_landscape.emerging_frames || [])
+                          .slice(0, 4)
+                          .map((f) => `${f.frame} (${f.last_month}→${f.this_month})`)
+                          .join(' · ') || '—'}
+                      </div>
+                      <div className="muted small">
+                        减弱：
+                        {(s.narrative_landscape.fading_frames || [])
+                          .slice(0, 4)
+                          .map((f) => `${f.frame} (${f.last_month}→${f.this_month})`)
+                          .join(' · ') || '—'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : Array.isArray(s.cross_country_narrative) && s.cross_country_narrative.length > 0 ? (
               <div className="gni-table-wrap">
                 <table className="gni-table">
                   <thead>
                     <tr>
-                      <th>国家</th>
-                      <th className="gni-num">本月篇数</th>
-                      <th className="gni-num">环比 Δ</th>
-                      <th className="gni-num">负面率</th>
-                      <th className="gni-num">覆盖率</th>
-                      <th>样本状态</th>
+                      <th>热门主题</th>
+                      <th>各国主要报道框架（按篇数）</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(s.country_profiles || []).map((cp) => (
-                      <tr key={String(cp.country_id)}>
-                        <td>
-                          <Link to={`/countries?c=${encodeURIComponent(String(cp.country_id))}`}>
-                            <strong>{String(cp.country_id)}</strong>
-                          </Link>
-                        </td>
-                        <td className="gni-num">{String(cp.article_count ?? 0)}</td>
-                        <td className="gni-num">{String(cp.delta ?? 0)}</td>
-                        <td className="gni-num">{fmtPct(cp.negative_rate as number | null)}</td>
-                        <td className="gni-num">{fmtPct(cp.stance_coverage_rate as number | null)}</td>
-                        <td className="small muted">{cp.sample_sufficient ? '可用' : '样本不足'}</td>
-                      </tr>
-                    ))}
+                    {(s.cross_country_narrative as Array<{ topic: string; by_country?: Record<string, Array<{ frame: string; count: number }>> }>).map(
+                      (row) => (
+                        <tr key={row.topic}>
+                          <td>
+                            <strong>{row.topic}</strong>
+                          </td>
+                          <td className="small">
+                            {Object.entries(row.by_country || {})
+                              .map(([cid, frames]) => `${cid}: ${frames.map((f) => `${f.frame}(${f.count})`).join(', ')}`)
+                              .join(' ｜ ') || '—'}
+                          </td>
+                        </tr>
+                      ),
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -371,16 +479,23 @@ function PeriodBrief({
           task={tasks.emerging_signals}
           heading={isMonthly ? '战略风险信号与下月条件性展望' : '持续性异常、跨国扩散信号与下周监测清单'}
         />
-        <p>{nar.signals}</p>
-        <ul className="event-list">
-          {(s.signals || []).slice(0, 6).map((sig) => (
-            <li key={String(sig.id)}>
-              <strong>{String(sig.title)}</strong>
-              <div className="muted small">{String(sig.summary || '')}</div>
-            </li>
-          ))}
-        </ul>
-        {s.summary?.outlook && <p className="callout">{s.summary.outlook}</p>}
+        {!tasks.emerging_signals && (
+          <>
+            <p>{nar.signals}</p>
+            {s.summary?.outlook && <p className="callout">{s.summary.outlook}</p>}
+          </>
+        )}
+        <details style={{ marginTop: '0.5rem' }}>
+          <summary className="muted small">查看规则引擎原始信号（{(s.signals || []).length}）</summary>
+          <ul className="event-list">
+            {(s.signals || []).slice(0, 6).map((sig) => (
+              <li key={String(sig.id)}>
+                <strong>{String(sig.title)}</strong>
+                <div className="muted small">{String(sig.summary || '')}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
       </section>
 
       <section className="brief-section">
@@ -411,30 +526,6 @@ function PeriodBrief({
         )}
       </section>
     </article>
-  )
-}
-
-function TopicBars({
-  topics,
-}: {
-  topics: Array<{ label: string; count: number; share: number }>
-}) {
-  const max = Math.max(1, ...topics.map((t) => t.count))
-  if (topics.length === 0) return <p className="muted">无主题样本</p>
-  return (
-    <div className="bars topic-bars">
-      {topics.map((t) => (
-        <div className="bar-row" key={t.label}>
-          <div className="bar-label">
-            <Link to="/trends">{t.label}</Link>
-          </div>
-          <div className="bar-track">
-            <div className="bar-fill" style={{ width: `${(t.count / max) * 100}%` }} />
-          </div>
-          <div className="bar-n">{t.count}</div>
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -507,7 +598,7 @@ function DailyBrief({
   return (
     <div className="daily-brief daily-brief-v4">
       <header className="brief-header">
-        <div className="brief-eyebrow">DAILY BRIEF · 预警优先</div>
+        <div className="brief-eyebrow">DAILY BRIEF · 全局涉华态势 + 情报研判</div>
         <h1>全球对华监测 · 日报</h1>
         <p className="muted small">
           当前接入 {connectedN} 国
@@ -518,30 +609,47 @@ function DailyBrief({
       </header>
 
       <section className="brief-section">
-        <h2>1 · 当日摘要与综合研判</h2>
-        <div className={`risk-banner ${risk?.has_high_risk ? 'hot' : 'calm'}`}>
-          {risk?.text || nar.risk || '—'}
-        </div>
+        <h2>1 · 全局态势与综合研判（Global Situation &amp; Intelligence Judgment）</h2>
         <IntelligenceHeader
           intelligence={intel}
           analyzing={analyzing}
           analyzeError={analyzeError}
           onGenerate={onGenerate}
           onRetryFailed={onRetryFailed}
-          title="当日综合研判与关键变化（Daily Executive Judgment）"
+          title="当日全局涉华态势与核心变化研判"
         />
-        <p className="brief-lede">{summary.judgment_text || nar.executive || summary.overview_text}</p>
-        {summary.confidence && (
-          <p className="muted small">规则研判置信度：{summary.confidence}</p>
+        <div className={`risk-banner ${risk?.has_high_risk ? 'hot' : 'calm'}`} style={{ marginTop: '0.6rem' }}>
+          规则关键词初筛：{risk?.text || nar.risk || '—'}
+        </div>
+        {tasks.executive_analysis ? (
+          <details style={{ marginTop: '0.5rem' }}>
+            <summary className="muted small">查看规则基线摘要（置信度：{summary.confidence || '—'}）</summary>
+            <p className="brief-lede">{summary.judgment_text || nar.executive || summary.overview_text}</p>
+            <ol className="brief-changes">
+              {(summary.top_changes || []).map((c) => (
+                <li key={c.title}>
+                  {c.href ? <Link to={c.href}>{c.title}</Link> : <strong>{c.title}</strong>}
+                  <span className="muted"> — {c.summary}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
+        ) : (
+          <>
+            <p className="brief-lede">{summary.judgment_text || nar.executive || summary.overview_text}</p>
+            {summary.confidence && (
+              <p className="muted small">规则研判置信度：{summary.confidence}</p>
+            )}
+            <ol className="brief-changes">
+              {(summary.top_changes || []).map((c) => (
+                <li key={c.title}>
+                  {c.href ? <Link to={c.href}>{c.title}</Link> : <strong>{c.title}</strong>}
+                  <span className="muted"> — {c.summary}</span>
+                </li>
+              ))}
+            </ol>
+          </>
         )}
-        <ol className="brief-changes">
-          {(summary.top_changes || []).map((c) => (
-            <li key={c.title}>
-              {c.href ? <Link to={c.href}>{c.title}</Link> : <strong>{c.title}</strong>}
-              <span className="muted"> — {c.summary}</span>
-            </li>
-          ))}
-        </ol>
       </section>
 
       <section className="brief-section">
@@ -568,7 +676,10 @@ function DailyBrief({
             {tech.vs_yesterday_delta != null ? ` · 较昨 Δ ${tech.vs_yesterday_delta}` : ''} · {tech.note}
           </p>
         )}
-        <h3>各国情感简表</h3>
+        <h3>各国媒体情感简表（仅监测媒体，排除政府公报 · 5 国口径）</h3>
+        <p className="muted small">
+          口径说明：上方 V1.0 表按全库已接入国家与全部涉华有效文章统计对华立场；下方简表为旧媒体情感辅助视图（排除 GOVERNMENT_RELEASES，仅列默认 5 国）。
+        </p>
         <table className="tone-mini">
           <thead>
             <tr>
@@ -665,10 +776,6 @@ function DailyBrief({
             </ul>
           </div>
         )}
-        <TopicBars topics={s.coverage.topics_top || []} />
-        {s.coverage.taxonomy_confidence === 'low' && (
-          <p className="callout">议题 taxonomy 低置信（当日主题过度集中）。</p>
-        )}
         <button type="button" className="linkish" onClick={() => setShowCoverageDetail(!showCoverageDetail)}>
           {showCoverageDetail ? '收起事件证据明细' : '展开事件证据 / 覆盖明细'}
         </button>
@@ -696,38 +803,48 @@ function DailyBrief({
           task={tasks.emerging_signals}
           heading="异动解释与明日监测优先级（Anomaly Explanation & Tomorrow's Priorities）"
         />
-        <ul className="event-list">
-          {(s.anomalies || []).map((a, idx) => (
-            <li key={String(a.id || a.event_id || a.title || idx)} className={a.kind === 'event_anomaly' ? 'row-anomaly-item' : undefined}>
-              <span className={`sev sev-${a.severity === 'high' || a.risk_level === 'high' ? 'high' : 'medium'}`}>
-                {String(a.kind || 'signal')}
-              </span>{' '}
-              {a.href ? <Link to={String(a.href)}>{String(a.title)}</Link> : <strong>{String(a.title)}</strong>}
-              <div className="muted small">
-                {String(a.summary || (Array.isArray(a.reasons) ? a.reasons.join('；') : '') || '')}
-              </div>
-            </li>
-          ))}
-          {(s.anomalies || []).length === 0 && <li className="muted">当日无显著异动</li>}
-        </ul>
+        <details style={{ marginTop: '0.5rem' }} open={!tasks.emerging_signals}>
+          <summary className="muted small">
+            查看规则异动与信号明细（{(s.anomalies || []).length}）
+          </summary>
+          <ul className="event-list">
+            {(s.anomalies || []).map((a, idx) => (
+              <li key={String(a.id || a.event_id || a.title || idx)} className={a.kind === 'event_anomaly' ? 'row-anomaly-item' : undefined}>
+                <span className={`sev sev-${a.severity === 'high' || a.risk_level === 'high' ? 'high' : 'medium'}`}>
+                  {String(a.kind || 'signal')}
+                </span>{' '}
+                {a.href ? <Link to={String(a.href)}>{String(a.title)}</Link> : <strong>{String(a.title)}</strong>}
+                <div className="muted small">
+                  {String(a.summary || (Array.isArray(a.reasons) ? a.reasons.join('；') : '') || '')}
+                </div>
+              </li>
+            ))}
+            {(s.anomalies || []).length === 0 && <li className="muted">当日无显著异动</li>}
+          </ul>
+        </details>
       </section>
 
       <section className="brief-section">
-        <h2>5 · 次日跟踪 + 采集状态</h2>
-        <p className="muted small">{s.ops?.note}</p>
-        <h3>规则跟踪建议</h3>
-        <ul className="event-list">
-          {(s.ops?.follow_ups || []).map((f) => (
-            <li key={String(f.event_id || f.title)}>
-              {f.href ? <Link to={f.href}>{f.title}</Link> : f.title}
-              <div className="muted small">{f.action}</div>
-            </li>
-          ))}
-          {(s.ops?.follow_ups || []).length === 0 && <li className="muted">无专项跟踪项</li>}
-        </ul>
-        <h3>采集状态</h3>
-        <SourceOpsTable rows={s.ops?.crawl_status || []} defaultOnlyFailed />
-        <p className="muted small">
+        <h2>5 · 运维与数据覆盖说明</h2>
+        <details>
+          <summary className="muted small">
+            展开次日规则跟踪建议（{(s.ops?.follow_ups || []).length}）与采集状态（异常源 {Number(stats?.crawl_summary?.failing ?? 0)}）
+          </summary>
+          <p className="muted small">{s.ops?.note}</p>
+          <h3>规则跟踪建议</h3>
+          <ul className="event-list">
+            {(s.ops?.follow_ups || []).map((f) => (
+              <li key={String(f.event_id || f.title)}>
+                {f.href ? <Link to={f.href}>{f.title}</Link> : f.title}
+                <div className="muted small">{f.action}</div>
+              </li>
+            ))}
+            {(s.ops?.follow_ups || []).length === 0 && <li className="muted">无专项跟踪项</li>}
+          </ul>
+          <h3>采集状态</h3>
+          <SourceOpsTable rows={s.ops?.crawl_status || []} defaultOnlyFailed />
+        </details>
+        <p className="muted small" style={{ marginTop: '0.5rem' }}>
           局限：分析积压 {s.quality.missing_analysis}；无样本国{' '}
           {(s.quality.countries_without_sample || []).join(', ') || '—'}。
           {(s.quality.notes || []).slice(0, 2).join(' ')}

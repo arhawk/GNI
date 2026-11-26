@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { NarrativeFinding, ReportIntelligenceBlock } from '../../api'
 import { EvidenceChips } from './EvidenceChips'
 import './narrative.css'
@@ -70,12 +71,33 @@ export function IntelligenceHeader({
   onRetryFailed: (failedTasks: string[]) => void
   title?: string
 }) {
+  const [showValidation, setShowValidation] = useState(false)
   const st = statusLabel(intelligence?.status)
   const meta = intelligence?.meta
   const taskStatuses = intelligence?.task_statuses || {}
   const failedTasks = Object.entries(taskStatuses)
     .filter(([, info]) => info.status === 'failed')
     .map(([k]) => k)
+  const validationIssues = Object.entries(taskStatuses)
+    .map(([k, info]) => {
+      const v = info.validation as
+        | {
+            numeric_issues?: string[]
+            evidence_issues?: string[]
+            reasoning_issues?: string[]
+            dropped_count?: number
+            downgraded_count?: number
+          }
+        | null
+        | undefined
+      const all = [
+        ...(v?.numeric_issues || []),
+        ...(v?.evidence_issues || []),
+        ...(v?.reasoning_issues || []),
+      ]
+      return { key: k, title: info.title_zh || k, issues: all, dropped: v?.dropped_count || 0, downgraded: v?.downgraded_count || 0 }
+    })
+    .filter((x) => x.issues.length > 0)
   const execTask = intelligence?.tasks?.executive_analysis
 
   return (
@@ -122,6 +144,39 @@ export function IntelligenceHeader({
             <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
               回退说明：{intelligence.fallback_reason}
             </p>
+          )}
+          {validationIssues.length > 0 && (
+            <div style={{ marginTop: '0.35rem' }}>
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => setShowValidation(!showValidation)}
+              >
+                {showValidation
+                  ? '收起校验复核原因'
+                  : `查看校验复核原因（${validationIssues.reduce((acc, x) => acc + x.issues.length, 0)} 项）`}
+              </button>
+              {showValidation && (
+                <div className="gni-kv-box" style={{ marginTop: '0.35rem' }}>
+                  {validationIssues.map((item) => (
+                    <div key={item.key} style={{ marginBottom: '0.35rem' }}>
+                      <strong>
+                        {item.title}
+                        {item.dropped > 0 ? ` · 剔除 ${item.dropped}` : ''}
+                        {item.downgraded > 0 ? ` · 降级 ${item.downgraded}` : ''}
+                      </strong>
+                      <ul className="event-list" style={{ margin: '0.2rem 0 0' }}>
+                        {item.issues.slice(0, 6).map((msg, i) => (
+                          <li key={i} className="gni-c-warn small">
+                            {msg}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
           {analyzeError && (
             <p className="gni-c-neg small" style={{ margin: '0.35rem 0 0' }}>

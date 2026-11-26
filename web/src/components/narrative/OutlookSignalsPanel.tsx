@@ -58,6 +58,34 @@ export function OutlookSignalsPanel({
       )}
 
       <FindingsGrid findings={task.findings} />
+      {((task.uncertainties || []).length > 0 || (task.follow_up_questions || []).length > 0) && (
+        <div className="gni-two-col" style={{ marginTop: '0.5rem' }}>
+          {(task.uncertainties || []).length > 0 && (
+            <div className="gni-kv-box">
+              <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
+              <ul className="event-list" style={{ margin: 0 }}>
+                {(task.uncertainties || []).map((u, i) => (
+                  <li key={i} className="muted small">
+                    {u}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(task.follow_up_questions || []).length > 0 && (
+            <div className="gni-kv-box">
+              <div className="gni-kv-label">待进一步核查（Follow-up Questions）</div>
+              <ul className="event-list" style={{ margin: 0 }}>
+                {(task.follow_up_questions || []).map((q, i) => (
+                  <li key={i} className="small">
+                    {q}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

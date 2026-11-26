@@ -195,7 +195,7 @@ def validate_task_output(
     low_global = bundle.global_article_count < MIN_RELIABLE_SAMPLE_N
     has_low_scopes = bool(bundle.low_sample_scopes)
 
-    # Check top-level summary
+    # Check top-level summary, important_changes, main_drivers
     sum_bad_nums = _find_ungrounded_numbers(out.summary, bundle.allowed_numbers)
     if sum_bad_nums:
         numeric_issues.append(f"summary: ungrounded numbers {sum_bad_nums}")
@@ -203,6 +203,13 @@ def validate_task_output(
         reasoning_issues.append(f"summary[{code}]: {msg}")
         if sev == "drop":
             out.summary = ""
+    for list_name, items in (("important_changes", out.important_changes), ("main_drivers", out.main_drivers)):
+        for i, txt in enumerate(items):
+            bnums = _find_ungrounded_numbers(txt, bundle.allowed_numbers)
+            if bnums:
+                numeric_issues.append(f"{list_name}[{i}]: ungrounded numbers {bnums}")
+            for code, _, msg in _check_reasoning_text(txt):
+                reasoning_issues.append(f"{list_name}[{i}][{code}]: {msg}")
 
     # 1. Validate findings
     kept_findings = []
@@ -276,7 +283,7 @@ def validate_task_output(
         ev.evidence_refs = _filter_evidence_refs(ev.evidence_refs, bundle, evidence_issues, ctx)
         if not any(r.type == "event" and r.ref_id == ev.event_id for r in ev.evidence_refs):
             ev.evidence_refs.insert(0, EvidenceRef(type="event", ref_id=ev.event_id, label=ev.title))
-        blob = f"{ev.background} {ev.what_happened} {ev.event_actual_changes} {ev.coverage_attention_changes} {ev.why_it_matters}"
+        blob = f"{ev.background} {ev.what_happened} {ev.event_actual_changes} {ev.coverage_attention_changes} {ev.country_differences} {ev.why_it_matters}"
         bad_nums = _find_ungrounded_numbers(blob, bundle.allowed_numbers)
         if bad_nums:
             numeric_issues.append(f"{ctx}: ungrounded numbers {bad_nums}")
@@ -294,7 +301,10 @@ def validate_task_output(
     for idx, t in enumerate(out.topic_trends):
         ctx = f"topic_trend[{idx}:{t.topic_id}]"
         t.evidence_refs = _filter_evidence_refs(t.evidence_refs, bundle, evidence_issues, ctx)
-        blob = f"{t.attention_change} {t.stance_change} {t.topic_structure_change}"
+        if not t.evidence_refs:
+            evidence_issues.append(f"{ctx}: missing valid evidence_refs")
+            t.needs_review = True
+        blob = f"{t.attention_change} {t.stance_change} {t.topic_structure_change} {' '.join(t.drivers)}"
         bad_nums = _find_ungrounded_numbers(blob, bundle.allowed_numbers)
         if bad_nums:
             numeric_issues.append(f"{ctx}: ungrounded numbers {bad_nums}")
@@ -321,7 +331,14 @@ def validate_task_output(
             cf.evidence_refs = _filter_evidence_refs(
                 cf.evidence_refs, bundle, evidence_issues, f"{ctx}.{cf.country_id}"
             )
+        if not cc.evidence_refs and not any(cf.evidence_refs for cf in cc.country_frames):
+            evidence_issues.append(f"{ctx}: missing valid evidence_refs")
+            cc.needs_review = True
         blob = f"{cc.common_focus} {cc.major_differences} {cc.emerging_or_shifting}"
+        bad_nums = _find_ungrounded_numbers(blob, bundle.allowed_numbers)
+        if bad_nums:
+            numeric_issues.append(f"{ctx}: ungrounded numbers {bad_nums}")
+            cc.needs_review = True
         for code, _, msg in _check_reasoning_text(blob):
             reasoning_issues.append(f"{ctx}[{code}]: {msg}")
             cc.needs_review = True
@@ -330,7 +347,10 @@ def validate_task_output(
     for idx, sa in enumerate(out.stance_analyses):
         ctx = f"stance[{idx}:{sa.scope_id}]"
         sa.evidence_refs = _filter_evidence_refs(sa.evidence_refs, bundle, evidence_issues, ctx)
-        blob = f"{sa.rate_vs_count_note} {sa.coverage_limitation}"
+        if not sa.evidence_refs:
+            evidence_issues.append(f"{ctx}: missing valid evidence_refs")
+            sa.needs_review = True
+        blob = f"{sa.rate_vs_count_note} {sa.coverage_limitation} {' '.join(sa.drivers)}"
         bad_nums = _find_ungrounded_numbers(blob, bundle.allowed_numbers)
         if bad_nums:
             numeric_issues.append(f"{ctx}: ungrounded numbers {bad_nums}")
@@ -343,6 +363,9 @@ def validate_task_output(
     for idx, sig in enumerate(out.outlook_signals):
         ctx = f"outlook[{idx}]"
         sig.evidence_refs = _filter_evidence_refs(sig.evidence_refs, bundle, evidence_issues, ctx)
+        if not sig.evidence_refs:
+            evidence_issues.append(f"{ctx}: missing valid evidence_refs")
+            sig.needs_review = True
         blob = f"{sig.signal} {sig.reasoning} {sig.potential_trigger}"
         bad_nums = _find_ungrounded_numbers(blob, bundle.allowed_numbers)
         if bad_nums:

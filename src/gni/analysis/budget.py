@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from gni.core.config import Settings, get_settings
-from gni.infrastructure.models import AnalysisRun, ArticleAnalysis
+from gni.infrastructure.models import AnalysisRun, ArticleAnalysis, ReportNarrativeTask
 
 
 @dataclass
@@ -42,7 +42,12 @@ def snapshot_budget(session: Session, settings: Settings | None = None) -> Budge
             AnalysisRun.started_at >= day_start
         )
     ) or 0.0
-    cost_f = float(cost)
+    report_cost = session.scalar(
+        select(func.coalesce(func.sum(ReportNarrativeTask.estimated_cost_usd), 0.0)).where(
+            ReportNarrativeTask.updated_at >= day_start
+        )
+    ) or 0.0
+    cost_f = float(cost) + float(report_cost)
 
     art_rem = max(0, settings.daily_article_limit - int(article_count))
     usd_rem = max(0.0, settings.daily_llm_budget_usd - cost_f)
@@ -62,9 +67,14 @@ def snapshot_budget(session: Session, settings: Settings | None = None) -> Budge
     )
 
 
-def llm_allowed(snapshot: BudgetSnapshot, *, estimated_cost_usd: float = 0.0) -> bool:
+def llm_allowed(
+    snapshot: BudgetSnapshot,
+    *,
+    estimated_cost_usd: float = 0.0,
+    ignore_article_limit: bool = False,
+) -> bool:
     """Whether a paid LLM call is allowed. Heuristic path ignores this."""
-    if snapshot.articles_remaining <= 0:
+    if not ignore_article_limit and snapshot.articles_remaining <= 0:
         return False
     if estimated_cost_usd > 0 and snapshot.llm_budget_remaining_usd < estimated_cost_usd:
         return False

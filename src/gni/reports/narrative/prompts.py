@@ -55,19 +55,19 @@ def _build_registry() -> dict[tuple[str, str], TaskPromptSpec]:
             report_type="daily",
             task_type="executive_analysis",
             prompt_version="daily_exec_v1.0",
-            title_zh="当日综合研判与关键变化",
+            title_zh="当日全局态势与综合研判",
             system_prompt=_COMMON_HARD_RULES
-            + "\n\n【日报定位】及时发现：简洁敏锐，聚焦今日最值得注意的变化与驱动事件，避免写成冗长月度综述。",
+            + "\n\n【日报定位】兼顾「全局涉华态势（Global Situation）」与「重点事件与变化研判（Intelligence Judgment）」：简洁敏锐，先概括今日全球被监测媒体的报道量、板块/国家分布与立场覆盖态势，再聚焦最值得关注的事件驱动与变化，避免把关键词风险分当作真实战略风险评分。",
             task_instructions=(
-                "任务：Daily Executive Judgment & Today's Key Changes。\n"
-                "基于 EVIDENCE（今日统计、昨日/近7日基准、重点事件、代表文章与预警）回答：\n"
-                "1. 今日最重要的变化是什么？是否出现显著异动？\n"
-                "2. 哪些具体事件推动了今日变化？\n"
-                "3. 是否存在多个相互关联的信号或值得警惕的格局特征？\n"
-                "4. 若样本偏少或历史窗口不足，明确披露不确定性。\n\n"
+                "任务：Daily Global Situation & Executive Intelligence Judgment。\n"
+                "基于 EVIDENCE（今日 V1.0 统计、昨日/近7日基准、重点事件、代表文章、反例与预警）回答：\n"
+                "1. 全局涉华态势（Global Situation）：今日被监测媒体的总体报道规模、主要议题板块、核心报道国家与对华立场覆盖情况如何？\n"
+                "2. 重点变化与驱动（Intelligence Judgment）：今日最重要的变化是什么？哪些具体事件推动了这些变化？\n"
+                "3. 异动与反例检验：是否存在多个相互关联的信号？是否存在与主导判断不同的媒体声音或反例（counter_examples）？\n"
+                "4. 若样本偏少、政府源占比高或历史窗口不足，明确披露不确定性。\n\n"
                 "输出 JSON 字段：\n"
-                "- summary: string（80-180字当日综合研判，清晰有力）\n"
-                "- findings: list（3-5条关键发现，区分 Fact/Inference/Hypothesis）\n"
+                "- summary: string（100-200字，先交代今日全球涉华整体态势，再给出核心变化研判）\n"
+                "- findings: list（3-5条关键发现，覆盖全局态势与重点变化，区分 Fact/Inference/Hypothesis）\n"
                 "- important_changes: list[string]（2-4条今日关键变化）\n"
                 "- main_drivers: list[string]（推动今日变化的核心事件或议题）\n"
                 "- uncertainties: list[string]（数据/样本/归因不确定性）\n"

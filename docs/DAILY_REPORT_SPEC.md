@@ -1,12 +1,12 @@
 # 每日情报规格（DAILY_REPORT_SPEC）
 
-**版本：** daily_report_schema_v4（Ops/Risk + 研判门禁 + `methodology_v1.0`）  
+**版本：** daily_report_schema_v4（**全局涉华态势 Global Situation + 情报研判 Intelligence Judgment** + `methodology_v1.0` + `narrative/` LLM 3 任务）  
 **统计口径：** 严格遵循 [STATISTICAL_METHODOLOGY_V1.md](STATISTICAL_METHODOLOGY_V1.md)（按 `published_at` 入窗、唯一 `Article Count`、信源国归属、`sections.v1_stats` 输出四层级 `GLOBAL/COUNTRY/BOARD/TOPIC` 与对华立场三分类 + 覆盖率）。  
 **产品名：** Daily Intelligence Brief（每日情报）  
-**核心问题：** 今天有没有高风险？异动在哪？明日跟什么？采集是否异常？  
+**核心问题：** 今日全球涉华整体态势如何？有哪些重点事件与关键变化？明日需要关注什么？  
 **阅读时长：** 3–5 分钟  
-**对齐：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、[REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)、固定八维中的**日报必出子集**  
-**原则：** **规则算数 → 结构化 JSON →（可选）LLM 只写叙述**；预警段在前。
+**对齐：** [REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)、[REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)  
+**原则：** **规则确定性统计 → EvidenceBundle → LLM 结构化分析（`executive_analysis` / `event_analysis` / `emerging_signals`）→ 3-Layer Validator → 报告中心以分析结论居中展示**；`china_signal_score` 仅用于规则排序参考，不作为真实战略风险评分。
 
 本地开发：**必须重启** `gni api serve` 才能加载本 schema；`/health` 暴露 `daily_schema`，日报响应带 `X-GNI-Report-Schema`。UI 若收到非 v4 或缺 `overview_stats` / `risk_banner`，**整页错误态**，禁止空五段。
 

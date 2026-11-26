@@ -7,9 +7,9 @@
 
 详细规格：
 
-- 日报 → [DAILY_REPORT_SPEC.md](DAILY_REPORT_SPEC.md)（`daily_report_schema_v2`）
-- 周报 → [WEEKLY_REPORT_SPEC.md](WEEKLY_REPORT_SPEC.md)（实现后置）
-- 月报 → [MONTHLY_REPORT_SPEC.md](MONTHLY_REPORT_SPEC.md)（实现后置）
+- 日报 → [DAILY_REPORT_SPEC.md](DAILY_REPORT_SPEC.md)（`daily_report_schema_v4` + LLM 情报解读层 3 任务）
+- 周报 → [WEEKLY_REPORT_SPEC.md](WEEKLY_REPORT_SPEC.md)（`weekly_report_schema_v1` + LLM 情报解读层 6 任务）
+- 月报 → [MONTHLY_REPORT_SPEC.md](MONTHLY_REPORT_SPEC.md)（`monthly_report_schema_v1` + LLM 情报解读层 6 任务）
 - 治理 → [REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)
 
 ---
@@ -112,4 +112,4 @@ Raw News & Article Data
 2. **再做周报** — 验证环比、演化、跨国比较。  
 3. **最后月报** — 依赖前两者数据积累与质量稳定。  
 
-本仓库当前实现范围：**文档三层全写齐；代码只落地日报 v2**；周/月在报告中心占位。
+本仓库当前实现范围：**日报 v4、周报 v1、月报 v1 与 `src/gni/reports/narrative/` 15 任务 LLM 情报解读层均已落地**，支持 `POST /api/reports/{daily|weekly|monthly}/analyze` 按任务缓存与局部重试，前端报告中心以 LLM 分析结论居中、规则统计作支撑。

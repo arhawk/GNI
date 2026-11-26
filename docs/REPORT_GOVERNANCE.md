@@ -1,8 +1,8 @@
 # 报告治理与证据约束（REPORT_GOVERNANCE）
 
-**版本：** 0.6（对齐三层情报产品 report_products_v1）  
-**阶段：** 日报 v2 实现中；周报/月报规格已冻结、编码后置  
-**数据层：** 报告属 [DATA_LAYERS.md](DATA_LAYERS.md) Layer 5；MVP 可落 `data/daily_report_*.md`。仅使用可分析涉华样本；禁止无证据编造。
+**版本：** 0.7（对齐三层情报产品 + `narrative/` LLM 情报解读层 + 3-Layer Validator）  
+**阶段：** 日报 v4、周报 v1、月报 v1 与 15 任务 LLM 情报分析层均已实现  
+**数据层：** 报告属 [DATA_LAYERS.md](DATA_LAYERS.md) Layer 5；仅使用可分析涉华样本；禁止无证据编造。
 
 产品总纲：[REPORT_PRODUCTS.md](REPORT_PRODUCTS.md)  
 规格：[DAILY_REPORT_SPEC.md](DAILY_REPORT_SPEC.md) · [WEEKLY_REPORT_SPEC.md](WEEKLY_REPORT_SPEC.md) · [MONTHLY_REPORT_SPEC.md](MONTHLY_REPORT_SPEC.md)
@@ -13,9 +13,9 @@
 
 | 类型 | 窗口 | 说明 |
 |------|------|------|
-| daily | 自然日（报告时区） | **Daily Brief** — 事件主线；`daily_report_schema_v2` |
-| weekly | 自然周 | **变化分析** — 规格已冻结，实现后置 |
-| monthly | 自然月 | **长期格局** — 规格已冻结；须文章级重算，禁止简单日均 |
+| daily | 自然日（报告时区） | **Daily Brief** — 全局涉华态势 + 重点事件研判；`daily_report_schema_v4` + 3 LLM 任务 |
+| weekly | 自然周（7 日） | **变化分析** — 本周 vs 上周 + 4 周序列；`weekly_report_schema_v1` + 6 LLM 任务 |
+| monthly | 自然月 | **长期格局** — 6 月文章级重算；`monthly_report_schema_v1` + 6 LLM 任务 |
 
 ---
 

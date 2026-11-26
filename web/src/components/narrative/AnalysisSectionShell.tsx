@@ -132,7 +132,25 @@ export function TopicTrendAnalysisBlock({
           </div>
         ) : undefined
       }
-      evidenceSlot={task?.findings?.length ? <FindingsGrid findings={task.findings} /> : undefined}
+      evidenceSlot={
+        task?.findings?.length || task?.uncertainties?.length ? (
+          <>
+            <FindingsGrid findings={task.findings} />
+            {(task.uncertainties || []).length > 0 && (
+              <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
+                <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
+                <ul className="event-list" style={{ margin: 0 }}>
+                  {(task.uncertainties || []).map((u, i) => (
+                    <li key={i} className="muted small">
+                      {u}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        ) : undefined
+      }
       dataSlot={dataSlot}
       drilldownLinks={[
         { label: '查看趋势分析页', to: '/trends' },
@@ -166,7 +184,11 @@ export function CrossCountryAnalysisBlock({
               <div key={`${item.subject_id || idx}`} className="gni-event-interp-card" style={{ marginBottom: '0.7rem' }}>
                 <div className="gni-intel-panel-head">
                   <h4>{item.subject_label || item.subject_id || '跨国叙事对比'}</h4>
-                  <span className="gni-tag">{item.subject_type || 'topic'}</span>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    <span className="gni-tag">{item.subject_type || 'topic'}</span>
+                    <span className="gni-tag">置信度: {item.confidence || 'medium'}</span>
+                    {item.needs_review && <span className="gni-pill gni-pill-warn">需复核</span>}
+                  </div>
                 </div>
                 {item.common_focus && (
                   <p className="small" style={{ margin: '0.25rem 0' }}>
@@ -214,7 +236,25 @@ export function CrossCountryAnalysisBlock({
           </div>
         ) : undefined
       }
-      evidenceSlot={task?.findings?.length ? <FindingsGrid findings={task.findings} /> : undefined}
+      evidenceSlot={
+        task?.findings?.length || task?.uncertainties?.length ? (
+          <>
+            <FindingsGrid findings={task.findings} />
+            {(task.uncertainties || []).length > 0 && (
+              <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
+                <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
+                <ul className="event-list" style={{ margin: 0 }}>
+                  {(task.uncertainties || []).map((u, i) => (
+                    <li key={i} className="muted small">
+                      {u}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        ) : undefined
+      }
       dataSlot={dataSlot}
       drilldownLinks={[{ label: '进入国家对比分析页', to: '/countries' }]}
     />
@@ -249,6 +289,7 @@ export function StanceAnalysisBlock({
                       <strong>{s.scope_label || s.scope_id}</strong>
                       <span className="gni-tag">{s.scope_type}</span>
                       <span className="gni-tag">置信度: {s.confidence || 'medium'}</span>
+                      {s.needs_review && <span className="gni-pill gni-pill-warn">需复核</span>}
                     </div>
                     {s.rate_vs_count_note && <div className="small">{s.rate_vs_count_note}</div>}
                     {(s.drivers || []).length > 0 && (
@@ -265,7 +306,25 @@ export function StanceAnalysisBlock({
           </div>
         ) : undefined
       }
-      evidenceSlot={task?.findings?.length ? <FindingsGrid findings={task.findings} /> : undefined}
+      evidenceSlot={
+        task?.findings?.length || task?.uncertainties?.length ? (
+          <>
+            <FindingsGrid findings={task.findings} />
+            {(task.uncertainties || []).length > 0 && (
+              <div className="gni-kv-box" style={{ marginTop: '0.5rem' }}>
+                <div className="gni-kv-label">不确定性与局限（Uncertainties）</div>
+                <ul className="event-list" style={{ margin: 0 }}>
+                  {(task.uncertainties || []).map((u, i) => (
+                    <li key={i} className="muted small">
+                      {u}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        ) : undefined
+      }
       dataSlot={dataSlot}
       drilldownLinks={[
         { label: '查看国家维度', to: '/countries' },

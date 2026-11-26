@@ -38,12 +38,11 @@ UI 参考：[assets/report-ui/weekly-visual-ref.png](assets/report-ui/weekly-vis
 
 ## 3. 实现状态
 
-**schema v1 已实现**（`src/gni/reports/weekly.py` + `/api/reports/weekly` + 报告中心 Tab）：
+**schema v1 + LLM 情报解读层 6 任务已实现**（`src/gni/reports/weekly.py` + `src/gni/reports/narrative/` + `/api/reports/weekly` + `POST /api/reports/weekly/analyze` + 报告中心 Tab）：
 
-- 周环比 facts（vs 上周）  
-- 事件演化占位（规则 v1 列表；完整时间线后置）  
-- 国家 × 主题 / 框架摘要  
-- 报告中心 Weekly 真页（明细可折叠）  
+- 周环比 V1.0 统计（vs 上周）+ 近 4 周文章级重算序列  
+- 6 个独立周度 LLM 任务（综合研判、事件演化、议题趋势、跨国叙事、立场变化、新兴信号）+ 3-Layer Validator + DB 缓存  
+- 报告中心 Weekly 真页（LLM 结论居中，4 周序列、事件演化与跨国框架表结构化展示）  
 
 未做：参考图 Sankey / 社媒兴趣曲线。  
 禁止项同 [REPORT_GOVERNANCE.md](REPORT_GOVERNANCE.md)：LLM 不点数；不把样本写成国家立场。

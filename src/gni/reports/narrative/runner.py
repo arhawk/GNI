@@ -240,17 +240,71 @@ def _upsert_task_row(
     return row
 
 
-def _build_user_prompt(spec: TaskPromptSpec, bundle: EvidenceBundle) -> str:
-    ev_slice = bundle.for_task(spec.task_type)
+def _shrink_article_excerpts(articles: list[dict[str, Any]], max_excerpt: int) -> list[dict[str, Any]]:
+    out = []
+    for a in articles:
+        item = dict(a)
+        if isinstance(item.get("china_excerpt"), str) and len(item["china_excerpt"]) > max_excerpt:
+            item["china_excerpt"] = item["china_excerpt"][:max_excerpt]
+        out.append(item)
+    return out
+
+
+def _build_user_prompt(spec: TaskPromptSpec, bundle: EvidenceBundle, *, max_chars: int = 22000) -> str:
+    ev_slice = dict(bundle.for_task(spec.task_type))
     ev_json = json.dumps(ev_slice, ensure_ascii=False, default=str)
-    # Trim cleanly if oversized while preserving valid JSON
-    if len(ev_json) > 22000:
-        ev_slice = dict(ev_slice)
+
+    # Structured progressive trimming — NEVER raw-slice JSON string
+    if len(ev_json) > max_chars:
         if isinstance(ev_slice.get("articles"), list):
-            ev_slice["articles"] = ev_slice["articles"][:10]
+            ev_slice["articles"] = _shrink_article_excerpts(ev_slice["articles"][:12], 320)
         if isinstance(ev_slice.get("events"), list):
-            ev_slice["events"] = ev_slice["events"][:5]
-        ev_json = json.dumps(ev_slice, ensure_ascii=False, default=str)[:22000]
+            ev_slice["events"] = [
+                (
+                    dict(ev)
+                    | {
+                        "articles": _shrink_article_excerpts((ev.get("articles") or [])[:3], 240),
+                        "representative_articles": _shrink_article_excerpts(
+                            (ev.get("representative_articles") or [])[:2], 240
+                        ),
+                    }
+                    if isinstance(ev, dict)
+                    else ev
+                )
+                for ev in ev_slice["events"][:6]
+            ]
+        ev_json = json.dumps(ev_slice, ensure_ascii=False, default=str)
+
+    if len(ev_json) > max_chars:
+        if isinstance(ev_slice.get("articles"), list):
+            ev_slice["articles"] = _shrink_article_excerpts(ev_slice["articles"][:6], 180)
+        if isinstance(ev_slice.get("counter_examples"), list):
+            ev_slice["counter_examples"] = _shrink_article_excerpts(ev_slice["counter_examples"][:2], 180)
+        if isinstance(ev_slice.get("events"), list):
+            ev_slice["events"] = [
+                (
+                    {k: v for k, v in ev.items() if k not in {"timeline", "by_country_views"}}
+                    | {"articles": _shrink_article_excerpts((ev.get("articles") or [])[:2], 160)}
+                    if isinstance(ev, dict)
+                    else ev
+                )
+                for ev in ev_slice["events"][:4]
+            ]
+        ev_json = json.dumps(ev_slice, ensure_ascii=False, default=str)
+
+    if len(ev_json) > max_chars:
+        ev_slice["articles"] = _shrink_article_excerpts((ev_slice.get("articles") or [])[:3], 120)
+        ev_slice["events"] = [
+            {
+                "event_id": ev.get("event_id"),
+                "title": ev.get("title"),
+                "countries": ev.get("countries"),
+                "article_count": ev.get("article_count"),
+            }
+            for ev in (ev_slice.get("events") or [])[:4]
+            if isinstance(ev, dict)
+        ]
+        ev_json = json.dumps(ev_slice, ensure_ascii=False, default=str)
 
     return (
         f"report_type={spec.report_type} task_type={spec.task_type} "
@@ -280,9 +334,9 @@ def run_report_intelligence(
     target_set = set(tasks) if tasks else {s.task_type for s in all_specs}
     bundle = prepare_evidence_bundle(session, report_type=report_type, payload=payload)
 
-    # Load existing cache rows for this (report_type, period)
+    # Load existing cache rows for this (report_type, period) keyed by (task_type, prompt_version)
     existing_rows = {
-        r.task_type: r
+        (r.task_type, r.prompt_version): r
         for r in session.scalars(
             select(ReportNarrativeTask).where(
                 ReportNarrativeTask.report_type == report_type,
@@ -299,7 +353,7 @@ def run_report_intelligence(
             llm_unavailable_reason = "GNI_LLM_API_KEY not configured; fallback to rule report"
         else:
             budget = snapshot_budget(session, cfg)
-            if not llm_allowed(budget, estimated_cost_usd=0.01):
+            if not llm_allowed(budget, estimated_cost_usd=0.01, ignore_article_limit=True):
                 llm_unavailable_reason = f"LLM daily budget/limit exhausted ({budget.reason or 'budget'})"
             else:
                 try:
@@ -309,8 +363,8 @@ def run_report_intelligence(
 
     rows_by_task: dict[str, ReportNarrativeTask] = {}
     for spec in all_specs:
-        cached = existing_rows.get(spec.task_type)
-        same_version = cached is not None and cached.prompt_version == spec.prompt_version
+        cached = existing_rows.get((spec.task_type, spec.prompt_version))
+        same_version = cached is not None
         if same_version:
             rows_by_task[spec.task_type] = cached  # type: ignore[assignment]
 

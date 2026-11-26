@@ -172,6 +172,17 @@ def validate_weekly_report(payload: dict[str, Any]) -> dict[str, Any]:
     blob = str({k: v for k, v in payload.items() if k != "validation"})
     ok("no_composite_score_field", "china_sentiment_score" not in blob and "composite_score" not in blob)
 
+    events = sections.get("major_events") or []
+    ev_ids = [e.get("event_id") or e.get("id") for e in events if isinstance(e, dict) and (e.get("event_id") or e.get("id"))]
+    ok("events_unique", len(ev_ids) == len(set(ev_ids)), f"dupes={len(ev_ids) - len(set(ev_ids))}")
+
+    narr = payload.get("narratives") or {}
+    text_join = " ".join(str(v) for v in narr.values() if isinstance(v, str))
+    overview = str((sections.get("summary") or {}).get("overview_text") or "") + " " + text_join
+    body_wo_disclaimer = overview.replace(str(payload.get("disclaimer") or ""), "")
+    banned_hit = next((p for p in FORBIDDEN_PHRASES if p in body_wo_disclaimer), None)
+    ok("no_forbidden_claims", banned_hit is None, banned_hit or "")
+
     _check_intelligence_block(payload, ok)
     return {"ok": len(errors) == 0, "checks": checks, "errors": errors}
 
@@ -214,6 +225,17 @@ def validate_monthly_report(payload: dict[str, Any]) -> dict[str, Any]:
 
     blob = str({k: v for k, v in payload.items() if k != "validation"})
     ok("no_composite_score_field", "china_sentiment_score" not in blob and "composite_score" not in blob)
+
+    events = sections.get("major_events") or []
+    ev_ids = [e.get("event_id") or e.get("id") for e in events if isinstance(e, dict) and (e.get("event_id") or e.get("id"))]
+    ok("events_unique", len(ev_ids) == len(set(ev_ids)), f"dupes={len(ev_ids) - len(set(ev_ids))}")
+
+    narr = payload.get("narratives") or {}
+    text_join = " ".join(str(v) for v in narr.values() if isinstance(v, str))
+    overview = str((sections.get("summary") or {}).get("overview_text") or "") + " " + text_join
+    body_wo_disclaimer = overview.replace(str(payload.get("disclaimer") or ""), "")
+    banned_hit = next((p for p in FORBIDDEN_PHRASES if p in body_wo_disclaimer), None)
+    ok("no_forbidden_claims", banned_hit is None, banned_hit or "")
 
     _check_intelligence_block(payload, ok)
     return {"ok": len(errors) == 0, "checks": checks, "errors": errors}

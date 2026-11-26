@@ -728,3 +728,74 @@ def test_api_reports_get_and_analyze_route(tmp_path, monkeypatch) -> None:
         reset_engine()
         get_settings.cache_clear()
 
+
+def test_evidence_enrichment_safe_trim_and_extended_validator(db_session: Session) -> None:
+    """Verify Issue 2/3/5/8 fixes: non-risk event inclusion, counter_examples, safe JSON trim, extended validator, budget, markdown."""
+    import json
+
+    from gni.analysis.budget import llm_allowed, snapshot_budget
+    from gni.reports.monthly import render_monthly_markdown
+    from gni.reports.narrative.runner import _build_user_prompt
+    from gni.reports.narrative.schemas import CrossCountryItem
+    from gni.reports.weekly import render_weekly_markdown
+
+    meta = _seed_corpus(db_session)
+    report = build_daily_report(db_session, day=meta["day"], analyze=False)
+    bundle = prepare_evidence_bundle(db_session, report_type="daily", payload=report)
+
+    # 1. Event evidence has timeline, no rule signal score in summary, and article cards have media_type/feed_scope
+    assert len(bundle.events) >= 1
+    ev0 = bundle.events[0]
+    assert "对华信号" not in (ev0.get("summary") or "")
+    assert isinstance(ev0.get("timeline"), list)
+    assert len(bundle.articles) >= 1
+    assert "media_type" in bundle.articles[0]
+    assert "feed_scope" in bundle.articles[0]
+    # Counter-examples extracted (contradicting dominant stance)
+    assert len(bundle.counter_examples) >= 1
+    exec_slice = bundle.for_task("executive_analysis")
+    assert "counter_examples" in exec_slice
+
+    # 2. _build_user_prompt NEVER produces invalid truncated JSON even under tight max_chars
+    spec = get_task_prompt_spec("daily", "executive_analysis")
+    tight_prompt = _build_user_prompt(spec, bundle, max_chars=1800)
+    ev_json_part = tight_prompt.split("EVIDENCE JSON:\n", 1)[1]
+    parsed_ev = json.loads(ev_json_part)
+    assert isinstance(parsed_ev, dict)
+    assert "statistical" in parsed_ev
+
+    # 3. Extended validator catches ungrounded numbers in important_changes & cross_country + empty evidence_refs
+    bad_ext = NarrativeTaskOutput(
+        task_type="cross_country_analysis",
+        report_type="weekly",
+        summary="跨国比较测试。",
+        important_changes=["本周暴涨 91.3% 创历史新高"],
+        cross_country=[
+            CrossCountryItem(
+                subject_type="topic",
+                subject_id="tech_competition",
+                subject_label="科技竞争",
+                common_focus="各国关注度上升 77.7%。",
+                evidence_refs=[],
+            )
+        ],
+    )
+    validated_ext, vrep = validate_task_output(bad_ext, bundle)
+    assert vrep["ok"] is False
+    assert any("91.3%" in x for x in vrep["numeric_issues"])
+    assert any("77.7%" in x for x in vrep["numeric_issues"])
+    assert validated_ext.cross_country[0].needs_review is True
+
+    # 4. Budget: report LLM tasks ignore daily_article_limit & track ReportNarrativeTask cost
+    cfg = Settings(daily_article_limit=0, daily_llm_budget_usd=5.0)
+    snap = snapshot_budget(db_session, cfg)
+    assert llm_allowed(snap, estimated_cost_usd=0.01, ignore_article_limit=False) is False
+    assert llm_allowed(snap, estimated_cost_usd=0.01, ignore_article_limit=True) is True
+
+    # 5. Weekly & Monthly Markdown renderers work cleanly
+    weekly = build_weekly_report(db_session, end_day=meta["day"], analyze=False)
+    monthly = build_monthly_report(db_session, month=meta["month"], analyze=False)
+    assert "GNI Weekly Intelligence Report" in render_weekly_markdown(weekly)
+    assert "GNI Monthly Strategic Review" in render_monthly_markdown(monthly)
+
+
