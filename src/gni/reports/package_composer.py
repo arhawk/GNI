@@ -145,13 +145,22 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
         or (sections.get("events") if isinstance(sections.get("events"), list) else [])
         or []
     )
+    def _event_article_count(ev: dict[str, Any]) -> int:
+        # daily.py stores event article counts in coverage.article_count; fall back to top-level keys
+        cov = ev.get("coverage") if isinstance(ev.get("coverage"), dict) else {}
+        return int(cov.get("article_count") or ev.get("article_count") or 0)
+
+    def _event_countries(ev: dict[str, Any]) -> list[str]:
+        cov = ev.get("coverage") if isinstance(ev.get("coverage"), dict) else {}
+        return [str(c) for c in (cov.get("countries") or ev.get("countries") or [])]
+
     event_timeline = [
         {
             "event_id": str(ev.get("event_id") or ev.get("id") or ""),
             "title": str(ev.get("title") or ev.get("canonical_title") or ""),
             "event_time": ev.get("event_time"),
-            "article_count": int(ev.get("article_count") or 0),
-            "countries": ev.get("countries") or [],
+            "article_count": _event_article_count(ev),
+            "countries": _event_countries(ev),
         }
         for ev in raw_events[:10]
         if isinstance(ev, dict)

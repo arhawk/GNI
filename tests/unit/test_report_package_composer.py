@@ -70,3 +70,33 @@ def test_weekly_and_monthly_unified_packages_and_markdown() -> None:
         # Monthly baseline < 6 months limitation must be stated honestly
         appendix = m["report_package"]["sections"][-1]
         assert any("6 个月" in lim or "口径" in lim for lim in appendix["limitations"])
+
+
+def test_event_timeline_reads_article_count_and_countries_from_coverage() -> None:
+    """Regression: daily major_events store counts under coverage.*; timeline must not show 0 篇 / empty countries."""
+    from gni.reports.package_composer import extract_report_visualizations
+
+    payload = {
+        "sections": {
+            "v1_stats": {"global": {"article_count": 3}},
+            "major_events": [
+                {
+                    "event_id": "ev-1",
+                    "title": "Megaspeed probe",
+                    "event_time": None,
+                    "coverage": {"article_count": 4, "country_count": 2, "countries": ["US", "SG"]},
+                },
+                {
+                    "event_id": "ev-2",
+                    "title": "Top-level fallback",
+                    "article_count": 2,
+                    "countries": ["IN"],
+                },
+            ],
+        }
+    }
+    items = extract_report_visualizations(payload)["event_timeline"]["items"]
+    assert items[0]["article_count"] == 4
+    assert items[0]["countries"] == ["US", "SG"]
+    assert items[1]["article_count"] == 2
+    assert items[1]["countries"] == ["IN"]
