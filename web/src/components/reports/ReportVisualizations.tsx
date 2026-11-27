@@ -67,7 +67,7 @@ export function WindowSpecBadge({ spec }: { spec?: ReportWindowSpec }) {
   )
 }
 
-function TrendLineChart({
+export function TrendLineChart({
   data,
 }: {
   data?: ReportVisualizations['trend_line']
@@ -172,7 +172,7 @@ function CountryBarChart({
   )
 }
 
-function StanceStackedBar({
+export function StanceStackedBar({
   data,
 }: {
   data?: ReportVisualizations['stance_stacked']

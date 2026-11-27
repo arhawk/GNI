@@ -30,7 +30,8 @@ import {
 } from '../components/reports/ReportViewChrome'
 import {
   QualityGateBanner,
-  ReportVisualDashboard,
+  StanceStackedBar,
+  TrendLineChart,
   WindowSpecBadge,
 } from '../components/reports/ReportVisualizations'
 
@@ -482,13 +483,14 @@ function PeriodBrief({
         <CuratedEvidencePanel refs={pkgRefs as never} />
       </section>
 
-      <section className="brief-section">
-        <ReportVisualDashboard visualizations={data.visualizations} cadence={tab} />
-      </section>
-
       {(s.historical_v1_stats || []).length > 0 && (
         <section className="brief-section">
           <h2>{isMonthly ? '2 · 全球关注格局与近 6 个月文章级重算序列' : '2 · 近 4 周文章级重算趋势序列'}</h2>
+          {data.visualizations?.trend_line && (
+            <div style={{ marginBottom: '0.75rem' }}>
+              <TrendLineChart data={data.visualizations.trend_line} />
+            </div>
+          )}
           <p className="muted small">
             {isMonthly
               ? '所有月度统计均直接基于文章级 V1.0 口径重算（不合并周报）；缺失月份如实标 0，不伪装成趋势。'
@@ -712,6 +714,11 @@ function PeriodBrief({
 
       <section className="brief-section">
         <h2>{isMonthly ? '6 · 长期对华立场趋势（Long-term Stance Trends）' : '6 · 情感与对华立场变化（Sentiment & Stance Changes）'}</h2>
+        {data.visualizations?.stance_stacked && (
+          <div style={{ marginBottom: '0.75rem' }}>
+            <StanceStackedBar data={data.visualizations.stance_stacked} />
+          </div>
+        )}
         <StanceAnalysisBlock
           assessment={assessments.sentiment_stance_analysis}
           title={isMonthly ? '长期对华立场演变与单事件冲击辨析' : '周度对华立场比例 vs 绝对数量变化解读'}
@@ -880,9 +887,6 @@ function DailyBrief({
               .join(' · ') || '—'}
           </p>
         )}
-        <div style={{ marginTop: '0.9rem' }}>
-          <ReportVisualDashboard visualizations={data.visualizations} cadence="daily" />
-        </div>
       </section>
 
       <section className="brief-section">

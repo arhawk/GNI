@@ -155,3 +155,28 @@ def test_nine_statistical_methodology_invariants() -> None:
             assert rep["window_spec"]["timezone"] == "Asia/Shanghai"
             assert "report_package" in rep
             assert "visualizations" in rep
+            # Mandatory statistical blocks: stance distribution, country table, and 15-topic table
+            v1_rep = rep["sections"]["v1_stats"]
+            assert "global" in v1_rep and "stance_coverage_rate" in v1_rep["global"]
+            assert isinstance(v1_rep.get("countries"), list) and len(v1_rep["countries"]) > 0
+            assert isinstance(v1_rep.get("topics"), list) and len(v1_rep["topics"]) > 0
+
+
+def test_reports_ui_no_duplicate_dashboard_and_keeps_mandatory_tables() -> None:
+    """Guardrail: Reports.tsx removes duplicate ReportVisualDashboard while keeping stance/country/topic tables."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "web" / "src" / "pages" / "Reports.tsx").read_text(encoding="utf-8")
+
+    # Duplicate overview block must not be rendered in Daily/Weekly/Monthly
+    assert "<ReportVisualDashboard" not in src
+    # Weekly/Monthly embed focused single charts in sections 2 and 6
+    assert "<TrendLineChart" in src
+    assert "<StanceStackedBar" in src
+    # Mandatory blocks: stance distribution + country + 15-topic tables must remain present
+    assert "<V1StatsBlock" in src
+    assert "<TrendDeltaTable" in src
+    assert "country_profiles" in src
+    assert "cross_country_narrative" in src
+
