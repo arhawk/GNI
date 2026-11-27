@@ -29,6 +29,7 @@ from gni.metrics.definitions import (
 )
 from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
 from gni.reports.validate import validate_monthly_report
+from gni.reports.window import resolve_display_event_time
 from gni.reports.weekly import _aware, _fmt_pct, _in_window, _source_bucket, _upsert_snapshot
 
 SCHEMA_VERSION = "monthly_report_schema_v1"
@@ -247,6 +248,10 @@ def build_monthly_report(
                 }
             )
 
+        display_event_time, event_time_basis = resolve_display_event_time(
+            ev_time,
+            [a.published_at for a in ev_articles],
+        )
         major.append(
             {
                 "id": eid,
@@ -259,7 +264,8 @@ def build_monthly_report(
                 "actor_key": ev_obj.actor_key if ev_obj else e.get("actor_key"),
                 "action_key": ev_obj.action_key if ev_obj else e.get("action_key"),
                 "object_key": ev_obj.object_key if ev_obj else None,
-                "event_time": ev_time.isoformat() if ev_time else e.get("event_time"),
+                "event_time": display_event_time.isoformat() if display_event_time else e.get("event_time"),
+                "event_time_basis": event_time_basis,
                 "first_seen_at": e.get("first_seen_at"),
                 "coverage": {
                     "article_count": len(ev_articles) or e.get("article_count") or 0,

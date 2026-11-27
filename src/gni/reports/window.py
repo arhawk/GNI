@@ -231,3 +231,24 @@ def in_half_open_window(ts: datetime | None, start: datetime, end: datetime) -> 
         return False
     aware = ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
     return start <= aware.astimezone(start.tzinfo) < end
+
+
+def resolve_display_event_time(
+    actual: datetime | None,
+    published_times: list[datetime | None],
+) -> tuple[datetime | None, str | None]:
+    """Display time for report events: actual event time first, else earliest publish time (Proxy Event Time).
+
+    Returns (display_time, basis) where basis is "actual", "proxy_published_at", or None when unknown.
+    """
+    if actual is not None:
+        aware_actual = actual if actual.tzinfo is not None else actual.replace(tzinfo=timezone.utc)
+        return aware_actual, "actual"
+    pubs = [
+        p if p.tzinfo is not None else p.replace(tzinfo=timezone.utc)
+        for p in published_times
+        if p is not None
+    ]
+    if pubs:
+        return min(pubs), "proxy_published_at"
+    return None, None

@@ -273,7 +273,9 @@ function EventTimelineList({
                 <span className="shrink-0 text-[11px] text-slate-500">{ev.article_count} 篇</span>
               </div>
               <div className="mt-0.5 text-[11px] text-slate-500">
-                事件时间：{ev.event_time ? ev.event_time.slice(0, 16).replace('T', ' ') : '时间待定（未用发布时间替代）'}
+                {ev.event_time
+                  ? `${ev.event_time_basis === 'proxy_published_at' ? '事件时间（代理：最早发布时间）' : '事件时间'}：${ev.event_time.slice(0, 16).replace('T', ' ')}`
+                  : '事件时间：时间未知'}
                 {ev.countries && ev.countries.length > 0 ? ` · 国家：${ev.countries.join(', ')}` : ''}
               </div>
             </li>
@@ -311,7 +313,7 @@ export function ReportVisualDashboard({
         <CountryBarChart data={visualizations.country_bar} />
         <TopicDeltaChart data={visualizations.topic_delta} />
       </div>
-      <EventTimelineList data={visualizations.event_timeline} />
+      {cadence !== 'daily' && <EventTimelineList data={visualizations.event_timeline} />}
     </section>
   )
 }

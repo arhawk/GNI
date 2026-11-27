@@ -16,7 +16,7 @@
 - **统计口径零篡改**：
   - `StanceStackedBar` 显式单列 `Unclassified` 计数并注明“不计入比例分母”，右上角始终展示 `stance_coverage_rate`。
   - `TopicDeltaChart` 独立展示各议题文章数与环比 Δ，不将跨议题重叠计数错误堆叠为总量。
-  - `EventTimelineList` 严格渲染 `event_time`，缺失时显示“时间待定（未用发布时间替代）”。
+  - 日报不渲染重点事件时间线；周报/月报 `EventTimelineList` 渲染事件时间：优先 `event_time`（actual），缺失时以最早发布时间作为代理时间（`proxy_published_at`，Proxy Event Time）并标注“代理：最早发布时间”。
 - **门禁与周期提示**：`QualityGateBanner` 区分三态（`passed` / `passed_with_warnings` / `blocked`），`WindowSpecBadge` 在月中/进行中周期醒目标注 MTD 公平环比。
 
 ## 3. 构建与 Lint 验证

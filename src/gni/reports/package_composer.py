@@ -63,7 +63,8 @@ _CHAPTER_DEFS_BY_TYPE = {
 
 
 def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
-    """Build deterministic visualization payloads strictly from V1.0 stats & event_time."""
+    """Build deterministic visualization payloads from V1.0 stats and event times (actual, else proxy publish time)."""
+    rt = str(payload.get("report_type") or "").lower().strip()
     sections = payload.get("sections") or {}
     v1 = sections.get("v1_stats") or {}
     g = v1.get("global") or {}
@@ -159,6 +160,7 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
             "event_id": str(ev.get("event_id") or ev.get("id") or ""),
             "title": str(ev.get("title") or ev.get("canonical_title") or ""),
             "event_time": ev.get("event_time"),
+            "event_time_basis": ev.get("event_time_basis"),
             "article_count": _event_article_count(ev),
             "countries": _event_countries(ev),
         }
@@ -166,7 +168,7 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(ev, dict)
     ]
 
-    return {
+    result: dict[str, Any] = {
         "trend_line": {
             "type": "trend_line",
             "title": "涉华报道量趋势",
@@ -191,13 +193,16 @@ def extract_report_visualizations(payload: dict[str, Any]) -> dict[str, Any]:
             "data": stance_stacked,
             "caption": "正/中/负比例分母仅为已分类文章数，Unclassified 与 stance_coverage_rate 单独展示。",
         },
-        "event_timeline": {
-            "type": "event_timeline",
-            "title": "重点事件时间线（严格使用 event_time）",
-            "items": event_timeline,
-            "caption": "事件时间取自 event_time；发生时间不明确时保留为空，不用 published_at 替代。",
-        },
     }
+    # Daily reports do not render an event timeline (removed by product decision).
+    if rt != "daily":
+        result["event_timeline"] = {
+            "type": "event_timeline",
+            "title": "重点事件时间线",
+            "items": event_timeline,
+            "caption": "事件时间优先取实际发生时间（actual）；缺失时以最早发布时间作为代理时间（proxy_published_at，Proxy Event Time）。",
+        }
+    return result
 
 
 def _normalize_finding(
@@ -304,20 +309,24 @@ def build_report_package(
     article_pool = _collect_pool_articles(session, payload)
     curated_global = curate_finding_evidence(article_pool, max_refs=3, include_counter=True)
 
+    def _viz(*keys: str) -> list[dict[str, Any]]:
+        # Chapters may reference visualizations that a given cadence does not produce (e.g. daily has no event_timeline)
+        return [visualizations[k] for k in keys if visualizations.get(k) is not None]
+
     chapter_viz_map: dict[str, list[dict[str, Any]]] = {
-        "chapter_2_key_developments": [visualizations["event_timeline"]],
-        "chapter_3_global_situation": [visualizations["country_bar"], visualizations["topic_delta"]],
-        "chapter_4_key_changes_anomalies": [visualizations["trend_line"], visualizations["stance_stacked"]],
-        "chapter_2_attention_changes": [visualizations["trend_line"]],
-        "chapter_2_attention_landscape": [visualizations["trend_line"]],
-        "chapter_3_event_evolution": [visualizations["event_timeline"]],
-        "chapter_3_event_retrospective": [visualizations["event_timeline"]],
-        "chapter_4_country_comparison": [visualizations["country_bar"]],
-        "chapter_4_country_analysis": [visualizations["country_bar"]],
-        "chapter_5_topic_narrative_trends": [visualizations["topic_delta"]],
-        "chapter_6_topic_structural": [visualizations["topic_delta"]],
-        "chapter_6_stance_changes": [visualizations["stance_stacked"]],
-        "chapter_7_stance_trends": [visualizations["stance_stacked"]],
+        "chapter_2_key_developments": _viz("event_timeline"),
+        "chapter_3_global_situation": _viz("country_bar", "topic_delta"),
+        "chapter_4_key_changes_anomalies": _viz("trend_line", "stance_stacked"),
+        "chapter_2_attention_changes": _viz("trend_line"),
+        "chapter_2_attention_landscape": _viz("trend_line"),
+        "chapter_3_event_evolution": _viz("event_timeline"),
+        "chapter_3_event_retrospective": _viz("event_timeline"),
+        "chapter_4_country_comparison": _viz("country_bar"),
+        "chapter_4_country_analysis": _viz("country_bar"),
+        "chapter_5_topic_narrative_trends": _viz("topic_delta"),
+        "chapter_6_topic_structural": _viz("topic_delta"),
+        "chapter_6_stance_changes": _viz("stance_stacked"),
+        "chapter_7_stance_trends": _viz("stance_stacked"),
     }
 
     built_sections: list[ReportSectionContract] = []

@@ -138,11 +138,14 @@ def test_nine_statistical_methodology_invariants() -> None:
         assert len(daily["visualizations"]["country_bar"]["items"]) == 2
         assert len(daily["visualizations"]["topic_delta"]["items"]) >= 2
 
-        # 8 & 9. event_time=NULL is preserved as None, never replaced with published_at
-        tl = daily["visualizations"]["event_timeline"]["items"]
-        undated = [e for e in tl if e.get("event_id") == "ev-null-time"]
+        # Daily report no longer renders an event timeline
+        assert "event_timeline" not in daily["visualizations"]
+
+        # 8 & 9. event_time=NULL falls back to earliest article publish time as Proxy Event Time (basis labelled)
+        undated = [e for e in daily["sections"]["major_events"] if e.get("event_id") == "ev-null-time"]
         if undated:
-            assert undated[0]["event_time"] is None
+            assert undated[0]["event_time_basis"] == "proxy_published_at"
+            assert undated[0]["event_time"] is not None
 
         # Weekly & Monthly full pipeline traceability
         weekly = build_weekly_report(session, end_day="2026-11-26", persist_snapshot=False)

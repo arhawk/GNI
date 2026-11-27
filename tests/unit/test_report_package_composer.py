@@ -100,3 +100,17 @@ def test_event_timeline_reads_article_count_and_countries_from_coverage() -> Non
     assert items[0]["countries"] == ["US", "SG"]
     assert items[1]["article_count"] == 2
     assert items[1]["countries"] == ["IN"]
+
+
+def test_resolve_display_event_time_prefers_actual_then_proxy_publish_time() -> None:
+    """Actual event time wins; otherwise earliest publish time is the Proxy Event Time; else unknown."""
+    from datetime import datetime, timezone
+
+    from gni.reports.window import resolve_display_event_time
+
+    actual = datetime(2026, 11, 24, 0, 0, tzinfo=timezone.utc)
+    p1 = datetime(2026, 11, 25, 9, 0, tzinfo=timezone.utc)
+    p2 = datetime(2026, 11, 24, 6, 0)  # naive -> treated as UTC
+    assert resolve_display_event_time(actual, [p1, p2]) == (actual, "actual")
+    assert resolve_display_event_time(None, [p1, None, p2]) == (p2.replace(tzinfo=timezone.utc), "proxy_published_at")
+    assert resolve_display_event_time(None, [None]) == (None, None)

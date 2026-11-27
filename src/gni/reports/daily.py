@@ -580,6 +580,21 @@ def build_daily_report(
             if e.get("event_time")
             else None
         )
+        # Display time: actual event time first; otherwise earliest article publish time as Proxy Event Time
+        pub_times: list[datetime] = []
+        for ev_row in evidence:
+            pv = ev_row.get("published_at")
+            if not pv:
+                continue
+            try:
+                pub_times.append(_aware(datetime.fromisoformat(str(pv).replace("Z", "+00:00"))))
+            except ValueError:
+                continue
+        proxy_event_time = min(pub_times) if pub_times else None
+        display_event_time = event_time or proxy_event_time
+        event_time_basis = (
+            "actual" if event_time else ("proxy_published_at" if proxy_event_time else None)
+        )
         touched = False
         if event_time and win_start <= event_time < win_end:
             touched = True
@@ -719,7 +734,8 @@ def build_daily_report(
                 "china_signal_score": css,
                 "avg_china_relevance_weight": round(avg_w, 4),
                 "event_type": e.get("event_type"),
-                "event_time": event_time.isoformat() if event_time else e.get("event_time"),
+                "event_time": display_event_time.isoformat() if display_event_time else e.get("event_time"),
+                "event_time_basis": event_time_basis,
                 "first_seen_at": first_seen.isoformat() if first_seen else None,
                 "status": e.get("status"),
                 "overview_text": _event_overview(

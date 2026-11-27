@@ -268,6 +268,7 @@ export type ReportVisualizations = {
       event_id: string
       title: string
       event_time?: string | null
+      event_time_basis?: 'actual' | 'proxy_published_at' | null
       article_count: number
       countries?: string[]
     }>
