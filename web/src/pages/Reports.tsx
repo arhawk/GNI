@@ -37,7 +37,9 @@ import {
 
 type Tab = 'daily' | 'weekly' | 'monthly'
 
-function todayShanghaiDate(): string {
+export const DEFAULT_REPORT_DATE = '2026-11-26'
+
+export function todayShanghaiDate(): string {
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Shanghai',
@@ -68,7 +70,7 @@ function shiftDay(ymd: string, deltaDays: number): string {
 }
 
 export function ReportsPage() {
-  const initialDay = useMemo(() => todayShanghaiDate(), [])
+  const initialDay = useMemo(() => DEFAULT_REPORT_DATE, [])
   const [tab, setTab] = useState<Tab>('daily')
   const [selectedDate, setSelectedDate] = useState<string>(initialDay)
   const [calendarMonth, setCalendarMonth] = useState<string>(initialDay.slice(0, 7))
@@ -175,7 +177,7 @@ export function ReportsPage() {
       <div className="report-topbar">
         <div className="report-tabs">
           <button type="button" className={tab === 'daily' ? 'active' : ''} onClick={() => setTab('daily')}>
-            每日情报
+            每日简报
           </button>
           <button type="button" className={tab === 'weekly' ? 'active' : ''} onClick={() => setTab('weekly')}>
             每周分析
@@ -266,7 +268,7 @@ export function ReportsPage() {
 
 const WEEKDAYS_ZH = ['一', '二', '三', '四', '五', '六', '日']
 
-function ReportCalendarPopover({
+export function ReportCalendarPopover({
   month,
   days,
   selectedDate,

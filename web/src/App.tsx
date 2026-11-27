@@ -3,7 +3,6 @@ import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 import { CommandPalette } from './components/CommandPalette'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { EvidenceProvider } from './components/EvidenceContext'
-import { TimeFilter } from './components/TimeFilter'
 import { TopSearch } from './components/TopSearch'
 import { TimeWindowProvider } from './TimeWindowContext'
 import { OverviewPage } from './pages/Overview'
@@ -39,7 +38,7 @@ export default function App() {
                   <NavLink to="/" end>
                     Global Dashboard
                   </NavLink>
-                  <NavLink to="/reports">每日情报简报</NavLink>
+                  <NavLink to="/reports">情报分析</NavLink>
                   <NavLink to="/outlook">展望与观察清单</NavLink>
                 </NavGroup>
 
@@ -67,7 +66,6 @@ export default function App() {
                     监测中 · ⌘K
                   </div>
                 </header>
-                <TimeFilter />
                 <main className="main">
                   <Routes>
                     <Route path="/" element={<OverviewPage />} />

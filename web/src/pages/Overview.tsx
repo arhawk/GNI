@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { fetchReportCalendar, type ReportCalendarDay } from '../api'
 import { fetchDashboard, type DashboardPayload } from '../apiV2'
 import { useEvidenceDrawer } from '../components/EvidenceContext'
+import { DEFAULT_REPORT_DATE, ReportCalendarPopover } from './Reports'
 import {
   ClassificationBadge,
   EmptyState,
@@ -18,15 +20,55 @@ import '../components/intel.css'
 
 export function OverviewPage() {
   const { openEvidence } = useEvidenceDrawer()
+  const [selectedDate, setSelectedDate] = useState<string>(DEFAULT_REPORT_DATE)
+  const [trendDays, setTrendDays] = useState<number>(14)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState<string>(DEFAULT_REPORT_DATE.slice(0, 7))
+  const [calendarView, setCalendarView] = useState<'day' | 'month'>('day')
+  const [calendarDays, setCalendarDays] = useState<ReportCalendarDay[]>([])
+  const calendarAnchorRef = useRef<HTMLDivElement | null>(null)
+
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
+    fetchReportCalendar(calendarMonth)
+      .then((res) => {
+        if (!cancelled) setCalendarDays(res.days || [])
+      })
+      .catch(() => {
+        if (!cancelled) setCalendarDays([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [calendarMonth])
+
+  useEffect(() => {
+    if (!calendarOpen) return
+    function onDocClick(e: MouseEvent) {
+      if (calendarAnchorRef.current && !calendarAnchorRef.current.contains(e.target as Node)) {
+        setCalendarOpen(false)
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setCalendarOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [calendarOpen])
+
+  useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
-    fetchDashboard(undefined, 14)
+    fetchDashboard(selectedDate, trendDays)
       .then((res) => {
         if (!cancelled) setData(res)
       })
@@ -39,7 +81,7 @@ export function OverviewPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [selectedDate, trendDays])
 
   if (loading) return <LoadingState label="加载 Global Intelligence Dashboard…" />
   if (error) {
@@ -61,18 +103,76 @@ export function OverviewPage() {
 
   return (
     <div className="intel-page">
-      <div className="intel-header-row">
-        <div>
-          <h1 style={{ margin: 0 }}>Global Intelligence Dashboard</h1>
-          <p className="muted small" style={{ margin: '0.25rem 0 0' }}>
-            周期 {data.meta.period} · 窗口 {fmtDateTime(data.meta.period_start)} →{' '}
-            {fmtDateTime(data.meta.period_end)} UTC · 方法论 {data.meta.methodology_version} · 核心指标：
-            {data.meta.core_kpi}
-          </p>
+      <div
+        className="intel-header-row"
+        style={{ flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}
+      >
+        <h1 style={{ margin: 0 }}>Global Intelligence Dashboard</h1>
+        <div
+          className="intel-filter-bar"
+          style={{ marginLeft: 'auto', flexShrink: 0, alignItems: 'center', gap: '0.6rem', flexWrap: 'nowrap' }}
+        >
+          <label className="small muted" style={{ whiteSpace: 'nowrap' }}>
+            统计窗口{' '}
+            <select value={trendDays} onChange={(e) => setTrendDays(Number(e.target.value))}>
+              <option value={7}>近 7 天</option>
+              <option value={14}>近 14 天</option>
+              <option value={30}>近 30 天</option>
+              <option value={90}>近 90 天</option>
+            </select>
+          </label>
+          <div className="report-date-anchor" ref={calendarAnchorRef}>
+            <button
+              type="button"
+              className="report-date-trigger"
+              aria-expanded={calendarOpen}
+              aria-haspopup="dialog"
+              onClick={() => {
+                setCalendarOpen((v) => {
+                  const next = !v
+                  if (next) setCalendarView('day')
+                  return next
+                })
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span>{selectedDate}</span>
+              <span aria-hidden="true">{calendarOpen ? '▴' : '▾'}</span>
+            </button>
+            {calendarOpen && (
+              <ReportCalendarPopover
+                month={calendarMonth}
+                days={calendarDays}
+                selectedDate={selectedDate}
+                view={calendarView}
+                onChangeView={setCalendarView}
+                onChangeMonth={setCalendarMonth}
+                onSelectDate={(d) => {
+                  setSelectedDate(d)
+                  const ym = d.slice(0, 7)
+                  if (ym !== calendarMonth) setCalendarMonth(ym)
+                  setCalendarOpen(false)
+                }}
+              />
+            )}
+          </div>
         </div>
-        <div className="intel-chip-row">
+      </div>
+
+      <div className="intel-header-row" style={{ marginTop: '-0.35rem', alignItems: 'center' }}>
+        <p className="muted small" style={{ margin: 0 }}>
+          周期 {data.meta.period} · 窗口 {fmtDateTime(data.meta.period_start)} →{' '}
+          {fmtDateTime(data.meta.period_end)} UTC · 方法论 {data.meta.methodology_version} · 核心指标：
+          {data.meta.core_kpi}
+        </p>
+        <div className="intel-chip-row" style={{ marginLeft: 'auto', flexShrink: 0 }}>
           <Link to={data.daily_report_entry.href} className="intel-btn primary">
-            阅读完整每日情报简报 ({data.daily_report_entry.chapter_count} 章) →
+            阅读完整情报分析 ({data.daily_report_entry.chapter_count} 章) →
           </Link>
           <Link to="/explorer" className="intel-btn">
             证据与文章浏览
@@ -448,7 +548,7 @@ export function OverviewPage() {
       {/* F. Daily Report Entry */}
       <div className="intel-banner intel-header-row">
         <div>
-          <strong>F · Daily Intelligence Brief（完整每日情报简报）</strong>
+          <strong>F · Daily Intelligence Brief（完整情报分析）</strong>
           <div className="muted small">
             报告 ID：{data.daily_report_entry.report_id || data.meta.period} · 生成状态：
             {data.daily_report_entry.generation_status || '—'} · 校验状态：
