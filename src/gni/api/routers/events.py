@@ -34,9 +34,12 @@ class EventSplitRequest(BaseModel):
 
 
 @router.get("/api/events")
-def api_events(limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+def api_events(
+    limit: int = Query(50, ge=1, le=200),
+    include_closed: bool = Query(False, description="Include archived (closed) events"),
+) -> dict[str, Any]:
     with session_scope() as session:
-        return {"events": list_events(session, limit=limit)}
+        return {"events": list_events(session, limit=limit, include_closed=include_closed)}
 
 
 @router.get("/api/events/{event_id}")

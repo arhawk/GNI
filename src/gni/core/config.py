@@ -31,6 +31,11 @@ class Settings(BaseSettings):
 
     report_timezone: str = "Asia/Shanghai"
 
+    # Event lifecycle (writing-block §5.5): days since last linked article.
+    # 14d is the spec's test default and must stay configurable (not a fixed fact).
+    event_dormant_days: int = 14
+    event_closed_days: int = 90
+
     # Meilisearch (optional; search falls back to Postgres ilike when unset/down)
     meili_url: str = "http://127.0.0.1:7700"
     meili_key: str = "gni_dev_meili_key"

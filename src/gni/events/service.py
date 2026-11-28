@@ -16,6 +16,7 @@ from gni.core.config import Settings, get_settings
 from gni.events.extract import extract_for_articles, load_latest_cards
 from gni.events.geo import centroid, location_pin_spec
 from gni.events.llm_grouping import SYSTEM_PROMPT, CallFn, cluster_cards_daily, make_cached_llm_call
+from gni.events.lifecycle import HIDDEN_STATUSES, RECENT_TIER_STATUSES, refresh_event_lifecycle
 from gni.events.match import FingerprintCluster, cluster_fingerprints
 from gni.events.rollup import (
     attitude_map_rows,
@@ -94,7 +95,7 @@ def merge_events(
             )
             moved += 1
         session.delete(link)
-    merge.status = "closed"
+    merge.status = "merged"
     session.add(
         EventRevision(
             id=str(uuid4()),
@@ -114,7 +115,7 @@ def merge_events(
         )
     )
     session.flush()
-    return {"keep_id": keep_id, "merge_id": merge_id, "articles_moved": moved, "merge_status": "closed"}
+    return {"keep_id": keep_id, "merge_id": merge_id, "articles_moved": moved, "merge_status": "merged"}
 
 
 def split_event(
@@ -193,8 +194,9 @@ def split_event(
     }
 
 
-# Never auto-delete or overwrite these during rebuild (manual / terminal states).
-_PRESERVE_EVENT_STATUSES = frozenset({"confirmed", "closed", "locked"})
+# Never overwrite these during rebuild (manual / merge states).
+# dormant / closed are lifecycle states: rebuild may re-link articles, lifecycle recomputes status.
+_PRESERVE_EVENT_STATUSES = frozenset({"confirmed", "merged", "locked"})
 
 
 def _budgeted_grouping_call(session: Session, settings: Settings) -> CallFn | None:
@@ -265,6 +267,8 @@ def rebuild_proto_events(
         else:
             updated += 1
     session.flush()
+    # Lifecycle covers every event, not just the clusters touched in this rebuild.
+    lifecycle_stats = refresh_event_lifecycle(session, settings=get_settings())
     rollup_event_metrics(session, event_ids=event_ids)
     attitude_n = rollup_country_china_attitude(session, window="30d")
     return {
@@ -275,7 +279,28 @@ def rebuild_proto_events(
         "path": "fingerprint_incremental",
         "grouping": {"mode": grouping, **grouping_stats},
         "attitude_snapshots": attitude_n,
+        "lifecycle": lifecycle_stats,
     }
+
+
+def _min_time(a: datetime | None, b: datetime | None) -> datetime | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(_as_utc(a), _as_utc(b))
+
+
+def _max_time(a: datetime | None, b: datetime | None) -> datetime | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return max(_as_utc(a), _as_utc(b))
+
+
+def _as_utc(t: datetime) -> datetime:
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
 def _stable_event_id(fingerprint: str) -> str:
@@ -323,10 +348,13 @@ def _persist_fingerprint_cluster(session: Session, cl: FingerprintCluster) -> tu
             existing.title = cl.title
             existing.summary = summary
             existing.event_type = cl.cards[0].event_type
-            existing.status = "active" if cl.high_confidence else "proto"
+            # dormant/closed are set by refresh_event_lifecycle, not by clustering.
+            if existing.status in RECENT_TIER_STATUSES:
+                existing.status = "active" if cl.high_confidence else "proto"
             existing.importance_score = cl.importance_score
-            existing.window_start = cl.window_start
-            existing.window_end = cl.window_end
+            # Widen, never shrink: a later cluster must not erase earlier coverage.
+            existing.window_start = _min_time(existing.window_start, cl.window_start)
+            existing.window_end = _max_time(existing.window_end, cl.window_end)
             existing.has_physical_location = has_phys or existing.has_physical_location
             existing.actor_key = cl.actor_key
             existing.action_key = cl.action_key
@@ -425,12 +453,17 @@ def list_events(
     limit: int = 50,
     window_start: datetime | None = None,
     window_end: datetime | None = None,
+    include_closed: bool = False,
 ) -> list[dict[str, Any]]:
+    """Events newest-first. closed (archived) and merged rows are hidden unless include_closed."""
     from sqlalchemy import func
 
     # Fetch then sort in Python so SQLite/Postgres both honor event_time fallbacks.
+    base = select(Event)
+    if not include_closed:
+        base = base.where(Event.status.not_in(sorted(HIDDEN_STATUSES)))
     if window_start is not None or window_end is not None:
-        all_rows = list(session.scalars(select(Event)).all())
+        all_rows = list(session.scalars(base).all())
         ws = window_start if (window_start is None or window_start.tzinfo) else window_start.replace(tzinfo=timezone.utc)
         we = window_end if (window_end is None or window_end.tzinfo) else window_end.replace(tzinfo=timezone.utc)
         rows = []
@@ -442,7 +475,7 @@ def list_events(
                 continue
             rows.append(e)
     else:
-        rows = list(session.scalars(select(Event).limit(max(limit * 3, 80))).all())
+        rows = list(session.scalars(base.limit(max(limit * 3, 80))).all())
     rows.sort(key=_event_sort_time, reverse=True)
     rows = rows[:limit]
     out: list[dict[str, Any]] = []

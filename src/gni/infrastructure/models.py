@@ -453,7 +453,8 @@ class Event(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text)
     event_type: Mapped[str | None] = mapped_column(String(64))  # taxonomy topic hint, not threat-class
-    status: Mapped[str] = mapped_column(String(32), default="proto")  # proto | active | closed
+    # proto | active | dormant | closed (lifecycle, see events/lifecycle.py) | locked | confirmed | merged
+    status: Mapped[str] = mapped_column(String(32), default="proto")
     importance_score: Mapped[float | None] = mapped_column(Float)
     window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -607,7 +608,7 @@ class EventRevision(Base):
 
     id: Mapped[str] = mapped_column(PortableUUID, primary_key=True, default=lambda: str(uuid4()))
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
-    action: Mapped[str] = mapped_column(String(32), nullable=False)  # merge|split|correct|lock
+    action: Mapped[str] = mapped_column(String(32), nullable=False)  # merge|split|correct|lock|dormant|reactivate|archive
     payload: Mapped[dict[str, Any] | None] = mapped_column(PortableJSON)
     actor: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
