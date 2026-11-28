@@ -44,3 +44,4 @@ web/dist/
 
 # Event grouping LLM response cache (regenerable)
 data/event_grouping_cache/
+data/gdelt_rate_limit.lock

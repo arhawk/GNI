@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import random
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -21,6 +23,7 @@ GDELT_DOC_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc"
 _NON_RETRYABLE_STATUS = {400, 401, 403, 404, 407, 410}
 _RATE_LOCK = threading.Lock()
 _LAST_REQUEST_TS: float = 0.0
+DEFAULT_LOCK_PATH = Path(__file__).resolve().parents[3] / "data" / "gdelt_rate_limit.lock"
 
 _LANG_MAP = {
     "english": "en",
@@ -78,22 +81,47 @@ class GdeltAdapter(BaseAdapter):
         max_attempts: int = 5,
         min_interval_sec: float = 10.0,
         jitter_sec: float = 2.5,
+        lock_path: Path | None = DEFAULT_LOCK_PATH,
     ) -> None:
         self.timeout = timeout
         self.user_agent = user_agent
         self.max_attempts = max_attempts
         self.min_interval_sec = min_interval_sec
         self.jitter_sec = jitter_sec
+        self.lock_path = lock_path
 
     def _wait_rate_limit(self) -> None:
+        """Enforce minimum spacing across threads AND processes via file lock."""
         global _LAST_REQUEST_TS
         if self.min_interval_sec <= 0:
             return
+        target_gap = self.min_interval_sec + (
+            random.uniform(0.0, self.jitter_sec) if self.jitter_sec > 0 else 0.0
+        )
         with _RATE_LOCK:
+            if self.lock_path is not None:
+                self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.lock_path, "a+", encoding="utf-8") as fh:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                    try:
+                        fh.seek(0)
+                        raw = fh.read().strip()
+                        last_ts = float(raw) if raw else 0.0
+                        now = time.time()
+                        elapsed = now - last_ts
+                        if last_ts > 0 and elapsed < target_gap:
+                            time.sleep(target_gap - elapsed)
+                        now = time.time()
+                        fh.seek(0)
+                        fh.truncate()
+                        fh.write(f"{now:.6f}")
+                        fh.flush()
+                        _LAST_REQUEST_TS = time.monotonic()
+                    finally:
+                        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                return
+
             now = time.monotonic()
-            target_gap = self.min_interval_sec + (
-                random.uniform(0.0, self.jitter_sec) if self.jitter_sec > 0 else 0.0
-            )
             elapsed = now - _LAST_REQUEST_TS
             if _LAST_REQUEST_TS > 0 and elapsed < target_gap:
                 time.sleep(target_gap - elapsed)

@@ -183,3 +183,19 @@ def test_seed_contains_new_worldmonitor_and_gdelt_sources():
 
     assert media_type_bucket(MagicMock(source_type="aggregator_discovery", feed_scope="CHINA_FOCUSED")) == "aggregator_discovery"
     assert MEDIA_TYPE_ZH["aggregator_discovery"] == "聚合发现"
+
+
+def test_gdelt_cross_process_file_lock_enforces_spacing(tmp_path):
+    import time
+
+    lock_file = tmp_path / "gdelt.lock"
+    a1 = GdeltAdapter(min_interval_sec=0.15, jitter_sec=0.0, lock_path=lock_file)
+    a2 = GdeltAdapter(min_interval_sec=0.15, jitter_sec=0.0, lock_path=lock_file)
+
+    t0 = time.monotonic()
+    a1._wait_rate_limit()
+    a2._wait_rate_limit()
+    elapsed = time.monotonic() - t0
+    assert lock_file.exists()
+    assert elapsed >= 0.14
+

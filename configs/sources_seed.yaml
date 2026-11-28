@@ -1881,7 +1881,7 @@ sources:
     discovery_provider: gdelt
     gdelt_sourcecountry: US
     query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:US"
-    timespan: 24h
+    timespan: 48h
     maxrecords: 50
   notes: >
     GDELT DOC 2.0 China-focused discovery for US outlets (deduped against native RSS by URL; rate-limited 1 req / 6.5s).
@@ -1913,7 +1913,7 @@ sources:
     discovery_provider: gdelt
     gdelt_sourcecountry: IN
     query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:IN"
-    timespan: 24h
+    timespan: 48h
     maxrecords: 50
   notes: >
     GDELT DOC 2.0 China-focused discovery for IN outlets (deduped against native RSS by URL; rate-limited 1 req / 6.5s).
@@ -1944,8 +1944,8 @@ sources:
   config:
     discovery_provider: gdelt
     gdelt_sourcecountry: GM
-    query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:GM"
-    timespan: 24h
+    query: "sourcecountry:GM china"
+    timespan: 48h
     maxrecords: 50
   notes: >
     GDELT DOC 2.0 China-focused discovery for DE outlets (FIPS GM; deduped against native RSS by URL; rate-limited 1 req / 6.5s).
@@ -2113,7 +2113,7 @@ sources:
     discovery_provider: gdelt
     gdelt_sourcecountry: RS
     query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:RS"
-    timespan: 24h
+    timespan: 48h
     maxrecords: 50
   notes: >
     GDELT DOC 2.0 China-focused discovery for RU outlets (FIPS RS; deduped against native RSS by URL; rate-limited 1 req / 6.5s).
@@ -2145,7 +2145,7 @@ sources:
     discovery_provider: gdelt
     gdelt_sourcecountry: AS
     query: "(China OR Chinese OR Beijing OR Taiwan) sourcecountry:AS"
-    timespan: 24h
+    timespan: 48h
     maxrecords: 50
   notes: >
     GDELT DOC 2.0 China-focused discovery for AU outlets (FIPS AS; deduped against native RSS by URL; rate-limited 1 req / 6.5s).
