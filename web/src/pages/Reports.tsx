@@ -25,6 +25,11 @@ import {
   TrendDeltaTable,
 } from '../components/tables'
 import {
+  fetchDashboard,
+  type DashboardPayload,
+} from '../apiV2'
+import { DashboardBriefSections } from '../components/reports/DashboardBriefSections'
+import {
   CuratedEvidencePanel,
   ReportExportBar,
 } from '../components/reports/ReportViewChrome'
@@ -79,6 +84,7 @@ export function ReportsPage() {
   const [calendarView, setCalendarView] = useState<'day' | 'month'>('day')
   const calendarAnchorRef = useRef<HTMLDivElement | null>(null)
   const [data, setData] = useState<DailyReport | null>(null)
+  const [dashboardData, setDashboardData] = useState<DashboardPayload | null>(null)
   const [period, setPeriod] = useState<PeriodReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -113,6 +119,7 @@ export function ReportsPage() {
     setError(null)
     setAnalyzeError(null)
     setData(null)
+    setDashboardData(null)
     setPeriod(null)
     if (tab === 'daily') {
       fetchDailyReport(selectedDate)
@@ -130,6 +137,9 @@ export function ReportsPage() {
           setData(payload)
         })
         .catch((e: Error) => setError(e.message))
+      fetchDashboard(selectedDate, 14)
+        .then((dash) => setDashboardData(dash))
+        .catch(() => setDashboardData(null))
       return
     }
     const loader =
@@ -239,6 +249,7 @@ export function ReportsPage() {
       {tab === 'daily' && data && (
         <DailyBrief
           data={data}
+          dashboardData={dashboardData}
           selectedDate={selectedDate}
           analyzing={analyzing}
           analyzeError={analyzeError}
@@ -760,6 +771,7 @@ function PeriodBrief({
 
 function DailyBrief({
   data,
+  dashboardData,
   selectedDate,
   analyzing,
   analyzeError,
@@ -769,6 +781,7 @@ function DailyBrief({
   setShowCoverageDetail,
 }: {
   data: DailyReport
+  dashboardData: DashboardPayload | null
   selectedDate: string
   analyzing: boolean
   analyzeError: string | null
@@ -832,6 +845,8 @@ function DailyBrief({
           </div>
         </div>
       </header>
+
+      {dashboardData && <DashboardBriefSections data={dashboardData} trendDays={14} />}
 
       <section className="brief-section">
         <h2>1 · 全局态势与综合研判（Global Situation &amp; Intelligence Judgment）</h2>
