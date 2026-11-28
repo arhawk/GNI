@@ -66,6 +66,10 @@ class V1ArticleInput:
     stance_evidence: list[dict[str, Any]] = field(default_factory=list)
     analysis_schema_version: str | None = None
     sentiment_label: str | None = None
+    # Ingestion-time duplicate marker (processing/service.py). Primary records have None.
+    duplicate_of_article_id: str | None = None
+    # Used only as a keep-order tie-breaker inside duplicate groups.
+    first_seen_at: datetime | None = None
 
 
 @dataclass
@@ -168,29 +172,71 @@ def _in_published_window(
     return _as_utc(period_start) <= pub < _as_utc(period_end)  # type: ignore[operator]
 
 
-def deduplicate_v1_articles(rows: Iterable[V1ArticleInput]) -> list[V1ArticleInput]:
-    """Deterministic article deduplication by article_id, canonical_url, then content_hash."""
-    seen_ids: set[str] = set()
-    seen_urls: set[str] = set()
-    seen_hashes: set[str] = set()
-    kept: list[V1ArticleInput] = []
+_FAR_FUTURE = datetime.max.replace(tzinfo=timezone.utc)
 
-    for row in rows:
-        if row.article_id in seen_ids:
-            continue
+
+def dedup_keep_preference(row: V1ArticleInput) -> tuple[int, int, datetime, str]:
+    """Sort key for a duplicate group: the smallest key is the record kept.
+
+    1. Not marked as a duplicate at ingestion (``duplicate_of_article_id is None``).
+    2. Carries a valid China stance conclusion (Positive/Neutral/Negative), not Unclassified.
+    3. Earlier ``first_seen_at``.
+    4. ``article_id`` as a final stable tie-break.
+    """
+    return (
+        0 if row.duplicate_of_article_id is None else 1,
+        0 if _effective_stance(row) in _VALID_STANCES else 1,
+        _as_utc(row.first_seen_at) or _FAR_FUTURE,
+        row.article_id,
+    )
+
+
+def deduplicate_v1_articles(rows: Iterable[V1ArticleInput]) -> list[V1ArticleInput]:
+    """Deterministic, order-independent deduplication.
+
+    Rows that share an article_id, a normalized canonical_url, or a content_hash are
+    connected (transitively) into one duplicate group. Each group keeps exactly one row,
+    chosen by ``_dedup_keep_preference``. Output keeps the original input order of the
+    kept rows.
+    """
+    items = list(rows)
+    parent = list(range(len(items)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[max(ri, rj)] = min(ri, rj)
+
+    first_index_by_key: dict[tuple[str, str], int] = {}
+    for idx, row in enumerate(items):
+        keys: list[tuple[str, str]] = [("id", row.article_id)]
         url_key = normalize_url_for_dedup(row.canonical_url or row.url)
-        if url_key and url_key in seen_urls:
-            continue
-        ch = (row.content_hash or "").strip()
-        if ch and ch in seen_hashes:
-            continue
-        seen_ids.add(row.article_id)
         if url_key:
-            seen_urls.add(url_key)
+            keys.append(("url", url_key))
+        ch = (row.content_hash or "").strip()
         if ch:
-            seen_hashes.add(ch)
-        kept.append(row)
-    return kept
+            keys.append(("hash", ch))
+        for key in keys:
+            if key in first_index_by_key:
+                union(first_index_by_key[key], idx)
+            else:
+                first_index_by_key[key] = idx
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for idx in range(len(items)):
+        groups[find(idx)].append(idx)
+
+    kept_indices = [
+        min(members, key=lambda i: dedup_keep_preference(items[i]))
+        for members in groups.values()
+    ]
+    return [items[i] for i in sorted(kept_indices)]
 
 
 def _effective_stance(row: V1ArticleInput) -> str:

@@ -278,6 +278,8 @@ def run_v1_stat_snapshots(
                 url=a.url,
                 content_hash=a.content_hash,
                 exclude_from_metrics=bool(a.exclude_from_metrics),
+                duplicate_of_article_id=a.duplicate_of_article_id,
+                first_seen_at=a.first_seen_at,
                 china_relevance_level=a.china_relevance_level,
                 topics_v1=topics,
                 stance_label=stance,

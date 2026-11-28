@@ -22,6 +22,7 @@ from gni.metrics.definitions import (
     TAXONOMY_V1_VERSION,
 )
 from gni.metrics.service import _latest_analyses, run_v1_stat_snapshots
+from gni.metrics.v1_stats import V1ArticleInput, deduplicate_v1_articles
 from gni.reports.risk_tagging import (
     MEDIA_TYPE_ZH,
     china_signal_score,
@@ -315,11 +316,28 @@ def _build_judgment_text(
 def _china_count_in_window(
     articles: list[Article], start: datetime, end: datetime
 ) -> int:
-    return sum(
-        1
+    """Unique China-included article count in window, deduplicated like V1.0 stats."""
+    rows = [
+        a
         for a in articles
         if _in_range(a, start, end)
         and (a.china_relevance_level or "") in CHINA_INCLUDE_LEVELS
+    ]
+    return len(
+        deduplicate_v1_articles(
+            V1ArticleInput(
+                article_id=a.id,
+                source_id=a.source_id,
+                source_country=None,
+                published_at=a.published_at,
+                canonical_url=a.canonical_url,
+                url=a.url,
+                content_hash=a.content_hash,
+                duplicate_of_article_id=a.duplicate_of_article_id,
+                first_seen_at=a.first_seen_at,
+            )
+            for a in rows
+        )
     )
 
 
@@ -355,11 +373,21 @@ def build_daily_report(
     y_start, y_end = shanghai_day_window(report_day - timedelta(days=1))
     week_start, _ = shanghai_day_window(report_day - timedelta(days=7))
 
+    # Single source of truth for the day's unique China sample: the V1.0 global scope
+    # (dedup by article_id / canonical_url / content_hash, stance-aware keep rule).
+    v1_snap = run_v1_stat_snapshots(
+        session,
+        period_start=win_start,
+        period_end=win_end,
+        persist=False,
+    )
+    v1_unique_ids = set((v1_snap["by_scope"].get("global") or {}).get("article_ids") or [])
+
     day_articles = [a for a in articles if _in_range(a, win_start, win_end)]
     china_day = [
         a
         for a in day_articles
-        if (a.china_relevance_level or "") in CHINA_INCLUDE_LEVELS
+        if (a.china_relevance_level or "") in CHINA_INCLUDE_LEVELS and a.id in v1_unique_ids
     ]
     yesterday_china = _china_count_in_window(articles, y_start, y_end)
     week_china_total = _china_count_in_window(articles, week_start, win_start)
@@ -1206,13 +1234,6 @@ def build_daily_report(
         f"（本日有报道 {len(reporting_countries)} 国）· "
         f"活跃源约 {active_sources_n} · 本日引用源 {len(reporting_sources)}。"
         + DISCLAIMER
-    )
-
-    v1_snap = run_v1_stat_snapshots(
-        session,
-        period_start=win_start,
-        period_end=win_end,
-        persist=False,
     )
 
     payload: dict[str, Any] = {

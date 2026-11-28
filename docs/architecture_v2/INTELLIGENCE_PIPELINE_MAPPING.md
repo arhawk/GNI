@@ -12,7 +12,7 @@
 | RSS 采集 | `src/gni/ingestion/service.py:run_ingestion()` + `rss_adapter.py:RssAdapter` | 活跃 `Source` 列表 | `raw_documents`（append-only）、`discovered_articles`、`articles(RAW_STORED)`、`source_health`、`ingestion_jobs`、`collection_tasks` | 确定性 | 仅支持 `rss_adapter`；原始载荷截断上限 256,000 字符 |
 | URL 规范化 & L1 标题初筛 | `src/gni/processing/service.py:process_article()` + `title_l1.py:screen_title()` | `Article.title` + `content_original` | `article_screenings(stage='title')`、`articles.title_screening_label/priority` | 确定性规则 | 仅用于优先级与日志，**不直接拦截**文章进入正文提取（防止漏召回） |
 | 正文抓取与清洗 | `src/gni/processing/extractor.py:fetch_and_extract()` + `normalize.py` | `Article.url` 或离线 HTML / RSS stub | `article_versions`（`version_no`, `content_clean`, `char_count`, `quality_status`）、`articles.content_clean` | 确定性 | 支持 `skip_fetch` 离线模式；正文过短标记 `insufficient_text` |
-| 去重与语言识别 | `processing/service.py:_find_duplicate()` + `language.py:detect_language()` | 同源 `articles`、`content_hash`、规范化标题 | 重复文章置 `duplicate_of_article_id` + `exclude_from_metrics=True`；`pipeline_state=DEDUPLICATED` | 确定性 | **仅做同源去重**；跨源转载/重复 URL 去重目前由 `metrics/v1_stats.py` 在统计期动态完成，未回写持久化 |
+| 去重与语言识别 | `processing/service.py:_find_duplicate()` + `language.py:detect_language()` | 同源 `articles`、`content_hash`、规范化标题 | 重复文章置 `duplicate_of_article_id` + `exclude_from_metrics=True`；`pipeline_state=DEDUPLICATED` | 确定性 | 入库期做**跨源精确 `content_hash` 去重**（较早记录为主记录，后到副本标记 `duplicate_of_article_id` 并跳过 LLM 分析）；同源标题近似去重保持不变。统计期 `metrics/v1_stats.py` 仍做 URL/hash 分组兜底，同组保留规则为：未标记重复 > 有立场结论 > `first_seen_at` 更早 > `article_id` |
 
 ---
 

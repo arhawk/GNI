@@ -628,7 +628,10 @@ def _select_articles_for_analysis(
 
     if article_id:
         art = session.get(Article, article_id)
-        return ([art] if art else []), {}
+        # Marked duplicates (ingestion-time dedup) never get LLM analysis, even when targeted.
+        if art is None or art.exclude_from_metrics or art.duplicate_of_article_id is not None:
+            return [], {}
+        return [art], {}
 
     legacy_article_ids: set[str] | None = None
     if reanalyze_legacy and not reanalyze:

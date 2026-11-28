@@ -39,6 +39,17 @@ def _next_version_no(session: Session, article_id: str) -> int:
     return (max(rows) + 1) if rows else 1
 
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _seniority_key(article: Article) -> tuple[bool, datetime, str]:
+    """Smaller key = seen earlier = canonical. Missing first_seen_at sorts last."""
+    fs = article.first_seen_at
+    if fs is not None and fs.tzinfo is None:
+        fs = fs.replace(tzinfo=timezone.utc)
+    return (fs is None, fs or _EPOCH, article.id or "")
+
+
 def _find_duplicate(
     session: Session,
     article: Article,
@@ -46,17 +57,35 @@ def _find_duplicate(
     content_hash: str | None,
     title_norm: str,
 ) -> Article | None:
-    """Same-source exact content_hash or normalized title near-dup (keep older as canonical)."""
+    """Return the canonical primary record this article duplicates, or None.
+
+    1. Exact ``content_hash`` match across ALL sources (syndicated / wire copies). Only
+       primary records (not already marked duplicate) qualify, and only if they were
+       first seen before this article, so the earliest record stays canonical.
+    2. Same-source normalized-title near-duplicate (unchanged; titles are not compared
+       across sources because they collide too easily).
+    """
+    if content_hash:
+        hash_q = select(Article).where(
+            Article.content_hash == content_hash,
+            Article.id != article.id,
+            Article.duplicate_of_article_id.is_(None),
+            Article.exclude_from_metrics.is_(False),
+        )
+        my_key = _seniority_key(article)
+        earlier = [o for o in session.scalars(hash_q).all() if _seniority_key(o) < my_key]
+        if earlier:
+            return min(earlier, key=_seniority_key)
+
+    if not title_norm:
+        return None
     q = select(Article).where(
         Article.source_id == article.source_id,
         Article.id != article.id,
         Article.exclude_from_metrics.is_(False),
     )
-    candidates = session.scalars(q).all()
-    for other in candidates:
-        if content_hash and other.content_hash and other.content_hash == content_hash:
-            return other
-        if title_norm and normalize_title_for_dedup(other.title) == title_norm:
+    for other in session.scalars(q).all():
+        if normalize_title_for_dedup(other.title) == title_norm:
             # Prefer the earlier first_seen as canonical
             if other.first_seen_at and article.first_seen_at:
                 if other.first_seen_at <= article.first_seen_at:
@@ -165,6 +194,10 @@ def process_article(
         title_norm = normalize_title_for_dedup(article.title)
         dup = _find_duplicate(session, article, content_hash=content_hash, title_norm=title_norm)
         article.latest_article_version_id = version.id
+        if dup is None and article.duplicate_of_article_id is not None:
+            # Previously marked duplicate but no longer matches an earlier primary record.
+            article.duplicate_of_article_id = None
+            article.exclude_from_metrics = False
         if dup is not None:
             article.duplicate_of_article_id = dup.id
             article.exclude_from_metrics = True
