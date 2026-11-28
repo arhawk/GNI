@@ -10,9 +10,12 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from gni.analysis.budget import llm_allowed, snapshot_budget
 from gni.analysis.stance_util import primary_stance_label
+from gni.core.config import Settings, get_settings
 from gni.events.extract import extract_for_articles, load_latest_cards
 from gni.events.geo import centroid, location_pin_spec
+from gni.events.llm_grouping import SYSTEM_PROMPT, CallFn, cluster_cards_daily, make_cached_llm_call
 from gni.events.match import FingerprintCluster, cluster_fingerprints
 from gni.events.rollup import (
     attitude_map_rows,
@@ -194,6 +197,30 @@ def split_event(
 _PRESERVE_EVENT_STATUSES = frozenset({"confirmed", "closed", "locked"})
 
 
+def _budgeted_grouping_call(session: Session, settings: Settings) -> CallFn | None:
+    """LLM grouping call guarded by the same daily budget snapshot as article analysis."""
+    # Imported lazily: gni.analysis.deepseek imports gni.events.fingerprint, which initializes
+    # this package and would otherwise create a circular import at module load.
+    from gni.analysis.deepseek import DeepSeekLLMProvider, estimate_call_cost_usd
+
+    if not settings.llm_api_key:
+        return None
+    try:
+        provider = DeepSeekLLMProvider(settings)
+    except RuntimeError:
+        return None
+    raw_call = make_cached_llm_call(provider=provider, model=settings.llm_model)
+
+    def call(prompt: str) -> dict[str, Any] | None:
+        snapshot = snapshot_budget(session, settings)
+        est = estimate_call_cost_usd(prompt_chars=len(prompt) + len(SYSTEM_PROMPT))
+        if not llm_allowed(snapshot, estimated_cost_usd=est, ignore_article_limit=True):
+            return None
+        return raw_call(prompt)
+
+    return call
+
+
 def rebuild_proto_events(
     session: Session,
     *,
@@ -201,19 +228,30 @@ def rebuild_proto_events(
     limit: int = 50,
     extract: bool = True,
     use_llm: bool = True,
+    grouping: str = "llm_daily",
 ) -> dict[str, Any]:
-    """Rebuild events via fingerprint extract→match→rollup."""
+    """Rebuild events via fingerprint extract→match→rollup.
+
+    grouping:
+      - "llm_daily": one batch LLM grouping call per day; falls back to rules per day on any failure.
+      - "rule": pairwise rule/LLM-judge greedy clustering over all cards (legacy path).
+    """
     if extract:
         extract_stats = extract_for_articles(session, limit=500)
     else:
         extract_stats = {"articles": 0, "candidates_written": 0}
 
     cards = load_latest_cards(session, limit_articles=500)
-    clusters = [
-        c
-        for c in cluster_fingerprints(cards, use_llm=use_llm)
-        if len(c.article_ids) >= min_articles
-    ][:limit]
+    grouping_stats: dict[str, int] = {}
+    if grouping == "llm_daily":
+        call = _budgeted_grouping_call(session, get_settings()) if use_llm else None
+        all_clusters, grouping_stats = cluster_cards_daily(cards, call=call, use_llm=use_llm)
+    elif grouping == "rule":
+        all_clusters = cluster_fingerprints(cards, use_llm=use_llm)
+    else:
+        raise ValueError(f"unknown grouping mode: {grouping!r}")
+    all_clusters.sort(key=lambda c: -c.importance_score)
+    clusters = [c for c in all_clusters if len(c.article_ids) >= min_articles][:limit]
 
     # Incremental upsert by fingerprint_hash — do NOT wipe proto/active graph.
     created = 0
@@ -235,6 +273,7 @@ def rebuild_proto_events(
         "seed_articles": len({c.article_id for c in cards}),
         "candidates_written": extract_stats.get("candidates_written", 0),
         "path": "fingerprint_incremental",
+        "grouping": {"mode": grouping, **grouping_stats},
         "attitude_snapshots": attitude_n,
     }
 

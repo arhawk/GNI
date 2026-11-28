@@ -41,3 +41,6 @@ postgres_data/
 # Frontend
 web/node_modules/
 web/dist/
+
+# Event grouping LLM response cache (regenerable)
+data/event_grouping_cache/

@@ -402,7 +402,7 @@ const KPI_LABELS_ZH: Record<string, string> = {
   prev_month_articles: '上月同期文章',
   delta: '环比变化 Δ',
   reporting_countries: '报道国家数',
-  major_events: '重点事件数',
+  major_events: '高重要事件数',
 }
 
 function PeriodBrief({
@@ -836,7 +836,7 @@ function DailyBrief({
             <strong>{kpis.reporting_countries}</strong>
           </div>
           <div>
-            <div className="muted small">重点事件数</div>
+            <div className="muted small">高重要事件数</div>
             <strong>{kpis.major_events}</strong>
           </div>
           <div>

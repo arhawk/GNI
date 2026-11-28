@@ -164,6 +164,8 @@ export type DashboardPayload = {
     reporting_sources: number
     connected_countries?: number
     active_sources?: number
+    major_events?: number
+    new_events?: number
     stance_coverage_rate: number | null
     stance_distribution: StanceSummary
   }

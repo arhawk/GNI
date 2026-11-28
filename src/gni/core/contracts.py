@@ -244,7 +244,9 @@ class ArticleEventCandidateContract(BaseModel):
     event_id: str | None = None
     event_relation: EventRelationType = "new_event_candidate"
     actor: str = ""
+    actor_key: str | None = None  # standardized actor code from controlled vocabulary (or None)
     action: str = ""
+    action_key: str | None = None  # standardized ACTION_KEY from controlled vocabulary (or None)
     object: str = ""
     event_time: str | None = None  # Never filled from published_at when unknown
     location: str | None = None

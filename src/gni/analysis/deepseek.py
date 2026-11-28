@@ -22,11 +22,20 @@ from gni.core.contracts import (
     ArticleEventCandidateContract,
     ArticleNarrativeContract,
 )
+from gni.events.fingerprint import allowed_action_keys, allowed_actor_keys
 from gni.metrics.taxonomy_v1 import boards_for_topics, normalize_topic_ids, taxonomy_prompt_block
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "deepseek_analyze_v1.1"
+PROMPT_VERSION = "deepseek_analyze_v1.2"
+
+
+def _actor_key_choices() -> str:
+    return ", ".join(allowed_actor_keys())
+
+
+def _action_key_choices() -> str:
+    return ", ".join(allowed_action_keys())
 _VALID_STANCE_LABELS = {"Positive", "Neutral", "Negative", "Unclassified"}
 _VALID_OWNERS = {"media", "quoted_actor", "unclear"}
 
@@ -199,6 +208,9 @@ class DeepSeekLLMProvider(BaseLLMProvider):
             f"and event_candidates[] (event_relation in [new_event_candidate,existing_event_update,background_reference,unrelated], "
             f"actor, action, object, event_time=null unless explicitly stated in text, location, summary, confidence). "
             f"NEVER fill unknown event_time with published_at.\n"
+            f"For each event_candidate also set actor_key to the code matching the actor, chosen ONLY from "
+            f"[{_actor_key_choices()}], and action_key to the code matching the action, chosen ONLY from "
+            f"[{_action_key_choices()}]. Use null when no listed code fits. Codes must be used verbatim.\n"
             f"Required JSON keys: topics_v1, china_stance ({{target, stance_label, expression_owner, stance_confidence, "
             f"stance_evidence, reasoning, analysis_status}}), sentiment ({{label, sentiment_target, confidence, reasoning}}), "
             f"narratives, entities, event_candidates, stances, framing, summary.\n"

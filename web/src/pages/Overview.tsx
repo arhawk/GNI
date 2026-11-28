@@ -195,12 +195,9 @@ export function OverviewPage() {
             </div>
           </div>
           <div className="intel-kpi-card">
-            <div className="intel-kpi-label">报道国家 / 接入监测国</div>
-            <div className="intel-kpi-value">
-              {ov.reporting_countries}
-              <span className="muted small"> / {ov.connected_countries ?? '—'}</span>
-            </div>
-            <div className="intel-kpi-sub">按信源所属国 (source_country)</div>
+            <div className="intel-kpi-label">高重要事件数</div>
+            <div className="intel-kpi-value">{ov.major_events ?? 0}</div>
+            <div className="intel-kpi-sub">重要度 ≥ 0.7 · 新发现 {ov.new_events ?? 0} 个</div>
           </div>
           <div className="intel-kpi-card">
             <div className="intel-kpi-label">报道媒体 / 活跃信源</div>

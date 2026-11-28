@@ -126,6 +126,32 @@ def _action_map() -> dict[str, str]:
     return out
 
 
+def allowed_action_keys() -> list[str]:
+    """Canonical ACTION_KEYs the analysis LLM may emit (from configs/event_action_synonyms.yaml)."""
+    return sorted(set(_action_map().values()))
+
+
+def allowed_actor_keys() -> list[str]:
+    """Canonical ACTOR_KEYs the analysis LLM may emit (values of ACTOR_ALIASES)."""
+    return sorted(set(ACTOR_ALIASES.values()))
+
+
+def valid_actor_key(raw: Any) -> str | None:
+    """Accept an LLM-supplied actor_key only if it is in the controlled vocabulary."""
+    if not isinstance(raw, str):
+        return None
+    key = raw.strip().lower()
+    return key if key in set(allowed_actor_keys()) else None
+
+
+def valid_action_key(raw: Any) -> str | None:
+    """Accept an LLM-supplied action_key only if it is in the controlled vocabulary."""
+    if not isinstance(raw, str):
+        return None
+    key = raw.strip().upper()
+    return key if key in set(allowed_action_keys()) else None
+
+
 def tokenize(text: str | None) -> set[str]:
     if not text:
         return set()
@@ -216,14 +242,18 @@ class FingerprintCard:
     evidence: dict[str, Any] = field(default_factory=dict)
     analysis_id: str | None = None
     article_version_id: str | None = None
+    # Standardized keys emitted by the analysis LLM (validated against the controlled vocabulary).
+    # When present they take precedence over the alias/synonym dictionaries.
+    llm_actor_key: str | None = None
+    llm_action_key: str | None = None
 
     @property
     def actor_key(self) -> str | None:
-        return normalize_actor(self.actor)
+        return valid_actor_key(self.llm_actor_key) or normalize_actor(self.actor)
 
     @property
     def action_key(self) -> str | None:
-        return normalize_action(self.action)
+        return valid_action_key(self.llm_action_key) or normalize_action(self.action)
 
     @property
     def object_key(self) -> str | None:
@@ -270,6 +300,8 @@ class FingerprintCard:
             "published_at": self.published_at.isoformat() if self.published_at else None,
             "actor_key": self.actor_key,
             "action_key": self.action_key,
+            "llm_actor_key": valid_actor_key(self.llm_actor_key),
+            "llm_action_key": valid_action_key(self.llm_action_key),
             "object_key": self.object_key,
             "status": "INSUFFICIENT_INFORMATION" if insufficient else "ok",
             "fingerprint_hash": None

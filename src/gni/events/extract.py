@@ -12,7 +12,13 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from gni.events.fingerprint import FingerprintCard, normalize_action, tokenize
+from gni.events.fingerprint import (
+    FingerprintCard,
+    normalize_action,
+    tokenize,
+    valid_action_key,
+    valid_actor_key,
+)
 from gni.events.geo import guess_location_from_text
 from gni.infrastructure.models import Article, ArticleAnalysis, ArticleEventCandidate
 from gni.metrics.definitions import CHINA_INCLUDE_LEVELS
@@ -232,6 +238,8 @@ def extract_from_structured_candidates(
                 },
                 analysis_id=analysis_id,
                 article_version_id=article_version_id,
+                llm_actor_key=valid_actor_key(item.get("actor_key")),
+                llm_action_key=valid_action_key(item.get("action_key")),
             )
         )
     return cards
@@ -332,6 +340,8 @@ def load_latest_cards(session: Session, *, limit_articles: int = 500) -> list[Fi
                         evidence=row.evidence or {},
                         analysis_id=row.analysis_id,
                         article_version_id=row.article_version_id,
+                        llm_actor_key=valid_actor_key(fp.get("llm_actor_key")),
+                        llm_action_key=valid_action_key(fp.get("llm_action_key")),
                     )
                 )
         else:

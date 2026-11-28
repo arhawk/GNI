@@ -137,6 +137,8 @@ def api_dashboard(
                     "reporting_sources": int(kpis_raw.get("reporting_sources") or 0),
                     "connected_countries": (daily.get("connected") or {}).get("countries"),
                     "active_sources": (daily.get("connected") or {}).get("active_sources"),
+                    "major_events": int(kpis_raw.get("major_events") or 0),
+                    "new_events": int(kpis_raw.get("new_events") or 0),
                     "stance_coverage_rate": g.get("stance_coverage_rate"),
                     "stance_distribution": {
                         "target": "china_mainland",
