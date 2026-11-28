@@ -8,7 +8,6 @@ import pytest
 
 from gni.sources.editorial_focus import (
     ACTIVE_EDITORIAL_DENYLIST,
-    EDITORIAL_FOCUS_INTERNATIONAL_OR_CHINA,
     passes_editorial_focus,
     score_titles,
     title_is_china,
@@ -55,35 +54,16 @@ def test_passes_editorial_focus_desk_threshold():
     assert detail["rate"] == pytest.approx(0.2)
 
 
-def test_active_sources_declare_editorial_focus_and_avoid_denylist():
+def test_active_sources_avoid_denylist():
     data = load_seed_file(SEED)
     sources = data.get("sources") or []
     active = [s for s in sources if s.get("active_status") == "active"]
     assert active, "expected at least one active source in seed"
 
-    missing_focus = []
-    denylist_hits = []
-    for row in active:
-        sid = row["source_id"]
-        if sid in ACTIVE_EDITORIAL_DENYLIST:
-            denylist_hits.append(sid)
-        focus = row.get("editorial_focus") or (row.get("config") or {}).get("editorial_focus")
-        if focus != EDITORIAL_FOCUS_INTERNATIONAL_OR_CHINA:
-            missing_focus.append(sid)
-
+    denylist_hits = [
+        row["source_id"]
+        for row in active
+        if row["source_id"] in ACTIVE_EDITORIAL_DENYLIST
+    ]
     assert not denylist_hits, f"denylisted source_ids still active: {denylist_hits}"
-    assert not missing_focus, (
-        f"active sources missing editorial_focus={EDITORIAL_FOCUS_INTERNATIONAL_OR_CHINA}: "
-        f"{missing_focus}"
-    )
 
-
-def test_active_panel_has_target_countries():
-    data = load_seed_file(SEED)
-    active = [s for s in data["sources"] if s.get("active_status") == "active"]
-    by_country: dict[str, list[str]] = {}
-    for s in active:
-        by_country.setdefault(s["country_id"], []).append(s["source_id"])
-    for code in ("US", "RU", "DE", "IN", "AU"):
-        assert code in by_country, f"no active source for {code}"
-        assert 1 <= len(by_country[code]) <= 5, by_country

@@ -19,7 +19,6 @@ ACTIVE_EDITORIAL_DENYLIST: frozenset[str] = frozenset(
         "ru_ria",  # site-wide domestic mix
         "ru_tass_russian",  # site-wide domestic mix
         "au_abc_top",  # Top Stories domestic-heavy
-        "de_dw_german",  # DE-all domestic/EU-heavy below bar
         "us_defense_news",  # domestic DoD lifestyle/ops mix
     }
 )

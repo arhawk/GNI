@@ -330,7 +330,7 @@ sources:
   evidence_url: https://www.voanews.com/rssfeeds
   classification_confidence: high
   reviewed_by: us_pilot_probe_20261126
-  active_status: paused
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
   feed_scope: CHINA_FOCUSED
@@ -385,7 +385,7 @@ sources:
   evidence_url: https://www.state.gov/rss-feed/press-releases/feed/
   classification_confidence: high
   reviewed_by: ru_au_stale_probe_20261126
-  active_status: active
+  active_status: inactive
   verification_status: verified
   editorial_focus: international_or_china
   feed_scope: GOVERNMENT_RELEASES
@@ -413,7 +413,7 @@ sources:
   evidence_url: https://www.voanews.com/rssfeeds
   classification_confidence: high
   reviewed_by: us_pilot_probe_20261126
-  active_status: paused
+  active_status: active
   verification_status: verified
   editorial_focus: international_or_china
   feed_or_api_url: https://www.voanews.com/api/zobo_l-vomx-tpepvmv
@@ -519,7 +519,7 @@ sources:
   evidence_url: https://www.pbs.org/newshour/about/pbs-news-rss-feeds
   classification_confidence: high
   reviewed_by: us_pilot_probe_20261126
-  active_status: active
+  active_status: inactive
   verification_status: verified
   editorial_focus: mixed
   feed_scope: GENERAL_NEWS
@@ -649,7 +649,7 @@ sources:
   evidence_url: https://feeds.npr.org/1001/rss.xml
   classification_confidence: high
   reviewed_by: us_pilot_probe_20261126
-  active_status: inactive
+  active_status: active
   verification_status: verified
   editorial_focus: mixed
   feed_scope: GENERAL_NEWS
@@ -1132,7 +1132,7 @@ sources:
   evidence_url: https://www.presidentofindia.gov.in/
   classification_confidence: high
   reviewed_by: editorial_probe_20261124
-  active_status: inactive
+  active_status: active
   verification_status: verified
   feed_or_api_url: https://www.presidentofindia.gov.in/rss.xml
   config:
@@ -1292,7 +1292,7 @@ sources:
   evidence_url: https://sputnikglobe.com/
   classification_confidence: high
   reviewed_by: race_cleanup_20261124
-  active_status: inactive
+  active_status: active
   verification_status: verified
   feed_or_api_url: https://sputnikglobe.com/export/rss2/index.xml
   notes: Duplicate of ru_sputnik_world from seed race; kept inactive.
@@ -1315,7 +1315,7 @@ sources:
   evidence_url: https://www.dw.com/en/about-dw/s-30606
   classification_confidence: high
   reviewed_by: race_cleanup_20261124
-  active_status: inactive
+  active_status: active
   verification_status: verified
   feed_or_api_url: https://rss.dw.com/rdf/rss-en-world
   notes: Verified World desk; panel uses de_dw_english as 2nd DE slot; kept as backup.

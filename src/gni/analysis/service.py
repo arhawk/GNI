@@ -628,8 +628,13 @@ def _select_articles_for_analysis(
 
     if article_id:
         art = session.get(Article, article_id)
-        # Marked duplicates (ingestion-time dedup) never get LLM analysis, even when targeted.
-        if art is None or art.exclude_from_metrics or art.duplicate_of_article_id is not None:
+        # Marked duplicates (ingestion-time dedup) and L1 no_match never get LLM analysis, even when targeted.
+        if (
+            art is None
+            or art.exclude_from_metrics
+            or art.duplicate_of_article_id is not None
+            or art.title_screening_label == "no_match"
+        ):
             return [], {}
         return [art], {}
 
@@ -651,7 +656,7 @@ def _select_articles_for_analysis(
         if not legacy_article_ids:
             return [], {}
 
-    from sqlalchemy import case, func
+    from sqlalchemy import case, func, or_
 
     priority_expr = case(
         (Article.title_screening_label == "explicit_relevant", 0),
@@ -667,6 +672,10 @@ def _select_articles_for_analysis(
     q = select(Article).where(
         Article.processing_status == "done",
         Article.exclude_from_metrics.is_(False),
+        or_(
+            Article.title_screening_label.is_(None),
+            Article.title_screening_label != "no_match",
+        ),
     )
     if source_id:
         q = q.where(Article.source_id == source_id)

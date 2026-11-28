@@ -21,6 +21,7 @@ from gni.infrastructure.models import (
 from gni.infrastructure.pipeline_state import (
     DEDUPLICATED,
     EXTRACTION_COMPLETED,
+    TITLE_SCREENED,
     set_pipeline_state,
 )
 from gni.processing.extractor import fetch_and_extract
@@ -134,6 +135,22 @@ def process_article(
         article.title_screening_label = l1.label
         article.title_screening_priority = l1.priority
         result["title_screening"] = l1.label
+
+        # Hard L1 gate: articles with no China entity hit in title/summary skip extraction & analysis.
+        # Kept in DB (reversible) with exclude_from_metrics=True and quality_status='title_filtered'.
+        if l1.label == "no_match":
+            article.exclude_from_metrics = True
+            article.quality_status = "title_filtered"
+            article.processing_status = "done"
+            article.processed_at = datetime.now(timezone.utc)
+            article.updated_at = datetime.now(timezone.utc)
+            set_pipeline_state(article, TITLE_SCREENED)
+            result["title_filtered"] = True
+            result["quality_status"] = article.quality_status
+            result["pipeline_state"] = article.pipeline_state
+            return result
+        if article.quality_status == "title_filtered" and article.duplicate_of_article_id is None:
+            article.exclude_from_metrics = False
 
         # Full-text extraction
         if offline_html is not None:

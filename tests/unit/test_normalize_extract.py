@@ -93,3 +93,56 @@ def test_process_article_offline(tmp_path):
         assert article.content_clean
         assert article.processing_status == "done"
         assert article.quality_status == "processed"
+
+
+def test_process_article_l1_no_match_hard_gate_and_restore(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from gni.infrastructure.models import Base
+
+    engine = create_engine(f"sqlite:///{tmp_path / 't_gate.db'}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(Country(id="US", code="US", name="US"))
+        session.add(Organization(id="o1", country_id="US", name="Org1"))
+        session.add(Source(id="s1", organization_id="o1", country_id="US", name="Src1", source_type="public_service"))
+        article = Article(
+            id="a_nomatch",
+            source_id="s1",
+            title="Local school bus schedule updated for winter",
+            url="https://example.com/local-bus",
+            content_original="Short local traffic notice.",
+            quality_status="rss_stub",
+            processing_status="pending",
+        )
+        session.add(article)
+        session.commit()
+
+        # Hard gate triggers before extraction; even if offline_html is given, it is skipped.
+        detail = process_article(session, article, offline_html="<html><body><p>unused</p></body></html>")
+        session.commit()
+        assert detail["ok"] is True
+        assert detail["title_screening"] == "no_match"
+        assert detail["title_filtered"] is True
+        assert article.exclude_from_metrics is True
+        assert article.quality_status == "title_filtered"
+        assert article.pipeline_state == "TITLE_SCREENED"
+        assert article.processing_status == "done"
+        assert article.content_clean is None
+
+        # If title later matches L1 (e.g. reprocess after dictionary update), restore cleanly.
+        article.title = "China announces new semiconductor tariff policy"
+        html = (
+            "<html><body><article><p>"
+            + ("Beijing announced new semiconductor tariffs affecting global supply chains. " * 20)
+            + "</p></article></body></html>"
+        )
+        detail2 = process_article(session, article, offline_html=html)
+        session.commit()
+        assert detail2["ok"] is True
+        assert detail2["title_screening"] == "explicit_relevant"
+        assert article.exclude_from_metrics is False
+        assert article.quality_status == "processed"
+        assert article.content_clean
+

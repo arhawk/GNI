@@ -116,7 +116,6 @@ def test_select_articles_prioritizes_china_and_newest_first() -> None:
             "a_explicit_old",
             "a_likely_new",
             "a_uncertain",
-            "a_nomatch_new",
         ]
 
         picked_pc, counts = _select_articles_for_analysis(
